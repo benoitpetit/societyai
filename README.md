@@ -2,6 +2,16 @@
 
 SocietyAI est une bibliothèque Golang permettant de créer une société d'agents d'intelligence artificielle qui collaborent pour analyser en profondeur un prompt et générer une réponse réfléchie.
 
+<div align="center">
+  <img src="./logo.jpg" alt="SocietyAI Logo" width="400"/>
+  
+[![Go Report Card](https://goreportcard.com/badge/github.com/benoitpetit/societyai)](https://goreportcard.com/report/github.com/benoitpetit/societyai)
+[![Go Reference](https://pkg.go.dev/badge/github.com/benoitpetit/societyai.svg)](https://pkg.go.dev/github.com/benoitpetit/societyai)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
+
 ## Caractéristiques
 
 - **Architecture Multi-Agents** : Création d'une société d'agents AI travaillant ensemble de manière coordonnée
