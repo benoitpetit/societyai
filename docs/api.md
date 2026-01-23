@@ -49,14 +49,16 @@ interface AIModel {
 Traite un prompt et retourne une réponse.
 
 **Paramètres :**
+
 - `prompt: unknown` - Le prompt à traiter (format flexible)
 - `signal?: AbortSignal` - Signal optionnel pour annuler l'opération
 
 **Retourne :** `Promise<string>` - La réponse générée
 
 **Exemple :**
+
 ```typescript
-const response = await model.process("Explique la gravité", abortSignal);
+const response = await model.process('Explique la gravité', abortSignal);
 ```
 
 ##### `name()`
@@ -70,6 +72,7 @@ Retourne le nom du modèle.
 Vérifie si le modèle supporte un type de prompt spécifique.
 
 **Paramètres :**
+
 - `promptType: string` - Type de prompt à vérifier ('text', 'structured', etc.)
 
 **Retourne :** `boolean`
@@ -95,6 +98,7 @@ interface ModelAdapter {
 Convertit un prompt générique au format spécifique du modèle.
 
 **Paramètres :**
+
 - `genericPrompt: unknown` - Prompt au format générique
 
 **Retourne :** `Promise<unknown>` - Prompt converti
@@ -104,6 +108,7 @@ Convertit un prompt générique au format spécifique du modèle.
 Convertit une réponse spécifique au format string standard.
 
 **Paramètres :**
+
 - `specificResponse: unknown` - Réponse dans le format du modèle
 
 **Retourne :** `Promise<string>` - Réponse normalisée
@@ -139,6 +144,7 @@ interface SocietyObserver {
 Appelé quand un agent commence le traitement.
 
 **Paramètres :**
+
 - `agentId: number` - Identifiant de l'agent
 - `modelName: string` - Nom du modèle utilisé
 - `prompt: unknown` - Prompt traité
@@ -148,6 +154,7 @@ Appelé quand un agent commence le traitement.
 Appelé quand un agent termine avec succès.
 
 **Paramètres :**
+
 - `agentId: number` - Identifiant de l'agent
 - `modelName: string` - Nom du modèle utilisé
 - `result: string` - Résultat généré
@@ -157,6 +164,7 @@ Appelé quand un agent termine avec succès.
 Appelé quand un agent rencontre une erreur.
 
 **Paramètres :**
+
 - `agentId: number` - Identifiant de l'agent
 - `modelName: string` - Nom du modèle utilisé
 - `error: Error` - Erreur rencontrée
@@ -166,6 +174,7 @@ Appelé quand un agent rencontre une erreur.
 Appelé au début d'une phase (mode collaboratif).
 
 **Paramètres :**
+
 - `phase: string` - Nom de la phase
 
 ##### `onPhaseComplete(phase)`
@@ -173,6 +182,7 @@ Appelé au début d'une phase (mode collaboratif).
 Appelé à la fin d'une phase.
 
 **Paramètres :**
+
 - `phase: string` - Nom de la phase
 
 ##### `onSocietyStart(prompt, agentCount)`
@@ -180,6 +190,7 @@ Appelé à la fin d'une phase.
 Appelé au démarrage de la société.
 
 **Paramètres :**
+
 - `prompt: string` - Prompt initial
 - `agentCount: number` - Nombre d'agents
 
@@ -188,6 +199,7 @@ Appelé au démarrage de la société.
 Appelé quand la société termine le traitement.
 
 **Paramètres :**
+
 - `finalResult: string` - Résultat final
 
 ---
@@ -278,11 +290,11 @@ abstract class StandardModelBase implements AIModel {
     options?: Partial<StandardModelOptions>,
     processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<string>
   );
-  
+
   name(): string;
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
   supportsPromptType(promptType: string): boolean;
-  
+
   withName(name: string): this;
   withAdapter(adapter: ModelAdapter): this;
   withTimeout(timeout: number): this;
@@ -300,10 +312,12 @@ constructor(
 ```
 
 **Paramètres :**
+
 - `options?: Partial<StandardModelOptions>` - Options de configuration
 - `processFunc?: Function` - Fonction de traitement custom
 
 **Options disponibles :**
+
 ```typescript
 interface StandardModelOptions {
   name: string;
@@ -321,15 +335,15 @@ interface StandardModelOptions {
 Configure le nom du modèle (chaînable).
 
 **Paramètres :**
+
 - `name: string` - Nouveau nom
 
 **Retourne :** `this`
 
 **Exemple :**
+
 ```typescript
-const model = new MyModel()
-  .withName('GPT-4')
-  .withTimeout(30000);
+const model = new MyModel().withName('GPT-4').withTimeout(30000);
 ```
 
 ##### `withAdapter(adapter)`
@@ -337,6 +351,7 @@ const model = new MyModel()
 Configure l'adaptateur (chaînable).
 
 **Paramètres :**
+
 - `adapter: ModelAdapter` - Adaptateur à utiliser
 
 **Retourne :** `this`
@@ -346,6 +361,7 @@ Configure l'adaptateur (chaînable).
 Configure le timeout (chaînable).
 
 **Paramètres :**
+
 - `timeout: number` - Timeout en millisecondes
 
 **Retourne :** `this`
@@ -355,6 +371,7 @@ Configure le timeout (chaînable).
 Configure les types de prompts supportés (chaînable).
 
 **Paramètres :**
+
 - `types: string[]` - Types supportés
 
 **Retourne :** `this`
@@ -365,16 +382,16 @@ Configure les types de prompts supportés (chaînable).
 class MyCustomModel extends StandardModelBase {
   constructor(apiKey: string) {
     super(
-      { 
+      {
         name: 'MyCustomModel',
-        timeout: 30000 
+        timeout: 30000,
       },
       async (prompt: unknown) => {
         // Votre logique de traitement
         const response = await fetch('https://api.example.com', {
           method: 'POST',
           body: JSON.stringify({ prompt }),
-          headers: { 'Authorization': `Bearer ${apiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` },
         });
         return await response.text();
       }
@@ -398,6 +415,7 @@ class TextModelAdapter implements ModelAdapter {
 ```
 
 **Usage :**
+
 ```typescript
 const adapter = new TextModelAdapter();
 const model = new StandardModelBase({ adapter });
@@ -418,15 +436,15 @@ class OpenAIAdapter implements ModelAdapter {
 ```
 
 **Format de sortie :**
+
 ```typescript
 {
-  messages: [
-    { role: 'user', content: prompt }
-  ]
+  messages: [{ role: 'user', content: prompt }];
 }
 ```
 
 **Usage :**
+
 ```typescript
 const adapter = new OpenAIAdapter();
 const model = new StandardModelBase({ adapter });
@@ -447,11 +465,10 @@ class GeminiAdapter implements ModelAdapter {
 ```
 
 **Format de sortie :**
+
 ```typescript
 {
-  contents: [
-    { role: 'user', parts: [{ text: prompt }] }
-  ]
+  contents: [{ role: 'user', parts: [{ text: prompt }] }];
 }
 ```
 
@@ -468,7 +485,7 @@ class SocietyGroup {
   public multiModel: boolean;
   public context?: CollaborativeContext;
   public observer?: SocietyObserver;
-  
+
   constructor(
     agents: Agent[],
     models: AIModel[],
@@ -476,14 +493,14 @@ class SocietyGroup {
     context?: CollaborativeContext,
     observer?: SocietyObserver
   );
-  
+
   async run(signal?: AbortSignal): Promise<void>;
   async collectResults(signal?: AbortSignal): Promise<string>;
   async collectResultsWithSynthesisModel(
-    synthesisModel: AIModel, 
+    synthesisModel: AIModel,
     signal?: AbortSignal
   ): Promise<string>;
-  
+
   // Mode collaboratif
   async performInitialAnalysis(signal?: AbortSignal): Promise<void>;
   async exploreDimensions(signal?: AbortSignal): Promise<void>;
@@ -499,6 +516,7 @@ class SocietyGroup {
 Lance tous les agents en parallèle.
 
 **Paramètres :**
+
 - `signal?: AbortSignal` - Signal d'annulation
 
 **Retourne :** `Promise<void>`
@@ -508,6 +526,7 @@ Lance tous les agents en parallèle.
 Collecte et agrège les résultats des agents.
 
 **Paramètres :**
+
 - `signal?: AbortSignal` - Signal d'annulation
 
 **Retourne :** `Promise<string>` - Résultats agrégés
@@ -517,6 +536,7 @@ Collecte et agrège les résultats des agents.
 Collecte les résultats et utilise un modèle pour la synthèse.
 
 **Paramètres :**
+
 - `synthesisModel: AIModel` - Modèle de synthèse
 - `signal?: AbortSignal` - Signal d'annulation
 
@@ -531,7 +551,7 @@ Pool de workers pour parallélisation.
 ```typescript
 class WorkerPool {
   constructor(maxWorkers: number, signal?: AbortSignal);
-  
+
   async submit<T>(task: () => Promise<T>): Promise<T>;
   async waitAll(): Promise<void>;
 }
@@ -544,6 +564,7 @@ constructor(maxWorkers: number, signal?: AbortSignal)
 ```
 
 **Paramètres :**
+
 - `maxWorkers: number` - Nombre maximum de workers simultanés
 - `signal?: AbortSignal` - Signal d'annulation global
 
@@ -554,6 +575,7 @@ constructor(maxWorkers: number, signal?: AbortSignal)
 Soumet une tâche au pool.
 
 **Paramètres :**
+
 - `task: () => Promise<T>` - Fonction asynchrone à exécuter
 
 **Retourne :** `Promise<T>` - Résultat de la tâche
@@ -565,6 +587,7 @@ Attend que toutes les tâches soient terminées.
 **Retourne :** `Promise<void>`
 
 **Exemple :**
+
 ```typescript
 const pool = new WorkerPool(3);
 
@@ -594,10 +617,11 @@ async function society(
   models: AIModel[],
   multiModel?: boolean,
   observer?: SocietyObserver
-): Promise<string>
+): Promise<string>;
 ```
 
 **Paramètres :**
+
 - `prompt: string` - Prompt à analyser
 - `agentCount: number` - Nombre d'agents (doit être > 0)
 - `models: AIModel[]` - Tableau de modèles d'IA
@@ -607,17 +631,14 @@ async function society(
 **Retourne :** `Promise<string>` - Résultat agrégé
 
 **Throws :**
+
 - `InvalidAgentCountError` - Si agentCount <= 0
 - `NoModelsSpecifiedError` - Si models est vide
 
 **Exemple :**
+
 ```typescript
-const result = await society(
-  'Explique TypeScript',
-  3,
-  [new MyModel()],
-  false
-);
+const result = await society('Explique TypeScript', 3, [new MyModel()], false);
 console.log(result);
 ```
 
@@ -635,10 +656,11 @@ async function societyWithSynthesis(
   multiModel: boolean,
   synthModel: AIModel,
   observer?: SocietyObserver
-): Promise<string>
+): Promise<string>;
 ```
 
 **Paramètres :**
+
 - `prompt: string` - Prompt à analyser
 - `agentCount: number` - Nombre d'agents
 - `models: AIModel[]` - Modèles pour les agents
@@ -649,11 +671,13 @@ async function societyWithSynthesis(
 **Retourne :** `Promise<string>` - Résultat synthétisé
 
 **Throws :**
+
 - `InvalidAgentCountError` - Si agentCount <= 0
 - `NoModelsSpecifiedError` - Si models est vide
 - `SynthesisModelRequiredError` - Si synthModel est null/undefined
 
 **Exemple :**
+
 ```typescript
 const result = await societyWithSynthesis(
   'Avantages de TypeScript',
@@ -677,10 +701,11 @@ async function societyCollaborative(
   models: AIModel[],
   multiModel?: boolean,
   observer?: SocietyObserver
-): Promise<string>
+): Promise<string>;
 ```
 
 **Paramètres :**
+
 - `prompt: string` - Prompt à analyser
 - `agentCount: number` - Nombre d'agents (recommandé: 3-7)
 - `models: AIModel[]` - Modèles d'IA
@@ -690,12 +715,14 @@ async function societyCollaborative(
 **Retourne :** `Promise<string>` - Réponse finale collaborative
 
 **Phases exécutées :**
+
 1. Analyse initiale
 2. Exploration de dimensions
 3. Intégration des analyses
 4. Génération réponse finale
 
 **Exemple :**
+
 ```typescript
 const result = await societyCollaborative(
   'Comment améliorer la performance web ?',
@@ -713,11 +740,11 @@ const result = await societyCollaborative(
 
 ```typescript
 interface StandardModelOptions {
-  name: string;              // Nom du modèle
-  timeout: number;           // Timeout en ms (défaut: 20000)
+  name: string; // Nom du modèle
+  timeout: number; // Timeout en ms (défaut: 20000)
   retryOptions: RetryOptions; // Options de retry
-  logger: Logger;            // Logger
-  adapter?: ModelAdapter;    // Adaptateur optionnel
+  logger: Logger; // Logger
+  adapter?: ModelAdapter; // Adaptateur optionnel
 }
 ```
 
@@ -725,15 +752,16 @@ interface StandardModelOptions {
 
 ```typescript
 interface RetryOptions {
-  maxAttempts: number;       // Nombre max de tentatives (défaut: 3)
-  initialDelay: number;      // Délai initial en ms (défaut: 1000)
-  maxDelay: number;          // Délai max en ms (défaut: 10000)
+  maxAttempts: number; // Nombre max de tentatives (défaut: 3)
+  initialDelay: number; // Délai initial en ms (défaut: 1000)
+  maxDelay: number; // Délai max en ms (défaut: 10000)
   backoffMultiplier: number; // Multiplicateur backoff (défaut: 2)
-  jitter: boolean;           // Ajouter du jitter (défaut: true)
+  jitter: boolean; // Ajouter du jitter (défaut: true)
 }
 ```
 
 **Valeurs par défaut :**
+
 ```typescript
 {
   maxAttempts: 3,
@@ -751,7 +779,7 @@ enum LogLevel {
   DEBUG = 0,
   INFO = 1,
   WARN = 2,
-  ERROR = 3
+  ERROR = 3,
 }
 ```
 
@@ -803,7 +831,7 @@ throw new SynthesisModelRequiredError();
 Lancée quand le traitement échoue.
 
 ```typescript
-throw new ProcessingFailedError('Raison de l\'échec');
+throw new ProcessingFailedError("Raison de l'échec");
 ```
 
 ### TimeoutError
@@ -811,7 +839,7 @@ throw new ProcessingFailedError('Raison de l\'échec');
 Lancée lors d'un timeout.
 
 ```typescript
-throw new TimeoutError('L\'opération a dépassé le timeout');
+throw new TimeoutError("L'opération a dépassé le timeout");
 ```
 
 ### Gestion des Erreurs
@@ -821,7 +849,7 @@ try {
   const result = await society(prompt, 3, [model]);
 } catch (error) {
   if (error instanceof InvalidAgentCountError) {
-    console.error('Nombre d\'agents invalide');
+    console.error("Nombre d'agents invalide");
   } else if (error instanceof TimeoutError) {
     console.error('Timeout dépassé');
   } else {
@@ -894,10 +922,11 @@ async function withRetry<T>(
   operation: () => Promise<T>,
   options?: Partial<RetryOptions>,
   signal?: AbortSignal
-): Promise<T>
+): Promise<T>;
 ```
 
 **Paramètres :**
+
 - `operation: () => Promise<T>` - Opération à exécuter
 - `options?: Partial<RetryOptions>` - Options de retry
 - `signal?: AbortSignal` - Signal d'annulation
@@ -905,6 +934,7 @@ async function withRetry<T>(
 **Retourne :** `Promise<T>` - Résultat de l'opération
 
 **Exemple :**
+
 ```typescript
 import { withRetry } from '@societyai/core';
 
@@ -914,7 +944,7 @@ const result = await withRetry(
   },
   {
     maxAttempts: 5,
-    initialDelay: 2000
+    initialDelay: 2000,
   }
 );
 ```
@@ -924,15 +954,16 @@ const result = await withRetry(
 Encapsule une erreur avec un message contextuel.
 
 ```typescript
-function wrapError(error: Error, context: string): Error
+function wrapError(error: Error, context: string): Error;
 ```
 
 **Exemple :**
+
 ```typescript
 try {
   await operation();
 } catch (error) {
-  throw wrapError(error as Error, 'Échec de l\'opération');
+  throw wrapError(error as Error, "Échec de l'opération");
 }
 ```
 
@@ -947,17 +978,14 @@ import { StandardModelBase, society } from '@societyai/core';
 
 class MyModel extends StandardModelBase {
   constructor(apiKey: string) {
-    super(
-      { name: 'MyModel', timeout: 30000 },
-      async (prompt: unknown) => {
-        const response = await fetch('https://api.example.com', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({ prompt })
-        });
-        return await response.text();
-      }
-    );
+    super({ name: 'MyModel', timeout: 30000 }, async (prompt: unknown) => {
+      const response = await fetch('https://api.example.com', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ prompt }),
+      });
+      return await response.text();
+    });
   }
 }
 
@@ -974,27 +1002,27 @@ class MyObserver implements SocietyObserver {
   onAgentStart(id: number, model: string, prompt: unknown): void {
     console.log(`Agent ${id} démarre avec ${model}`);
   }
-  
+
   onAgentComplete(id: number, model: string, result: string): void {
     console.log(`Agent ${id} a terminé`);
   }
-  
+
   onAgentError(id: number, model: string, error: Error): void {
     console.error(`Agent ${id} erreur:`, error.message);
   }
-  
+
   onPhaseStart(phase: string): void {
     console.log(`Phase: ${phase}`);
   }
-  
+
   onPhaseComplete(phase: string): void {
     console.log(`Phase ${phase} terminée`);
   }
-  
+
   onSocietyStart(prompt: string, count: number): void {
     console.log(`Démarrage avec ${count} agents`);
   }
-  
+
   onSocietyComplete(result: string): void {
     console.log('Société terminée');
   }
@@ -1017,12 +1045,7 @@ const controller = new AbortController();
 setTimeout(() => controller.abort(), 60000);
 
 try {
-  const result = await societyCollaborative(
-    'Question complexe',
-    5,
-    [model],
-    false
-  );
+  const result = await societyCollaborative('Question complexe', 5, [model], false);
   console.log(result);
 } catch (error) {
   if (error.name === 'AbortError') {

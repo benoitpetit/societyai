@@ -6,45 +6,45 @@ Guide complet de navigation dans la documentation et les exemples de SocietyAI.
 
 ### Guides Principaux
 
-| Document | Description | Niveau |
-|----------|-------------|--------|
-| [README.md](./README.md) | Vue d'ensemble du projet | Débutant |
-| [docs/getting-started.md](./docs/getting-started.md) | Guide de démarrage rapide | Débutant |
-| [docs/api.md](./docs/api.md) | Référence API complète | Intermédiaire |
-| [docs/architecture.md](./docs/architecture.md) | Architecture du système | Avancé |
-| [docs/best-practices.md](./docs/best-practices.md) | Meilleures pratiques | Avancé |
+| Document                                             | Description               | Niveau        |
+| ---------------------------------------------------- | ------------------------- | ------------- |
+| [README.md](./README.md)                             | Vue d'ensemble du projet  | Débutant      |
+| [docs/getting-started.md](./docs/getting-started.md) | Guide de démarrage rapide | Débutant      |
+| [docs/api.md](./docs/api.md)                         | Référence API complète    | Intermédiaire |
+| [docs/architecture.md](./docs/architecture.md)       | Architecture du système   | Avancé        |
+| [docs/best-practices.md](./docs/best-practices.md)   | Meilleures pratiques      | Avancé        |
 
 ### Documentation Complémentaire
 
-| Document | Description |
-|----------|-------------|
-| [CHANGELOG.md](./CHANGELOG.md) | Historique des versions |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | Guide de contribution |
-| [LICENSE](./LICENSE) | Licence MIT |
+| Document                             | Description             |
+| ------------------------------------ | ----------------------- |
+| [CHANGELOG.md](./CHANGELOG.md)       | Historique des versions |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Guide de contribution   |
+| [LICENSE](./LICENSE)                 | Licence MIT             |
 
 ## 💻 Exemples de Code
 
 ### Exemples de Base
 
-| Fichier | Description | Concepts |
-|---------|-------------|----------|
-| [examples/basic.ts](./examples/basic.ts) | Exemples simples d'utilisation | Mode standard, synthèse, collaboratif |
-| [examples/README.md](./examples/README.md) | Guide des exemples | - |
+| Fichier                                    | Description                    | Concepts                              |
+| ------------------------------------------ | ------------------------------ | ------------------------------------- |
+| [examples/basic.ts](./examples/basic.ts)   | Exemples simples d'utilisation | Mode standard, synthèse, collaboratif |
+| [examples/README.md](./examples/README.md) | Guide des exemples             | -                                     |
 
 ### Exemples Avancés
 
-| Fichier | Description | Concepts |
-|---------|-------------|----------|
-| [examples/advanced/custom-observer.ts](./examples/advanced/custom-observer.ts) | Observateurs avec métriques | Observer pattern, monitoring |
-| [examples/advanced/multi-model.ts](./examples/advanced/multi-model.ts) | Utilisation multi-modèles | Distribution, rotation |
-| [examples/advanced/retry-config.ts](./examples/advanced/retry-config.ts) | Configuration du retry | Résilience, backoff |
-| [examples/advanced/timeout-cancellation.ts](./examples/advanced/timeout-cancellation.ts) | Gestion timeouts | AbortSignal, cancellation |
-| [examples/advanced/adapter-pattern.ts](./examples/advanced/adapter-pattern.ts) | Adaptateurs personnalisés | ModelAdapter, transformation |
+| Fichier                                                                                  | Description                 | Concepts                     |
+| ---------------------------------------------------------------------------------------- | --------------------------- | ---------------------------- |
+| [examples/advanced/custom-observer.ts](./examples/advanced/custom-observer.ts)           | Observateurs avec métriques | Observer pattern, monitoring |
+| [examples/advanced/multi-model.ts](./examples/advanced/multi-model.ts)                   | Utilisation multi-modèles   | Distribution, rotation       |
+| [examples/advanced/retry-config.ts](./examples/advanced/retry-config.ts)                 | Configuration du retry      | Résilience, backoff          |
+| [examples/advanced/timeout-cancellation.ts](./examples/advanced/timeout-cancellation.ts) | Gestion timeouts            | AbortSignal, cancellation    |
+| [examples/advanced/adapter-pattern.ts](./examples/advanced/adapter-pattern.ts)           | Adaptateurs personnalisés   | ModelAdapter, transformation |
 
 ### Exemples d'Intégration
 
-| Fichier | Description | API |
-|---------|-------------|-----|
+| Fichier                                                                                      | Description        | API            |
+| -------------------------------------------------------------------------------------------- | ------------------ | -------------- |
 | [examples/integrations/openai-integration.ts](./examples/integrations/openai-integration.ts) | Intégration OpenAI | GPT-3.5, GPT-4 |
 
 ## 🎯 Parcours d'Apprentissage
@@ -216,10 +216,10 @@ Guide complet de navigation dans la documentation et les exemples de SocietyAI.
 
 ## 🔗 Liens Externes
 
-- [GitHub Repository](https://github.com/benoitpetit/societyai)
+- [GitHub Repository](https://github.com/benoitpetit/societyai-package)
 - [npm Package](https://www.npmjs.com/package/@societyai/core)
-- [Issues](https://github.com/benoitpetit/societyai/issues)
-- [Discussions](https://github.com/benoitpetit/societyai/discussions)
+- [Issues](https://github.com/benoitpetit/societyai-package/issues)
+- [Discussions](https://github.com/benoitpetit/societyai-package/discussions)
 
 ## 📊 Statistiques
 
@@ -232,4 +232,4 @@ Guide complet de navigation dans la documentation et les exemples de SocietyAI.
 
 **Dernière mise à jour :** Janvier 2026
 
-Pour toute question, consultez la [documentation](./docs/) ou ouvrez une [issue](https://github.com/benoitpetit/societyai/issues).
+Pour toute question, consultez la [documentation](./docs/) ou ouvrez une [issue](https://github.com/benoitpetit/societyai-package/issues).

@@ -22,41 +22,42 @@ Ce guide présente les meilleures pratiques, patterns recommandés et conseils d
 ### Mode Standard
 
 **✅ Utilisez quand :**
+
 - Questions simples nécessitant plusieurs perspectives
 - Besoin de rapidité d'exécution
 - Première analyse d'un sujet
 - Budget limité
 
 **❌ Évitez quand :**
+
 - Besoin d'une réponse très cohérente
 - Questions très complexes
 - Besoin d'analyse approfondie
 
 **Exemple :**
+
 ```typescript
 // Bon usage : Question simple, besoin de rapidité
-const result = await society(
-  'Liste les avantages de TypeScript',
-  3,
-  [model],
-  false
-);
+const result = await society('Liste les avantages de TypeScript', 3, [model], false);
 ```
 
 ### Mode Synthèse
 
 **✅ Utilisez quand :**
+
 - Besoin d'une réponse unifiée et cohérente
 - Questions avec multiples angles d'analyse
 - Identification de consensus nécessaire
 - Budget modéré
 
 **❌ Évitez quand :**
+
 - Questions très simples (overhead inutile)
 - Besoin de rapidité maximale
 - Budget très limité
 
 **Exemple :**
+
 ```typescript
 // Bon usage : Besoin de synthèse cohérente
 const result = await societyWithSynthesis(
@@ -71,18 +72,21 @@ const result = await societyWithSynthesis(
 ### Mode Collaboratif
 
 **✅ Utilisez quand :**
+
 - Questions très complexes
 - Besoin d'analyse multidimensionnelle
 - Qualité prioritaire sur vitesse
 - Sujets nécessitant réflexion approfondie
 
 **❌ Évitez quand :**
+
 - Questions simples
 - Besoin de réponse rapide
 - Budget très limité
 - Production avec timeout strict
 
 **Exemple :**
+
 ```typescript
 // Bon usage : Question complexe nécessitant analyse approfondie
 const result = await societyCollaborative(
@@ -132,7 +136,7 @@ await society('Question', 5, [model], false); // ✅
 
 ```typescript
 // Modèles complémentaires
-const fastModel = new FastModel();      // Réponses rapides
+const fastModel = new FastModel(); // Réponses rapides
 const detailedModel = new DetailedModel(); // Analyses approfondies
 const creativeModel = new CreativeModel(); // Perspectives innovantes
 
@@ -184,11 +188,11 @@ class MyModel extends StandardModelBase {
 
 **Timeouts recommandés :**
 
-| Type de Modèle | Timeout Recommandé |
-|----------------|-------------------|
-| Rapide (GPT-3.5) | 15-20 secondes |
-| Standard (GPT-4) | 30-45 secondes |
-| Complexe | 60-90 secondes |
+| Type de Modèle   | Timeout Recommandé |
+| ---------------- | ------------------ |
+| Rapide (GPT-3.5) | 15-20 secondes     |
+| Standard (GPT-4) | 30-45 secondes     |
+| Complexe         | 60-90 secondes     |
 
 ### Retry Strategy
 
@@ -231,11 +235,9 @@ const productionRetry = {
 import { OpenAIAdapter, GeminiAdapter } from '@societyai/core';
 
 // Adapter selon le format de l'API
-const openaiModel = new MyModel()
-  .withAdapter(new OpenAIAdapter());
+const openaiModel = new MyModel().withAdapter(new OpenAIAdapter());
 
-const geminiModel = new MyModel()
-  .withAdapter(new GeminiAdapter());
+const geminiModel = new MyModel().withAdapter(new GeminiAdapter());
 ```
 
 ---
@@ -272,7 +274,7 @@ class CachedModel extends StandardModelBase {
   constructor() {
     super({ name: 'CachedModel' }, async (prompt: unknown) => {
       const key = JSON.stringify(prompt);
-      
+
       // Vérifier le cache
       if (this.cache.has(key)) {
         console.log('Cache hit!');
@@ -281,10 +283,10 @@ class CachedModel extends StandardModelBase {
 
       // Appel réel
       const response = await this.callAPI(prompt);
-      
+
       // Mettre en cache
       this.cache.set(key, response);
-      
+
       return response;
     });
   }
@@ -383,25 +385,25 @@ class CircuitBreakerModel extends StandardModelBase {
 
       try {
         const response = await this.callAPI(prompt);
-        
+
         // Succès - réinitialiser le compteur
         this.failures = 0;
-        
+
         return response;
       } catch (error) {
         this.failures++;
-        
+
         // Ouvrir le circuit si trop de défaillances
         if (this.failures >= this.maxFailures) {
           this.isOpen = true;
-          
+
           // Réinitialiser après un délai
           setTimeout(() => {
             this.isOpen = false;
             this.failures = 0;
           }, this.resetTimeout);
         }
-        
+
         throw error;
       }
     });
@@ -437,14 +439,14 @@ function estimateCost(
   synthesisCost?: number
 ): CostEstimate {
   let total = agents * modelCost;
-  
+
   if (mode === 'synthesis' && synthesisCost) {
     total += synthesisCost;
   } else if (mode === 'collaborative') {
     // 4 phases : analyse, exploration, intégration, réponse
     total = (agents + 3) * modelCost;
   }
-  
+
   return {
     agents,
     modelCost,
@@ -477,8 +479,7 @@ await societyWithSynthesis(
 );
 
 // 2. Limiter max_tokens
-const budgetModel = new OpenAIModel(apiKey, 'gpt-3.5-turbo')
-  .withMaxTokens(500); // Limiter la longueur
+const budgetModel = new OpenAIModel(apiKey, 'gpt-3.5-turbo').withMaxTokens(500); // Limiter la longueur
 
 // 3. Caching agressif
 const cachedModel = new CachedModel();
@@ -488,7 +489,7 @@ try {
   return await society('Question', 3, [model], false);
 } catch (error) {
   if (error instanceof TimeoutError) {
-    return 'Réponse simplifiée (pas d\'API)';
+    return "Réponse simplifiée (pas d'API)";
   }
   throw error;
 }
@@ -512,7 +513,7 @@ class ProductionObserver implements SocietyObserver {
 
   onSocietyStart(prompt: string, agentCount: number): void {
     this.metrics.startTime = Date.now();
-    
+
     // Envoyer à système de monitoring
     this.sendMetric('society.start', {
       agentCount,
@@ -523,7 +524,7 @@ class ProductionObserver implements SocietyObserver {
   onAgentComplete(agentId: number, modelName: string, result: string): void {
     const duration = Date.now() - this.metrics.startTime;
     this.metrics.agentDurations.push(duration);
-    
+
     // Métriques
     this.sendMetric('agent.complete', {
       agentId,
@@ -535,7 +536,7 @@ class ProductionObserver implements SocietyObserver {
 
   onAgentError(agentId: number, modelName: string, error: Error): void {
     this.metrics.errors.push(error);
-    
+
     // Alertes
     this.sendAlert('agent.error', {
       agentId,
@@ -546,12 +547,12 @@ class ProductionObserver implements SocietyObserver {
 
   onSocietyComplete(finalResult: string): void {
     const totalDuration = Date.now() - this.metrics.startTime;
-    
+
     // Métriques finales
     this.sendMetric('society.complete', {
       totalDuration,
-      avgAgentDuration: this.metrics.agentDurations.reduce((a, b) => a + b, 0) / 
-                        this.metrics.agentDurations.length,
+      avgAgentDuration:
+        this.metrics.agentDurations.reduce((a, b) => a + b, 0) / this.metrics.agentDurations.length,
       errorCount: this.metrics.errors.length,
       resultLength: finalResult.length,
     });
@@ -662,7 +663,7 @@ class RateLimitedModel extends StandardModelBase {
     super({ name: 'RateLimited' }, async (prompt: unknown) => {
       // Nettoyer les anciennes requêtes
       const now = Date.now();
-      this.requests = this.requests.filter(t => now - t < this.windowMs);
+      this.requests = this.requests.filter((t) => now - t < this.windowMs);
 
       // Vérifier la limite
       if (this.requests.length >= this.maxRequests) {
@@ -714,9 +715,9 @@ class MockModel implements AIModel {
 describe('Society', () => {
   it('devrait agréger les résultats correctement', async () => {
     const model = new MockModel('Test response');
-    
+
     const result = await society('Question', 3, [model], false);
-    
+
     expect(result).toContain('Test response');
     expect(result).toContain('Agent 1');
     expect(result).toContain('Agent 2');
@@ -734,14 +735,18 @@ describe('Integration Tests', () => {
   // Skip si pas de clé API
   const skipIfNoAPIKey = !process.env.OPENAI_API_KEY ? it.skip : it;
 
-  skipIfNoAPIKey('devrait fonctionner avec OpenAI', async () => {
-    const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
-    
-    const result = await society('Test', 2, [model], false);
-    
-    expect(result).toBeDefined();
-    expect(result.length).toBeGreaterThan(0);
-  }, 30000); // Timeout élevé pour API réelle
+  skipIfNoAPIKey(
+    'devrait fonctionner avec OpenAI',
+    async () => {
+      const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
+
+      const result = await society('Test', 2, [model], false);
+
+      expect(result).toBeDefined();
+      expect(result.length).toBeGreaterThan(0);
+    },
+    30000
+  ); // Timeout élevé pour API réelle
 });
 ```
 
@@ -762,7 +767,7 @@ async function cascadeSociety(
   // 1. Essayer avec modèle rapide
   try {
     const quickResult = await society(prompt, 3, [fastModel], false);
-    
+
     // Vérifier la qualité
     if (quickResult.length > 500) {
       return quickResult; // Suffisant
@@ -799,10 +804,7 @@ const result = await societyWithSynthesis(
 **Vérifier la cohérence des réponses :**
 
 ```typescript
-async function validatedSociety(
-  prompt: string,
-  model: AIModel
-): Promise<string> {
+async function validatedSociety(prompt: string, model: AIModel): Promise<string> {
   // 1. Première passe
   const result1 = await society(prompt, 3, [model], false);
 
@@ -857,6 +859,7 @@ Ces meilleures pratiques vous aideront à :
 ✅ Préparer la production
 
 Pour plus d'exemples concrets, consultez :
+
 - [Exemples avancés](../examples/advanced/)
 - [Exemples d'intégration](../examples/integrations/)
 - [Documentation API](./api.md)

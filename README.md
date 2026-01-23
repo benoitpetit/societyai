@@ -299,7 +299,7 @@ Pour toute question ou problème, veuillez ouvrir une issue sur GitHub.
 
 ## 🔗 Liens
 
-- [Documentation complète](https://github.com/benoitpetit/societyai)
+- [Documentation complète](https://github.com/benoitpetit/societyai-package)
 - [Exemples](./examples)
 - [Changelog](./CHANGELOG.md)
 

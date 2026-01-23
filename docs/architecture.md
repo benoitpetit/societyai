@@ -69,6 +69,7 @@ interface AIModel {
 ```
 
 **Avantages :**
+
 - Indépendance vis-à-vis de fournisseurs spécifiques
 - Permet d'utiliser n'importe quel modèle d'IA
 - Facilite les tests avec des mocks
@@ -86,7 +87,7 @@ Classe de base qui implémente les fonctionnalités communes :
 class StandardModelBase implements AIModel {
   protected options: StandardModelOptions;
   protected processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<string>;
-  
+
   // Implémentation avec retry, timeout, adaptation...
 }
 ```
@@ -137,11 +138,13 @@ Prompt initial
 ```
 
 **Workflow :**
+
 1. Chaque agent reçoit une variation du prompt
 2. Les agents traitent en parallèle
 3. Les résultats sont agrégés simplement
 
 **Cas d'usage :**
+
 - Questions simples nécessitant plusieurs perspectives
 - Besoin de rapidité
 - Première analyse d'un sujet
@@ -166,11 +169,13 @@ Prompt initial
 ```
 
 **Workflow :**
+
 1. Agents analysent le prompt en parallèle
 2. Un modèle dédié synthétise les résultats
 3. Génération d'une conclusion cohérente
 
 **Cas d'usage :**
+
 - Besoin d'une réponse unifiée et cohérente
 - Questions complexes avec multiples angles
 - Analyse nécessitant intégration d'insights
@@ -203,12 +208,14 @@ Prompt initial
 ```
 
 **Workflow :**
+
 1. **Phase 1** : Analyse initiale approfondie par agent primaire
 2. **Phase 2** : Chaque agent explore une dimension spécifique
 3. **Phase 3** : Intégration des insights par agent primaire
 4. **Phase 4** : Génération de la réponse finale cohérente
 
 **Dimensions explorées :**
+
 - Compréhension fondamentale
 - Aspects pratiques
 - Implications plus larges
@@ -216,6 +223,7 @@ Prompt initial
 - Applications concrètes
 
 **Cas d'usage :**
+
 - Questions très complexes
 - Besoin d'analyse approfondie
 - Sujets nécessitant exploration multidimensionnelle
@@ -281,6 +289,7 @@ interface SocietyObserver {
 ```
 
 **Cas d'usage :**
+
 - Monitoring en production
 - Debugging
 - Métriques et analytics
@@ -296,6 +305,7 @@ Logging hiérarchique avec niveaux :
 - **ERROR** : Erreurs
 
 Configuration globale :
+
 ```typescript
 setGlobalLogLevel(LogLevel.INFO);
 ```
@@ -322,11 +332,11 @@ class MyAdapter implements ModelAdapter {
   async convertPrompt(genericPrompt: unknown): Promise<unknown> {
     // Conversion prompt
   }
-  
+
   async convertResponse(specificResponse: unknown): Promise<string> {
     // Conversion réponse
   }
-  
+
   getSupportedPromptTypes(): string[] {
     return ['text', 'structured'];
   }
@@ -340,7 +350,7 @@ class MyObserver implements SocietyObserver {
   onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
     console.log(`Agent ${agentId} starting with ${modelName}`);
   }
-  
+
   // Implémenter autres méthodes...
 }
 ```

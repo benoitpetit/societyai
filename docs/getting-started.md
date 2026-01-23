@@ -94,19 +94,16 @@ import { StandardModelBase } from '@societyai/core';
 
 class SimulatedModel extends StandardModelBase {
   constructor(modelName: string) {
-    super(
-      { name: modelName },
-      async (prompt: unknown) => {
-        // Simuler un délai de traitement
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const promptText = String(prompt);
-        
-        // Simuler une réponse
-        return `Réponse de ${modelName} : J'ai analysé "${promptText.substring(0, 50)}..." 
+    super({ name: modelName }, async (prompt: unknown) => {
+      // Simuler un délai de traitement
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const promptText = String(prompt);
+
+      // Simuler une réponse
+      return `Réponse de ${modelName} : J'ai analysé "${promptText.substring(0, 50)}..." 
         et voici mon analyse détaillée du sujet.`;
-      }
-    );
+    });
   }
 }
 ```
@@ -116,9 +113,9 @@ class SimulatedModel extends StandardModelBase {
 ```typescript
 async function testModel() {
   const model = new SimulatedModel('TestModel');
-  
-  const response = await model.process('Qu\'est-ce que TypeScript ?');
-  
+
+  const response = await model.process("Qu'est-ce que TypeScript ?");
+
   console.log(response);
 }
 
@@ -126,8 +123,9 @@ testModel();
 ```
 
 **Sortie attendue :**
+
 ```
-Réponse de TestModel : J'ai analysé "Qu'est-ce que TypeScript ?..." 
+Réponse de TestModel : J'ai analysé "Qu'est-ce que TypeScript ?..."
 et voici mon analyse détaillée du sujet.
 ```
 
@@ -146,26 +144,23 @@ setGlobalLogLevel(LogLevel.INFO);
 // Créer un modèle
 class SimpleModel extends StandardModelBase {
   constructor() {
-    super(
-      { name: 'SimpleModel' },
-      async (prompt: unknown) => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return `Analyse : ${String(prompt)}`;
-      }
-    );
+    super({ name: 'SimpleModel' }, async (prompt: unknown) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return `Analyse : ${String(prompt)}`;
+    });
   }
 }
 
 async function firstSociety() {
   const model = new SimpleModel();
-  
+
   const result = await society(
     'Explique-moi TypeScript en termes simples',
-    3,           // 3 agents
-    [model],     // Modèle(s) à utiliser
-    false        // Un seul modèle pour tous les agents
+    3, // 3 agents
+    [model], // Modèle(s) à utiliser
+    false // Un seul modèle pour tous les agents
   );
-  
+
   console.log('\n=== RÉSULTAT ===\n');
   console.log(result);
 }
@@ -183,6 +178,7 @@ La fonction `society()` va :
 4. Agréger les résultats
 
 **Sortie attendue :**
+
 ```
 Démarrage de la société avec 3 agents
 Agent 0 (SimpleModel) démarre le traitement
@@ -214,18 +210,14 @@ Agent 3: Analyse : ...
 import { society } from '@societyai/core';
 
 async function modeStandard() {
-  const result = await society(
-    'Quels sont les avantages de TypeScript ?',
-    3,
-    [model],
-    false
-  );
-  
+  const result = await society('Quels sont les avantages de TypeScript ?', 3, [model], false);
+
   console.log(result);
 }
 ```
 
 **Caractéristiques :**
+
 - ✅ Rapide
 - ✅ Simple
 - ✅ Bon pour premières analyses
@@ -243,20 +235,21 @@ import { societyWithSynthesis } from '@societyai/core';
 async function modeSynthese() {
   const agentModel = new MyModel('Agent');
   const synthesisModel = new MyModel('Synthesis');
-  
+
   const result = await societyWithSynthesis(
     'Compare les frameworks React, Vue et Angular',
-    3,              // Agents
-    [agentModel],   // Modèle pour agents
-    false,          // Multi-modèle
-    synthesisModel  // Modèle de synthèse
+    3, // Agents
+    [agentModel], // Modèle pour agents
+    false, // Multi-modèle
+    synthesisModel // Modèle de synthèse
   );
-  
+
   console.log(result);
 }
 ```
 
 **Caractéristiques :**
+
 - ✅ Réponse cohérente et structurée
 - ✅ Identifie points d'accord/désaccord
 - ✅ Meilleure qualité de synthèse
@@ -274,11 +267,11 @@ import { societyCollaborative } from '@societyai/core';
 async function modeCollaboratif() {
   const result = await societyCollaborative(
     'Comment concevoir une architecture microservices scalable ?',
-    5,        // 5 agents recommandés
+    5, // 5 agents recommandés
     [model],
     false
   );
-  
+
   console.log(result);
 }
 ```
@@ -296,6 +289,7 @@ async function modeCollaboratif() {
 4. **Réponse Finale** : Génération d'une réponse complète
 
 **Caractéristiques :**
+
 - ✅ Analyse très approfondie
 - ✅ Exploration multidimensionnelle
 - ✅ Meilleure qualité pour sujets complexes
@@ -314,13 +308,14 @@ const modelC = new MyModel('Gemini');
 
 const result = await society(
   'Question complexe',
-  6,                          // 6 agents
-  [modelA, modelB, modelC],  // 3 modèles différents
-  true                        // Distribuer les modèles
+  6, // 6 agents
+  [modelA, modelB, modelC], // 3 modèles différents
+  true // Distribuer les modèles
 );
 ```
 
 Avec `multiModel: true`, les agents utiliseront les modèles en rotation :
+
 - Agent 0 → modelA
 - Agent 1 → modelB
 - Agent 2 → modelC
@@ -339,27 +334,27 @@ class MyObserver implements SocietyObserver {
   onSocietyStart(prompt: string, agentCount: number): void {
     console.log(`🚀 Démarrage : ${agentCount} agents`);
   }
-  
+
   onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
     console.log(`🤖 Agent ${agentId} (${modelName}) démarre`);
   }
-  
+
   onAgentComplete(agentId: number, modelName: string, result: string): void {
     console.log(`✅ Agent ${agentId} terminé`);
   }
-  
+
   onAgentError(agentId: number, modelName: string, error: Error): void {
     console.error(`❌ Agent ${agentId} erreur: ${error.message}`);
   }
-  
+
   onPhaseStart(phase: string): void {
     console.log(`📋 Phase: ${phase}`);
   }
-  
+
   onPhaseComplete(phase: string): void {
     console.log(`✓ Phase ${phase} terminée`);
   }
-  
+
   onSocietyComplete(finalResult: string): void {
     console.log(`🎉 Société terminée`);
   }
@@ -376,7 +371,7 @@ const result = await society('Question', 3, [model], false, observer);
 const model = new StandardModelBase(
   {
     name: 'MyModel',
-    timeout: 30000  // 30 secondes par agent
+    timeout: 30000, // 30 secondes par agent
   },
   async (prompt) => {
     // Traitement
@@ -393,12 +388,12 @@ const model = new StandardModelBase(
   {
     name: 'MyModel',
     retryOptions: {
-      maxAttempts: 5,        // 5 tentatives max
-      initialDelay: 2000,    // 2 secondes initial
-      maxDelay: 30000,       // 30 secondes max
-      backoffMultiplier: 2,  // Doublement du délai
-      jitter: true           // Ajouter de l'aléatoire
-    }
+      maxAttempts: 5, // 5 tentatives max
+      initialDelay: 2000, // 2 secondes initial
+      maxDelay: 30000, // 30 secondes max
+      backoffMultiplier: 2, // Doublement du délai
+      jitter: true, // Ajouter de l'aléatoire
+    },
   },
   async (prompt) => {
     // Traitement
@@ -416,7 +411,7 @@ import { OpenAIAdapter } from '@societyai/core';
 const model = new StandardModelBase(
   {
     name: 'MyModel',
-    adapter: new OpenAIAdapter()  // Format OpenAI
+    adapter: new OpenAIAdapter(), // Format OpenAI
   },
   async (prompt) => {
     // prompt est maintenant au format OpenAI
@@ -426,6 +421,7 @@ const model = new StandardModelBase(
 ```
 
 **Adaptateurs disponibles :**
+
 - `TextModelAdapter` : Format texte simple
 - `OpenAIAdapter` : Format OpenAI messages
 - `GeminiAdapter` : Format Google Gemini
@@ -448,21 +444,17 @@ try {
 ### Gestion Spécifique des Erreurs
 
 ```typescript
-import {
-  InvalidAgentCountError,
-  NoModelsSpecifiedError,
-  TimeoutError
-} from '@societyai/core';
+import { InvalidAgentCountError, NoModelsSpecifiedError, TimeoutError } from '@societyai/core';
 
 try {
   const result = await society('Question', 0, []); // Invalide !
 } catch (error) {
   if (error instanceof InvalidAgentCountError) {
-    console.error('Le nombre d\'agents doit être > 0');
+    console.error("Le nombre d'agents doit être > 0");
   } else if (error instanceof NoModelsSpecifiedError) {
     console.error('Vous devez fournir au moins un modèle');
   } else if (error instanceof TimeoutError) {
-    console.error('L\'opération a dépassé le timeout');
+    console.error("L'opération a dépassé le timeout");
   } else {
     console.error('Erreur inconnue:', error);
   }
@@ -500,7 +492,7 @@ import {
   setGlobalLogLevel,
   LogLevel,
   SocietyObserver,
-  OpenAIAdapter
+  OpenAIAdapter,
 } from '@societyai/core';
 
 // 1. Définir le niveau de log
@@ -509,34 +501,34 @@ setGlobalLogLevel(LogLevel.INFO);
 // 2. Créer un observateur personnalisé
 class ProgressObserver implements SocietyObserver {
   private startTime: number = 0;
-  
+
   onSocietyStart(prompt: string, agentCount: number): void {
     this.startTime = Date.now();
     console.log(`\n🚀 Démarrage de l'analyse`);
     console.log(`📝 Prompt: ${prompt.substring(0, 50)}...`);
     console.log(`👥 Agents: ${agentCount}\n`);
   }
-  
+
   onPhaseStart(phase: string): void {
     console.log(`📋 Phase: ${phase}`);
   }
-  
+
   onPhaseComplete(phase: string): void {
     console.log(`✅ Phase "${phase}" terminée\n`);
   }
-  
+
   onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
     console.log(`  🤖 Agent ${agentId} (${modelName}) en cours...`);
   }
-  
+
   onAgentComplete(agentId: number, modelName: string, result: string): void {
     console.log(`  ✓ Agent ${agentId} terminé`);
   }
-  
+
   onAgentError(agentId: number, modelName: string, error: Error): void {
     console.error(`  ❌ Agent ${agentId} erreur: ${error.message}`);
   }
-  
+
   onSocietyComplete(finalResult: string): void {
     const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(2);
     console.log(`\n🎉 Analyse terminée en ${elapsed}s`);
@@ -557,18 +549,18 @@ class MyAIModel extends StandardModelBase {
           initialDelay: 1000,
           maxDelay: 10000,
           backoffMultiplier: 2,
-          jitter: true
-        }
+          jitter: true,
+        },
       },
       async (prompt: unknown, signal?: AbortSignal) => {
         // Ici, vous appelleriez votre API réelle
         // Pour l'exemple, on simule
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
         if (signal?.aborted) {
           throw new Error('Opération annulée');
         }
-        
+
         return `Analyse détaillée du prompt...`;
       }
     );
@@ -580,33 +572,32 @@ async function main() {
   try {
     // Créer le modèle
     const model = new MyAIModel('your-api-key');
-    
+
     // Créer l'observateur
     const observer = new ProgressObserver();
-    
+
     // Poser une question complexe
     const question = `
       Comment concevoir une architecture microservices évolutive 
       pour une application e-commerce à fort trafic, en tenant compte 
       de la scalabilité, de la résilience et de la sécurité ?
     `.trim();
-    
+
     // Lancer la société collaborative
     const result = await societyCollaborative(
       question,
-      5,          // 5 agents
+      5, // 5 agents
       [model],
       false,
       observer
     );
-    
+
     // Afficher le résultat
     console.log('='.repeat(80));
     console.log('RÉSULTAT FINAL');
     console.log('='.repeat(80));
     console.log(result);
     console.log('='.repeat(80));
-    
   } catch (error) {
     console.error('❌ Erreur:', error.message);
     process.exit(1);
@@ -632,6 +623,7 @@ Maintenant que vous maîtrisez les bases, voici comment aller plus loin :
 ### 1. Explorez les Exemples
 
 Consultez le dossier `examples/` pour des cas d'usage avancés :
+
 - `examples/advanced/` - Patterns avancés
 - `examples/integrations/` - Intégrations avec APIs réelles
 
@@ -644,6 +636,7 @@ Consultez le dossier `examples/` pour des cas d'usage avancés :
 ### 3. Intégrez avec de Vraies APIs
 
 Créez des adaptateurs pour :
+
 - OpenAI GPT-4
 - Anthropic Claude
 - Google Gemini
@@ -687,21 +680,25 @@ await societyCollaborative(prompt, 5, [model], false);
 ### Questions Fréquentes
 
 **Q: Combien d'agents devrais-je utiliser ?**
+
 - Mode standard/synthèse : 3-5 agents
 - Mode collaboratif : 5-7 agents (un par dimension)
 
 **Q: Quel mode choisir ?**
+
 - Simple/rapide → Mode standard
 - Cohérence → Mode synthèse
 - Complexité → Mode collaboratif
 
 **Q: Comment gérer les coûts API ?**
+
 - Limitez le nombre d'agents
 - Configurez des timeouts
 - Utilisez le caching si possible
 - Testez avec des modèles simulés d'abord
 
 **Q: Comment debugger ?**
+
 ```typescript
 setGlobalLogLevel(LogLevel.DEBUG);
 ```
