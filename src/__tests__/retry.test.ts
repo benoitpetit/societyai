@@ -1,6 +1,16 @@
 import { withRetry, sleep } from '../retry';
 
 describe('Retry Mechanism', () => {
+  // Mock console pour éviter les logs dans la sortie des tests
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('withRetry', () => {
     it('should succeed on first attempt', async () => {
       const fn = jest.fn().mockResolvedValue('success');

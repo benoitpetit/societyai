@@ -13,6 +13,15 @@ class MockModel extends StandardModelBase {
 }
 
 describe('Society', () => {
+  // Mock console pour éviter les logs dans la sortie des tests
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
   describe('society function', () => {
     it('should throw InvalidAgentCountError when agentCount is 0', async () => {
       const model = new MockModel();

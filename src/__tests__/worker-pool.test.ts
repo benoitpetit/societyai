@@ -1,6 +1,15 @@
 import { WorkerPool } from '../worker-pool';
 
 describe('WorkerPool', () => {
+  // Mock console pour éviter les logs dans la sortie des tests
+  beforeAll(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
   it('should execute tasks in parallel', async () => {
     const pool = new WorkerPool(3);
     const results: number[] = [];
