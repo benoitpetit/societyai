@@ -1,428 +1,625 @@
-# Architecture de SocietyAI
+# Architecture Overview
 
-## Vue d'ensemble
+This document explains the core architecture, design principles, and key concepts of SocietyAI.
 
-SocietyAI est conçu pour orchestrer plusieurs agents d'IA qui collaborent pour analyser des prompts complexes et générer des réponses complètes. L'architecture repose sur plusieurs principes clés :
+## Table of Contents
 
-- **Modularité** : Chaque composant peut être remplacé ou étendu
-- **Extensibilité** : Support pour n'importe quel modèle d'IA via l'interface `AIModel`
-- **Performance** : Traitement parallèle via un pool de workers
-- **Robustesse** : Gestion des erreurs, retry automatique, timeouts configurables
+- [Design Philosophy](#design-philosophy)
+- [Core Components](#core-components)
+- [System Architecture](#system-architecture)
+- [Data Flow](#data-flow)
+- [Communication Model](#communication-model)
+- [Execution Model](#execution-model)
 
-## Architecture Générale
+## Design Philosophy
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Utilisateur                        │
-└───────────────────┬─────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│            Fonctions Principales                     │
-│  • society()                                         │
-│  • societyWithSynthesis()                           │
-│  • societyCollaborative()                           │
-└───────────────────┬─────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│              SocietyGroup                            │
-│  • Gestion des agents                               │
-│  • Orchestration du workflow                        │
-│  • Collecte des résultats                           │
-└───────────────────┬─────────────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        ▼                       ▼
-┌──────────────┐        ┌──────────────┐
-│ WorkerPool   │        │   Agents     │
-│ • Parallélisme│       │  • AIModel   │
-│ • Queue      │        │  • Prompt    │
-└──────────────┘        └──────────────┘
-                                │
-                                ▼
-                        ┌──────────────┐
-                        │  AIModel     │
-                        │ (Interface)  │
-                        └──────────────┘
-                                │
-                ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
-        ┌──────────┐    ┌──────────┐   ┌──────────┐
-        │  OpenAI  │    │  Gemini  │   │  Custom  │
-        │ Adapter  │    │ Adapter  │   │  Model   │
-        └──────────┘    └──────────┘   └──────────┘
-```
+SocietyAI is built on several key principles:
 
-## Composants Clés
+### 1. **Composability**
+Every component is designed to be composed with others. Roles, agents, and steps can be mixed and matched to create complex workflows.
 
-### 1. Interface AIModel
+### 2. **Configurability**
+Nothing is hardcoded. Users define their own roles, behaviors, and workflows. The library provides the infrastructure, you provide the intelligence.
 
-L'interface `AIModel` est au cœur de l'architecture. Elle définit le contrat que tous les modèles d'IA doivent respecter :
+### 3. **Model Agnosticism**
+SocietyAI doesn't depend on any specific AI provider. You bring your own AI model - OpenAI, Anthropic, Google, local models, or custom APIs.
+
+### 4. **Type Safety**
+Built with TypeScript, providing full type definitions and compile-time safety.
+
+### 5. **Observability**
+Every phase, agent action, and step is observable through hooks and observers.
+
+## Core Components
+
+### 1. AIModel Interface
+
+The foundation of model integration. Any AI service can be wrapped in this interface:
 
 ```typescript
 interface AIModel {
+  // Process a prompt and return a response
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
+  
+  // Return the model name
   name(): string;
+  
+  // Check if the model supports a prompt type
   supportsPromptType(promptType: string): boolean;
 }
 ```
 
-**Avantages :**
+**StandardModelBase** provides a convenient base class with built-in:
+- Timeout handling
+- Retry logic with exponential backoff
+- Model adapters for different prompt formats
+- Cancellation support via AbortSignal
 
-- Indépendance vis-à-vis de fournisseurs spécifiques
-- Permet d'utiliser n'importe quel modèle d'IA
-- Facilite les tests avec des mocks
+### 2. AgentRole
 
-### 2. StandardModelBase
-
-Classe de base qui implémente les fonctionnalités communes :
-
-- Gestion du timeout
-- Mécanisme de retry automatique
-- Adaptation de prompts via ModelAdapter
-- Logging intégré
+Defines the behavior and identity of an agent:
 
 ```typescript
-class StandardModelBase implements AIModel {
-  protected options: StandardModelOptions;
-  protected processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<string>;
-
-  // Implémentation avec retry, timeout, adaptation...
+interface AgentRole {
+  id: string;              // Unique identifier
+  name: string;            // Display name
+  systemPrompt: string;    // Instructions defining behavior
+  capabilities?: string[]; // What the agent can do
+  constraints?: string[];  // What the agent should not do
+  promptTemplate?: string; // Custom prompt formatting
 }
 ```
 
-### 3. SocietyGroup
-
-Orchestrateur principal qui gère :
-
-- La création et l'exécution des agents
-- Le workflow selon le mode choisi
-- La collecte et synthèse des résultats
-- L'observabilité (via SocietyObserver)
-
-### 4. WorkerPool
-
-Gestionnaire de parallélisme qui :
-
-- Exécute les agents en parallèle
-- Gère une queue de tâches
-- Supporte l'annulation via AbortSignal
-- Optimise l'utilisation des ressources
-
-### 5. Système de Retry
-
-Mécanisme robuste de retry avec :
-
-- Backoff exponentiel
-- Jitter pour éviter les thundering herds
-- Nombre maximum de tentatives configurable
-- Support de l'annulation
-
-## Trois Modes de Fonctionnement
-
-### Mode Standard
-
-```
-Prompt initial
-     │
-     ▼
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│ Agent 1 │  │ Agent 2 │  │ Agent 3 │
-└────┬────┘  └────┬────┘  └────┬────┘
-     │            │            │
-     └────────────┴────────────┘
-                  │
-                  ▼
-        Synthèse simple (agrégation)
+**Example**:
+```typescript
+const analyst = {
+  id: 'data-analyst',
+  name: 'Data Analyst',
+  systemPrompt: 'You are a data analyst focused on statistical analysis.',
+  capabilities: ['data-analysis', 'statistics', 'visualization'],
+  constraints: ['Do not make subjective judgments'],
+};
 ```
 
-**Workflow :**
+### 3. AgentConfig
 
-1. Chaque agent reçoit une variation du prompt
-2. Les agents traitent en parallèle
-3. Les résultats sont agrégés simplement
-
-**Cas d'usage :**
-
-- Questions simples nécessitant plusieurs perspectives
-- Besoin de rapidité
-- Première analyse d'un sujet
-
-### Mode Synthèse
-
-```
-Prompt initial
-     │
-     ▼
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│ Agent 1 │  │ Agent 2 │  │ Agent 3 │
-└────┬────┘  └────┬────┘  └────┬────┘
-     │            │            │
-     └────────────┴────────────┘
-                  │
-                  ▼
-          Modèle de synthèse
-                  │
-                  ▼
-         Réponse synthétisée
-```
-
-**Workflow :**
-
-1. Agents analysent le prompt en parallèle
-2. Un modèle dédié synthétise les résultats
-3. Génération d'une conclusion cohérente
-
-**Cas d'usage :**
-
-- Besoin d'une réponse unifiée et cohérente
-- Questions complexes avec multiples angles
-- Analyse nécessitant intégration d'insights
-
-### Mode Collaboratif
-
-```
-              Prompt initial
-                    │
-                    ▼
-         Phase 1: Analyse Initiale
-              (Agent primaire)
-                    │
-                    ▼
-       Phase 2: Exploration de Dimensions
-     ┌──────────────┼──────────────┐
-     ▼              ▼              ▼
-┌─────────┐   ┌─────────┐   ┌─────────┐
-│Dimension│   │Dimension│   │Dimension│
-│    1    │   │    2    │   │    3    │
-└────┬────┘   └────┬────┘   └────┬────┘
-     └──────────────┼──────────────┘
-                    ▼
-      Phase 3: Intégration des Analyses
-              (Agent primaire)
-                    │
-                    ▼
-      Phase 4: Génération Réponse Finale
-              (Agent primaire)
-```
-
-**Workflow :**
-
-1. **Phase 1** : Analyse initiale approfondie par agent primaire
-2. **Phase 2** : Chaque agent explore une dimension spécifique
-3. **Phase 3** : Intégration des insights par agent primaire
-4. **Phase 4** : Génération de la réponse finale cohérente
-
-**Dimensions explorées :**
-
-- Compréhension fondamentale
-- Aspects pratiques
-- Implications plus larges
-- Défis potentiels
-- Applications concrètes
-
-**Cas d'usage :**
-
-- Questions très complexes
-- Besoin d'analyse approfondie
-- Sujets nécessitant exploration multidimensionnelle
-
-## Gestion des Erreurs
-
-### Hiérarchie des Erreurs
-
-```
-Error
-  │
-  ├─ SocietyError (base)
-  │   ├─ InvalidAgentCountError
-  │   ├─ NoModelsSpecifiedError
-  │   ├─ SynthesisModelRequiredError
-  │   ├─ ProcessingFailedError
-  │   └─ TimeoutError
-```
-
-### Stratégie de Gestion
-
-1. **Erreurs récupérables** : Retry automatique avec backoff
-2. **Erreurs fatales** : Propagation immédiate avec contexte
-3. **Timeouts** : Annulation gracieuse via AbortSignal
-4. **Erreurs d'agents individuels** : Isolation (n'affectent pas les autres)
-
-## Système d'Adaptation
-
-### ModelAdapter
-
-Permet d'adapter les prompts et réponses entre différents formats :
+Combines a role with a model to create a functional agent:
 
 ```typescript
-interface ModelAdapter {
-  convertPrompt(genericPrompt: unknown): Promise<unknown>;
-  convertResponse(specificResponse: unknown): Promise<string>;
-  getSupportedPromptTypes(): string[];
+interface AgentConfig {
+  id: string;                      // Unique agent ID
+  name?: string;                   // Optional display name
+  role: AgentRole;                 // The role this agent plays
+  model: AIModel;                  // The AI model it uses
+  canCommunicateWith?: string[];   // Which agents it can message
+  priority?: number;               // Execution priority (higher = first)
+  initialContext?: Record<string, unknown>; // Starting data
 }
 ```
 
-**Adaptateurs fournis :**
+### 4. WorkflowStep
 
-- **TextModelAdapter** : Pour modèles textuels simples
-- **OpenAIAdapter** : Format messages OpenAI
-- **GeminiAdapter** : Format contents Gemini
+Defines a single step in a workflow:
 
-## Observabilité
+```typescript
+interface WorkflowStep {
+  id: string;
+  name: string;
+  agentIds: string[];              // Which agents participate
+  executionType: WorkflowStepExecutionType;
+  instructions?: string;           // Step-specific instructions
+  maxIterations?: number;          // For collaborative steps
+  completionCondition?: Function;  // When to stop iteration
+  resultTransformer?: Function;    // Transform step results
+  condition?: Function;            // Conditional execution
+  nextSteps?: string[];           // Possible next steps
+  nextStepResolver?: Function;     // Dynamic step routing
+}
+```
 
-### SocietyObserver
+### 5. WorkflowConfig
 
-Interface pour observer le cycle de vie :
+Orchestrates the entire multi-agent system:
+
+```typescript
+interface WorkflowConfig {
+  id: string;
+  name: string;
+  steps: WorkflowStep[];           // Ordered workflow steps
+  agents: AgentConfig[];           // All participating agents
+  entryStepId?: string;           // Where to start
+  globalContext?: Record<string, unknown>; // Shared data
+  onBeforeStep?: Function;        // Pre-step hook
+  onAfterStep?: Function;         // Post-step hook
+  finalResultGenerator?: Function; // Custom output generation
+}
+```
+
+### 6. WorkflowExecutor
+
+Executes workflows and manages their lifecycle:
+
+```typescript
+interface WorkflowExecutor {
+  execute(
+    workflow: WorkflowConfig,
+    input: string,
+    signal?: AbortSignal
+  ): Promise<WorkflowResult>;
+  
+  executeStep(
+    step: WorkflowStep,
+    agents: Map<string, AgentConfig>,
+    context: WorkflowContext,
+    signal?: AbortSignal
+  ): Promise<StepResult[]>;
+}
+```
+
+**DefaultWorkflowExecutor** provides the standard implementation with support for all execution types.
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       User Application                          │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                ┌───────────┴───────────┐
+                │  WorkflowConfig       │
+                │  ┌─────────────────┐  │
+                │  │ AgentConfigs    │  │
+                │  │ ┌────────────┐  │  │
+                │  │ │ Role       │  │  │
+                │  │ │ Model      │  │  │
+                │  │ └────────────┘  │  │
+                │  └─────────────────┘  │
+                │  ┌─────────────────┐  │
+                │  │ WorkflowSteps   │  │
+                │  └─────────────────┘  │
+                └───────────┬───────────┘
+                            │
+                ┌───────────┴───────────────┐
+                │  DefaultWorkflowExecutor  │
+                └───────────┬───────────────┘
+                            │
+            ┌───────────────┼───────────────┐
+            │               │               │
+      ┌─────▼─────┐   ┌────▼────┐   ┌─────▼─────┐
+      │  Step 1   │   │ Step 2  │   │  Step 3   │
+      │(Sequential│   │(Parallel│   │(Collab.)  │
+      └─────┬─────┘   └────┬────┘   └─────┬─────┘
+            │              │               │
+      ┌─────▼─────┐   ┌────▼──────────┬───▼─────┐
+      │  Agent A  │   │  Agent B      │ Agent C │
+      └─────┬─────┘   └────┬──────────┴───┬─────┘
+            │              │               │
+      ┌─────▼─────┐   ┌────▼────┐    ┌────▼────┐
+      │ AI Model  │   │AI Model │    │AI Model │
+      │ (OpenAI)  │   │(Claude) │    │(Gemini) │
+      └───────────┘   └─────────┘    └─────────┘
+            │              │               │
+            └──────────────┼───────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │  MessageBus │
+                    │ (Communication)
+                    └─────────────┘
+```
+
+## Data Flow
+
+### 1. Initialization Phase
+
+```
+User Code
+   │
+   ├─► Create Roles (RoleBuilder)
+   ├─► Create Models (StandardModelBase)
+   ├─► Create Agents (AgentBuilder)
+   ├─► Define Steps (StepBuilder)
+   └─► Build Workflow (WorkflowConfigBuilder)
+```
+
+### 2. Execution Phase
+
+```
+Input String
+   │
+   ▼
+WorkflowExecutor.execute()
+   │
+   ├─► Initialize WorkflowContext
+   │   ├─► sharedData (Map)
+   │   ├─► stepResults (Map)
+   │   ├─► messageHistory (Array)
+   │   └─► metadata (Object)
+   │
+   ├─► For each WorkflowStep:
+   │   │
+   │   ├─► onBeforeStep hook (if defined)
+   │   │
+   │   ├─► Build prompts for agents
+   │   │   └─► Apply role systemPrompt
+   │   │       Apply step instructions
+   │   │       Inject context data
+   │   │       Replace template placeholders
+   │   │
+   │   ├─► Execute based on executionType:
+   │   │   ├─► Sequential: Run agents one by one
+   │   │   ├─► Parallel: Run all agents simultaneously
+   │   │   ├─► Collaborative: Iterate with message passing
+   │   │   └─► Conditional: Check condition first
+   │   │
+   │   ├─► Collect StepResults
+   │   │   ├─► agentId
+   │   │   ├─► stepId
+   │   │   ├─► content (AI response)
+   │   │   ├─► success/error
+   │   │   └─► timestamp
+   │   │
+   │   ├─► Store results in context.stepResults
+   │   │
+   │   ├─► Apply resultTransformer (if defined)
+   │   │
+   │   ├─► onAfterStep hook (if defined)
+   │   │
+   │   └─► Determine next step
+   │       ├─► nextStepResolver (dynamic)
+   │       ├─► nextSteps (predefined)
+   │       └─► Sequential (default)
+   │
+   └─► Generate final output
+       ├─► finalResultGenerator (custom)
+       └─► generateDefaultOutput (default)
+```
+
+### 3. Result Phase
+
+```
+WorkflowResult
+   ├─► success: boolean
+   ├─► output: string (final generated result)
+   ├─► stepResults: Map<stepId, StepResult[]>
+   ├─► messages: AgentMessage[] (all communications)
+   ├─► duration: number (milliseconds)
+   └─► errors?: Error[] (if any failures)
+```
+
+## Communication Model
+
+### MessageBus
+
+The MessageBus facilitates inter-agent communication:
+
+```typescript
+interface CommunicationChannel {
+  send(message: AgentMessage): Promise<void>;
+  subscribe(agentId: string, handler: Function): void;
+  unsubscribe(agentId: string): void;
+  getHistory(filter?: Filter): AgentMessage[];
+  clearHistory(): void;
+}
+```
+
+### Message Structure
+
+```typescript
+interface AgentMessage {
+  from: string;          // Sender agent ID
+  to: string;            // Recipient (or 'broadcast')
+  type: MessageType;     // request/response/notification/data/feedback
+  content: string;       // Message content
+  data?: Object;         // Structured data
+  timestamp: number;     // When sent
+  messageId: string;     // Unique ID
+  replyTo?: string;      // Parent message ID
+}
+```
+
+### Communication Flow
+
+```
+Agent A                MessageBus              Agent B
+   │                       │                      │
+   ├──send(message)───────►│                      │
+   │                       ├──notify──────────────►│
+   │                       │                      │
+   │                       │◄────send(reply)──────┤
+   ├──notify──────────────►│                      │
+   │                       │                      │
+   └───getHistory()────────►                      │
+```
+
+## Execution Model
+
+### Sequential Execution
+
+Agents run one after another. Each agent can access previous results.
+
+```
+Agent 1 → Result 1
+           ↓
+   Context Updated
+           ↓
+Agent 2 → Result 2
+           ↓
+   Context Updated
+           ↓
+Agent 3 → Result 3
+```
+
+**Use cases**: 
+- Pipeline processing
+- Dependent tasks
+- Step-by-step refinement
+
+### Parallel Execution
+
+Multiple agents run simultaneously using a worker pool.
+
+```
+       ┌─ Agent 1 → Result 1 ─┐
+       │                      │
+Start ─┼─ Agent 2 → Result 2 ─┼─ Collect
+       │                      │
+       └─ Agent 3 → Result 3 ─┘
+```
+
+**Use cases**:
+- Independent analyses
+- Speed optimization
+- Multiple perspectives
+
+### Collaborative Execution
+
+Agents exchange messages across multiple iterations.
+
+```
+Iteration 1:
+  Agent 1 → broadcast message → All agents
+  Agent 2 → broadcast message → All agents
+  Agent 3 → broadcast message → All agents
+
+Iteration 2:
+  Agent 1 → (considers previous messages) → broadcast
+  Agent 2 → (considers previous messages) → broadcast
+  Agent 3 → (considers previous messages) → broadcast
+
+Iteration 3:
+  ...continue until maxIterations or completionCondition...
+```
+
+**Use cases**:
+- Discussions
+- Consensus building
+- Iterative refinement
+- Brainstorming
+
+### Conditional Execution
+
+Steps execute only when conditions are met.
+
+```
+Previous Results
+       ↓
+   Condition?
+       ├─ true ──► Execute Step
+       └─ false ─► Skip Step
+```
+
+**Use cases**:
+- Error handling
+- Dynamic workflows
+- Branching logic
+- Optimization (skip unnecessary work)
+
+## Context Management
+
+### WorkflowContext
+
+The context is mutable and shared across all steps:
+
+```typescript
+interface WorkflowContext {
+  input: string;                           // Original input
+  sharedData: Map<string, unknown>;        // Shared mutable data
+  stepResults: Map<string, StepResult[]>;  // All step results
+  messageHistory: AgentMessage[];          // All messages
+  metadata: Record<string, unknown>;       // Extra metadata
+}
+```
+
+### Data Sharing
+
+**Between steps**:
+```typescript
+// Step 1 stores data
+context.sharedData.set('analysis', analysisResult);
+
+// Step 2 retrieves it
+const analysis = context.sharedData.get('analysis');
+```
+
+**Accessing previous results**:
+```typescript
+const previousStep = context.stepResults.get('step-1');
+previousStep.forEach(result => {
+  console.log(result.agentId, result.content);
+});
+```
+
+## Worker Pool
+
+For parallel execution, SocietyAI uses a worker pool:
+
+```typescript
+class WorkerPool {
+  constructor(maxWorkers: number, signal?: AbortSignal);
+  submit<T>(task: () => Promise<T>): Promise<T>;
+  waitAll(): Promise<void>;
+}
+```
+
+**Features**:
+- Concurrent task execution
+- Automatic queue management
+- Cancellation support
+- Error propagation
+
+## Retry Mechanism
+
+Built-in exponential backoff for AI model failures:
+
+```typescript
+interface RetryOptions {
+  maxRetries: number;        // How many times to retry
+  initialBackoff: number;    // Initial delay (ms)
+  maxBackoff: number;        // Maximum delay (ms)
+  backoffFactor: number;     // Multiplier per retry
+  jitter: boolean;          // Add randomness to prevent thundering herd
+}
+```
+
+**Retry Flow**:
+```
+Attempt 1 ──fail──► Wait 1s ──► Attempt 2
+                                     │
+                                   fail
+                                     ▼
+                              Wait 2s (backoff × 2)
+                                     │
+                                     ▼
+                                Attempt 3
+                                     │
+                                   fail
+                                     ▼
+                              Wait 4s (backoff × 4)
+                                     │
+                                     ▼
+                            Final attempt or throw
+```
+
+## Error Handling
+
+### Error Types
+
+```typescript
+SocietyError              // Base error class
+├─ ModelNotSupportedError
+├─ ProcessingFailedError
+├─ InvalidAgentCountError
+├─ NoModelsSpecifiedError
+├─ SynthesisModelRequiredError
+├─ OperationCancelledError
+├─ TimeoutError
+└─ InvalidConfigurationError
+```
+
+### Error Propagation
+
+```
+Agent fails
+   ├─► StepResult.success = false
+   ├─► StepResult.error = Error
+   ├─► Observer.onAgentError()
+   ├─► Continue with other agents (parallel)
+   │   or stop (sequential, if critical)
+   └─► Collected in WorkflowResult.errors
+```
+
+## Observability
+
+### Observer Pattern
 
 ```typescript
 interface SocietyObserver {
+  onSocietyStart(prompt: string, agentCount: number): void;
   onAgentStart(agentId: number, modelName: string, prompt: unknown): void;
   onAgentComplete(agentId: number, modelName: string, result: string): void;
   onAgentError(agentId: number, modelName: string, error: Error): void;
   onPhaseStart(phase: string): void;
   onPhaseComplete(phase: string): void;
-  onSocietyStart(prompt: string, agentCount: number): void;
   onSocietyComplete(finalResult: string): void;
 }
 ```
 
-**Cas d'usage :**
+### Logging
 
-- Monitoring en production
-- Debugging
-- Métriques et analytics
-- Progression en temps réel
-
-## Système de Logging
-
-Logging hiérarchique avec niveaux :
-
-- **DEBUG** : Informations détaillées de debug
-- **INFO** : Informations générales
-- **WARN** : Avertissements
-- **ERROR** : Erreurs
-
-Configuration globale :
+Built-in logger with configurable levels:
 
 ```typescript
-setGlobalLogLevel(LogLevel.INFO);
-```
-
-## Extensibilité
-
-### Ajouter un nouveau modèle
-
-```typescript
-class MyCustomModel extends StandardModelBase {
-  constructor() {
-    super({ name: 'MyCustomModel' }, async (prompt) => {
-      // Votre implémentation
-      return response;
-    });
-  }
+enum LogLevel {
+  SILENT = 0,  // No logs
+  ERROR = 1,   // Only errors
+  INFO = 2,    // Info + errors
+  DEBUG = 3,   // All logs
 }
+
+import { setGlobalLogLevel, LogLevel } from '@societyai/core';
+setGlobalLogLevel(LogLevel.DEBUG);
 ```
 
-### Créer un adaptateur personnalisé
+## Performance Considerations
 
+### 1. Parallel Execution
+Use parallel execution for independent tasks to reduce total execution time.
+
+### 2. Worker Pool
+The worker pool automatically manages concurrency based on the number of agents.
+
+### 3. Timeouts
+Set appropriate timeouts to prevent hanging on slow API calls:
 ```typescript
-class MyAdapter implements ModelAdapter {
-  async convertPrompt(genericPrompt: unknown): Promise<unknown> {
-    // Conversion prompt
-  }
-
-  async convertResponse(specificResponse: unknown): Promise<string> {
-    // Conversion réponse
-  }
-
-  getSupportedPromptTypes(): string[] {
-    return ['text', 'structured'];
-  }
-}
+const model = new StandardModelBase(
+  { timeout: 30000 },  // 30 seconds
+  processFunc
+);
 ```
 
-### Implémenter un observateur
-
+### 4. Cancellation
+Use AbortSignal to cancel long-running operations:
 ```typescript
-class MyObserver implements SocietyObserver {
-  onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
-    console.log(`Agent ${agentId} starting with ${modelName}`);
-  }
-
-  // Implémenter autres méthodes...
-}
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 60000);
+await executor.execute(workflow, input, controller.signal);
 ```
 
-## Performance
+### 5. Result Caching
+Store expensive computation results in `context.sharedData` to avoid recomputation.
 
-### Optimisations
+## Best Practices
 
-1. **Parallélisation** : WorkerPool pour exécution concurrente
-2. **Lazy loading** : Chargement à la demande des ressources
-3. **Caching** : Potentiel de cache au niveau adaptateurs
-4. **Timeouts** : Évite les blocages infinis
-5. **AbortSignal** : Annulation rapide des opérations
+### 1. Role Design
+- Keep system prompts clear and specific
+- Define concrete capabilities and constraints
+- Use prompt templates for consistency
 
-### Considérations de Scale
+### 2. Agent Configuration
+- Use meaningful IDs and names
+- Set appropriate priorities for execution order
+- Limit communication to necessary agents
 
-- **Nombre d'agents** : Recommandé 3-7 agents
-- **Timeout global** : Configurer selon complexité
-- **Retry** : Équilibrer robustesse et performance
-- **Modèles multiples** : Permet distribution de charge
+### 3. Workflow Design
+- Break complex tasks into smaller steps
+- Use appropriate execution types
+- Add completion conditions for collaborative steps
+- Implement error handling in hooks
 
-## Sécurité
+### 4. Performance
+- Use parallel execution when possible
+- Set reasonable timeouts
+- Implement cancellation for long operations
+- Consider result caching
 
-### Bonnes Pratiques
+### 5. Observability
+- Implement observers for production systems
+- Use appropriate log levels
+- Monitor execution duration and errors
+- Store message history for debugging
 
-1. **Gestion des secrets** : Ne jamais logger les clés API
-2. **Validation des entrées** : Valider prompts et configurations
-3. **Timeouts** : Protection contre déni de service
-4. **Isolation** : Erreurs d'un agent n'affectent pas les autres
-5. **AbortSignal** : Permet annulation contrôlée
+---
 
-## Diagramme de Séquence - Mode Collaboratif
+**Next**: [Workflow Patterns](./workflows.md) →
 
-```
-Client        Society      Agent1     Agent2     Agent3     Model
-  │              │           │          │          │          │
-  ├─collaborative─>│          │          │          │          │
-  │              ├─create────>│          │          │          │
-  │              ├─create─────┼────────>│          │          │
-  │              ├─create─────┼──────────┼────────>│          │
-  │              │            │          │          │          │
-  │              ├─Phase1─────>│         │          │          │
-  │              │            ├─process──┼──────────┼────────>│
-  │              │            │<─analysis┼──────────┼─────────┤
-  │              │            ├─share────>│         │          │
-  │              │            ├─share─────┼────────>│          │
-  │              │            │           │          │          │
-  │              ├─Phase2─────>│          │          │          │
-  │              │            ├─explore───┼──────────┼────────>│
-  │              ├─Phase2─────┼──────────>│          │          │
-  │              │            │           ├─explore──┼────────>│
-  │              ├─Phase2─────┼───────────┼────────>│          │
-  │              │            │           │          ├─explore─>│
-  │              │            │           │          │          │
-  │              ├─Phase3─────>│          │          │          │
-  │              │            ├─integrate─┼──────────┼────────>│
-  │              │            │<─integrated──────────┼─────────┤
-  │              │            │           │          │          │
-  │              ├─Phase4─────>│          │          │          │
-  │              │            ├─generate──┼──────────┼────────>│
-  │              │            │<─final────┼──────────┼─────────┤
-  │<─result──────┤            │           │          │          │
-```
-
-## Conclusion
-
-L'architecture de SocietyAI est conçue pour être :
-
-- **Flexible** : Support de tout modèle d'IA
-- **Robuste** : Gestion avancée des erreurs
-- **Performante** : Traitement parallèle optimisé
-- **Observable** : Monitoring et debugging facilités
-- **Extensible** : Facile d'ajouter de nouvelles fonctionnalités
-
-Cette architecture permet de créer des systèmes d'IA multi-agents sophistiqués tout en maintenant la simplicité d'utilisation.
+**Previous**: [Getting Started](./getting-started.md) ←

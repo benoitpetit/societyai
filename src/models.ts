@@ -21,7 +21,7 @@ export function defaultStandardModelOptions(): StandardModelOptions {
  * Classe de base pour les modèles d'IA
  * Peut être étendue par des implémentations concrètes
  */
-export abstract class StandardModelBase implements AIModel {
+export class StandardModelBase implements AIModel {
   protected options: StandardModelOptions;
   protected supportedPromptTypes: string[] = ['text'];
 

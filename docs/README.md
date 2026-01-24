@@ -1,207 +1,218 @@
-# Documentation SocietyAI
+# SocietyAI Documentation
 
-Bienvenue dans la documentation complète de SocietyAI ! Cette documentation vous guide à travers tous les aspects du package.
+Complete documentation for the SocietyAI library - a powerful TypeScript framework for building collaborative multi-agent AI systems.
 
-## 📚 Table des Matières
+## 📚 Documentation Guide
 
-### Démarrage
+### For Beginners
 
-- **[Guide de Démarrage](./getting-started.md)** ⭐ Commencez ici !
-  - Installation
-  - Premier agent
-  - Première société
-  - Les trois modes
-  - Configuration avancée
-  - Exemples complets
+Start here if you're new to SocietyAI:
 
-### Références
+1. **[Getting Started](./getting-started.md)** - Installation, setup, and your first workflow
+2. **[Architecture Overview](./architecture.md)** - Core concepts and design principles
+3. **[Examples Index](./examples.md)** - Browse all code examples
 
-- **[Référence API](./api.md)** 📖
-  - Interfaces complètes
-  - Classes et méthodes
-  - Types et options
-  - Gestion des erreurs
-  - Exemples d'utilisation
+### For Developers
 
-- **[Architecture](./architecture.md)** 🏗️
-  - Vue d'ensemble
-  - Composants clés
-  - Trois modes de fonctionnement
-  - Diagrammes
-  - Extensibilité
+Build your own multi-agent systems:
 
-- **[Meilleures Pratiques](./best-practices.md)** ✨
-  - Choix du mode
-  - Configuration optimale
-  - Performance
-  - Gestion des coûts
-  - Sécurité
-  - Tests
+4. **[Workflow Patterns](./workflows.md)** - Common workflow configurations and patterns
+5. **[API Reference](./api-reference.md)** - Complete API documentation
+6. **[Advanced Features](./advanced.md)** - Error handling, retry, observability, performance
 
-## 🚀 Parcours d'Apprentissage Recommandé
+### For Migrating Users
 
-### Niveau Débutant
+Upgrading from the legacy API:
 
-1. Lisez le [Guide de Démarrage](./getting-started.md)
-2. Exécutez les [exemples de base](../examples/basic.ts)
-3. Créez votre premier modèle personnalisé
-4. Essayez les trois modes
+7. **[Migration Guide](./migration.md)** - Step-by-step migration instructions
 
-### Niveau Intermédiaire
+## 🚀 Quick Links
 
-1. Explorez la [Référence API](./api.md) complète
-2. Étudiez les [exemples avancés](../examples/advanced/)
-3. Implémentez un observateur personnalisé
-4. Configurez retry et timeouts
+| Topic | Document | Description |
+|-------|----------|-------------|
+| **Installation** | [Getting Started](./getting-started.md#installation) | How to install SocietyAI |
+| **First Workflow** | [Getting Started](./getting-started.md#your-first-society) | Create your first multi-agent system |
+| **Core Concepts** | [Architecture](./architecture.md#core-components) | Understanding roles, agents, workflows |
+| **Execution Types** | [Workflows](./workflows.md#execution-types) | Sequential, parallel, collaborative patterns |
+| **Error Handling** | [Advanced](./advanced.md#error-handling) | Robust error handling strategies |
+| **API Reference** | [API Reference](./api-reference.md) | Complete API documentation |
+| **Code Examples** | [Examples](./examples.md) | Browse all example code |
 
-### Niveau Avancé
-
-1. Comprenez l'[Architecture](./architecture.md) interne
-2. Appliquez les [Meilleures Pratiques](./best-practices.md)
-3. Étudiez les [intégrations](../examples/integrations/)
-4. Créez des adaptateurs personnalisés
-5. Optimisez pour la production
-
-## 📂 Structure de la Documentation
+## 📖 Documentation Structure
 
 ```
 docs/
-├── README.md                  # Ce fichier
-├── getting-started.md         # Guide de démarrage rapide
-├── api.md                     # Référence API complète
-├── architecture.md            # Architecture du système
-└── best-practices.md          # Meilleures pratiques
-
-examples/
-├── basic.ts                   # Exemples de base
-├── advanced/                  # Exemples avancés
-│   ├── custom-observer.ts     # Observateurs personnalisés
-│   ├── multi-model.ts         # Utilisation multi-modèles
-│   ├── retry-config.ts        # Configuration retry
-│   └── timeout-cancellation.ts # Gestion timeouts
-└── integrations/              # Intégrations LLM
-    ├── openai-integration.ts  # Intégration OpenAI
-    └── README.md              # Guide d'intégration
+├── README.md              # This file - Documentation index
+├── getting-started.md     # Installation and basics
+├── architecture.md        # Core concepts and design
+├── workflows.md          # Workflow patterns
+├── api-reference.md      # Complete API documentation
+├── advanced.md           # Advanced features
+├── migration.md          # Migration from legacy API
+└── examples.md           # Examples index
 ```
 
-## 🎯 Guides par Cas d'Usage
+## 🎯 Learn by Use Case
 
-### Je veux...
+### Software Development
+- **Examples**: [software-team.ts](../examples/04-domains/software-team.ts)
+- **Patterns**: [Hierarchical Pattern](./workflows.md#4-hierarchical-pattern)
+- **API**: [WorkflowConfigBuilder](./api-reference.md#workflowconfigbuilder)
 
-#### ...créer mon premier agent
+### Research & Analysis
+- **Examples**: [research-team.ts](../examples/04-domains/research-team.ts)
+- **Patterns**: [Parallel Analysis + Synthesis](./workflows.md#2-parallel-analysis--synthesis)
+- **API**: [Parallel Execution](./api-reference.md#parallel-execution)
 
-👉 [Guide de Démarrage - Votre Premier Agent](./getting-started.md#votre-premier-agent)
+### Content Creation
+- **Examples**: [creative-team.ts](../examples/04-domains/creative-team.ts)
+- **Patterns**: [Pipeline Pattern](./workflows.md#1-pipeline-pattern)
+- **API**: [Sequential Execution](./api-reference.md#sequential-execution)
 
-#### ...comprendre les modes
+### Business Analysis
+- **Examples**: [business-team.ts](../examples/04-domains/business-team.ts)
+- **Patterns**: [Multiple Perspectives](./workflows.md#common-use-cases)
+- **API**: [StepBuilder](./api-reference.md#stepbuilder)
 
-👉 [Guide de Démarrage - Les Trois Modes](./getting-started.md#les-trois-modes)
-👉 [Architecture - Trois Modes](./architecture.md#trois-modes-de-fonctionnement)
+## 🔍 Find What You Need
 
-#### ...intégrer avec OpenAI/Claude/Gemini
+### I want to...
 
-👉 [Exemples d'Intégration](../examples/integrations/)
+**Create a simple multi-agent system**
+→ [Getting Started](./getting-started.md) → [Simple Example](./getting-started.md#your-first-society)
 
-#### ...optimiser les performances
+**Make agents work in parallel**
+→ [Workflows](./workflows.md) → [Parallel Execution](./workflows.md#parallel-execution)
 
-👉 [Meilleures Pratiques - Performance](./best-practices.md#performance-et-optimisation)
+**Have agents discuss together**
+→ [Workflows](./workflows.md) → [Collaborative Execution](./workflows.md#collaborative-execution)
 
-#### ...gérer les erreurs
+**Handle errors properly**
+→ [Advanced](./advanced.md) → [Error Handling](./advanced.md#error-handling)
 
-👉 [API - Gestion des Erreurs](./api.md#gestion-des-erreurs)
-👉 [Meilleures Pratiques - Erreurs](./best-practices.md#gestion-des-erreurs)
+**Integrate with OpenAI/Anthropic**
+→ [Examples](./examples.md) → [05-integrations](./examples.md#05-integrations---ai-service-integrations)
 
-#### ...réduire les coûts
+**Monitor execution**
+→ [Advanced](./advanced.md) → [Observability](./advanced.md#observability)
 
-👉 [Meilleures Pratiques - Coûts](./best-practices.md#coûts-et-budgets)
+**Optimize performance**
+→ [Advanced](./advanced.md) → [Performance](./advanced.md#performance-optimization)
 
-#### ...monitorer en production
+**Test my workflows**
+→ [Advanced](./advanced.md) → [Testing](./advanced.md#testing)
 
-👉 [Meilleures Pratiques - Observabilité](./best-practices.md#observabilité-et-monitoring)
+**Deploy to production**
+→ [Advanced](./advanced.md) → [Production](./advanced.md#production-deployment)
 
-#### ...créer un adaptateur personnalisé
+**Migrate from old API**
+→ [Migration Guide](./migration.md)
 
-👉 [API - ModelAdapter](./api.md#modeladapter)
-👉 [Exemples Avancés](../examples/advanced/)
+## 💡 Key Concepts
 
-## 📖 Glossaire
-
-| Terme                 | Définition                                                 |
-| --------------------- | ---------------------------------------------------------- |
-| **Agent**             | Instance qui utilise un modèle d'IA pour traiter une tâche |
-| **Société**           | Groupe d'agents collaborant sur un prompt                  |
-| **AIModel**           | Interface pour intégrer n'importe quel modèle d'IA         |
-| **Adapter**           | Convertit les formats de prompts/réponses                  |
-| **Observer**          | Surveille le cycle de vie de la société                    |
-| **Mode Standard**     | Agents indépendants avec agrégation simple                 |
-| **Mode Synthèse**     | Agrégation avec modèle de synthèse dédié                   |
-| **Mode Collaboratif** | 4 phases avec partage d'informations                       |
-
-## 🔗 Liens Utiles
-
-- [GitHub Repository](https://github.com/benoitpetit/societyai-package)
-- [npm Package](https://www.npmjs.com/package/@societyai/core)
-- [Changelog](../CHANGELOG.md)
-- [Contributing Guide](../CONTRIBUTING.md)
-- [License](../LICENSE)
-
-## 💡 FAQ
-
-### Combien d'agents dois-je utiliser ?
-
-**Réponse :**
-
-- Mode Standard/Synthèse : 3-5 agents
-- Mode Collaboratif : 5-7 agents
-
-Voir [Meilleures Pratiques - Configuration des Agents](./best-practices.md#configuration-des-agents)
-
-### Quel mode choisir ?
-
-**Réponse :**
-
-- **Standard** : Questions simples, rapidité
-- **Synthèse** : Besoin de cohérence
-- **Collaboratif** : Questions complexes, qualité
-
-Voir [Meilleures Pratiques - Choix du Mode](./best-practices.md#choix-du-mode)
-
-### Comment gérer les coûts API ?
-
-**Réponse :**
-
-- Limitez le nombre d'agents
-- Utilisez des modèles économiques pour les agents
-- Modèles puissants uniquement pour la synthèse
-- Configurez max_tokens
-- Implémentez du caching
-
-Voir [Meilleures Pratiques - Coûts](./best-practices.md#coûts-et-budgets)
-
-### Comment débugger ?
-
-**Réponse :**
-
+### 1. Roles
+Define agent behavior with system prompts, capabilities, and constraints.
 ```typescript
-import { setGlobalLogLevel, LogLevel } from '@societyai/core';
-
-// Activer logs détaillés
-setGlobalLogLevel(LogLevel.DEBUG);
+const role = RoleBuilder.create()
+  .withSystemPrompt('You are a data analyst')
+  .build();
 ```
+**Read more**: [Architecture - AgentRole](./architecture.md#2-agentrole)
 
-Voir [API - Logging](./api.md#logging)
+### 2. Agents
+Combine roles with AI models to create functional agents.
+```typescript
+const agent = AgentBuilder.create()
+  .withRole(role)
+  .withModel(model)
+  .build();
+```
+**Read more**: [Architecture - AgentConfig](./architecture.md#3-agentconfig)
 
-## 🤝 Contribution
+### 3. Steps
+Define what agents do and how (sequential, parallel, collaborative).
+```typescript
+const step = StepBuilder.create()
+  .withAgents(['agent-1', 'agent-2'])
+  .withExecutionType('parallel')
+  .build();
+```
+**Read more**: [Architecture - WorkflowStep](./architecture.md#4-workflowstep)
 
-Des questions ou suggestions sur la documentation ?
+### 4. Workflows
+Orchestrate agents and steps into complete systems.
+```typescript
+const workflow = WorkflowConfigBuilder.create()
+  .addAgents([agent1, agent2])
+  .addSteps([step1, step2])
+  .build();
+```
+**Read more**: [Architecture - WorkflowConfig](./architecture.md#5-workflowconfig)
 
-1. Ouvrez une [issue GitHub](https://github.com/benoitpetit/societyai-package/issues)
-2. Proposez une amélioration via pull request
-3. Consultez le [guide de contribution](../CONTRIBUTING.md)
+### 5. Execution
+Run workflows and get results.
+```typescript
+const executor = new DefaultWorkflowExecutor();
+const result = await executor.execute(workflow, input);
+```
+**Read more**: [Architecture - WorkflowExecutor](./architecture.md#6-workflowexecutor)
 
-## 📝 Notes de Version
+## 🎓 Learning Path
 
-Consultez le [CHANGELOG](../CHANGELOG.md) pour voir les dernières modifications.
+### Level 1: Basics (30 minutes)
+1. [Install and setup](./getting-started.md#installation)
+2. [Create your first workflow](./getting-started.md#your-first-society)
+3. [Understand core concepts](./getting-started.md#understanding-the-basics)
+
+### Level 2: Intermediate (1 hour)
+1. [Learn workflow patterns](./workflows.md#common-patterns)
+2. [Try different execution types](./workflows.md#execution-types)
+3. [Explore domain examples](./examples.md#04-domains---domain-specific-examples)
+
+### Level 3: Advanced (2 hours)
+1. [Master error handling](./advanced.md#error-handling)
+2. [Implement observability](./advanced.md#observability)
+3. [Optimize performance](./advanced.md#performance-optimization)
+4. [Deploy to production](./advanced.md#production-deployment)
+
+## 📝 API Quick Reference
+
+| Builder | Purpose | Documentation |
+|---------|---------|---------------|
+| `RoleBuilder` | Define agent roles | [API Ref](./api-reference.md#rolebuilder) |
+| `AgentBuilder` | Create agents | [API Ref](./api-reference.md#agentbuilder) |
+| `StepBuilder` | Define workflow steps | [API Ref](./api-reference.md#stepbuilder) |
+| `WorkflowConfigBuilder` | Build workflows | [API Ref](./api-reference.md#workflowconfigbuilder) |
+| `DefaultWorkflowExecutor` | Execute workflows | [API Ref](./api-reference.md#defaultworkflowexecutor) |
+| `StandardModelBase` | Create AI models | [API Ref](./api-reference.md#standardmodelbase) |
+| `MessageBus` | Agent communication | [API Ref](./api-reference.md#messagebus) |
+
+## 🤝 Getting Help
+
+- **Questions**: [GitHub Discussions](https://github.com/benoitpetit/societyai/discussions)
+- **Bugs**: [GitHub Issues](https://github.com/benoitpetit/societyai/issues)
+- **Examples**: [Browse examples](../examples/)
+- **API Docs**: [API Reference](./api-reference.md)
+
+## 🔗 External Resources
+
+- **npm Package**: [@societyai/core](https://www.npmjs.com/package/@societyai/core)
+- **GitHub**: [societyai-package](https://github.com/benoitpetit/societyai-package)
+- **Changelog**: [CHANGELOG.md](../CHANGELOG.md)
+- **License**: [MIT](../LICENSE)
+
+## 📋 Document Status
+
+| Document | Status | Last Updated |
+|----------|--------|--------------|
+| Getting Started | ✅ Complete | 2026-01-24 |
+| Architecture | ✅ Complete | 2026-01-24 |
+| Workflows | ✅ Complete | 2026-01-24 |
+| API Reference | ✅ Complete | 2026-01-24 |
+| Advanced Features | ✅ Complete | 2026-01-24 |
+| Migration Guide | ✅ Complete | 2026-01-24 |
+| Examples Index | ✅ Complete | 2026-01-24 |
 
 ---
 
-**Bonne exploration de SocietyAI ! 🎉**
+**Start Learning**: [Getting Started →](./getting-started.md)

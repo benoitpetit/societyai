@@ -41,7 +41,7 @@ describe('Society', () => {
       const model = new MockModel('TestModel', 'Test response');
       const result = await society('test prompt', 2, [model], false);
 
-      expect(result).toContain('Synthèse des analyses des agents');
+      expect(result).toContain('Agent analysis synthesis');
       expect(result).toContain('Test response');
     });
 
