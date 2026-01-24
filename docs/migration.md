@@ -1,6 +1,6 @@
 # Migration Guide
 
-Guide for migrating from the legacy API to the new workflow-based API.
+Guide for migrating from the legacy function helpers to the workflow-based API.
 
 ## Overview
 
@@ -18,6 +18,9 @@ The new API offers:
 - **Performance**: Optimized execution with worker pools
 
 ## Legacy API (Old)
+
+> Note: the legacy helpers (`society`, `societyCollaborative`, `runSociety*`, etc.) are no longer exported.
+> If you used them in older code, migrate using the patterns below.
 
 ```typescript
 import { society, societyCollaborative } from '@societyai/core';
@@ -268,14 +271,7 @@ const result = await executor.execute(workflow, 'Analyze market trends');
 
 ## Backward Compatibility
 
-The legacy API is still supported but deprecated. You can continue using it while migrating:
-
-```typescript
-import { society, societyCollaborative } from '@societyai/core';
-
-// Still works, but shows deprecation warnings
-const result = await society('prompt', 3, [model]);
-```
+The legacy helpers have been removed to keep the public API smaller and more consistent.
 
 ## Benefits After Migration
 
@@ -291,9 +287,9 @@ const result = await society('prompt', 3, [model]);
 
 If you encounter issues during migration:
 
-- Check the [examples](../examples/) directory
+- Check the docs in `docs/` (workflows, advanced, API reference)
 - Read the [API Reference](./api-reference.md)
-- Open an issue on [GitHub](https://github.com/benoitpetit/societyai/issues)
+- Open an issue on [GitHub](https://github.com/benoitpetit/societyai-package/issues)
 
 ---
 

@@ -427,9 +427,9 @@ export ANTHROPIC_API_KEY="your-key-here"
 ## Getting Help
 
 - **Documentation**: [Full docs](../README.md)
-- **Examples**: [Example code](../examples/)
-- **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/benoitpetit/societyai/discussions)
+- **Examples**: See [Examples Index](./examples.md) (folder coming soon)
+- **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/benoitpetit/societyai-package/discussions)
 
 ---
 

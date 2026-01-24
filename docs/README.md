@@ -22,7 +22,7 @@ Build your own multi-agent systems:
 
 ### For Migrating Users
 
-Upgrading from the legacy API:
+Migrating from older function helpers:
 
 7. **[Migration Guide](./migration.md)** - Step-by-step migration instructions
 
@@ -54,29 +54,10 @@ docs/
 
 ## 🎯 Learn by Use Case
 
-### Software Development
+Examples are being added progressively. In the meantime:
 
-- **Examples**: [software-team.ts](../examples/04-domains/software-team.ts)
-- **Patterns**: [Hierarchical Pattern](./workflows.md#4-hierarchical-pattern)
-- **API**: [WorkflowConfigBuilder](./api-reference.md#workflowconfigbuilder)
-
-### Research & Analysis
-
-- **Examples**: [research-team.ts](../examples/04-domains/research-team.ts)
-- **Patterns**: [Parallel Analysis + Synthesis](./workflows.md#2-parallel-analysis--synthesis)
-- **API**: [Parallel Execution](./api-reference.md#parallel-execution)
-
-### Content Creation
-
-- **Examples**: [creative-team.ts](../examples/04-domains/creative-team.ts)
-- **Patterns**: [Pipeline Pattern](./workflows.md#1-pipeline-pattern)
-- **API**: [Sequential Execution](./api-reference.md#sequential-execution)
-
-### Business Analysis
-
-- **Examples**: [business-team.ts](../examples/04-domains/business-team.ts)
-- **Patterns**: [Multiple Perspectives](./workflows.md#common-use-cases)
-- **API**: [StepBuilder](./api-reference.md#stepbuilder)
+- Browse patterns: [Workflow Patterns](./workflows.md)
+- See the intended examples structure: [Examples Index](./examples.md)
 
 ## 🔍 Find What You Need
 
@@ -206,15 +187,15 @@ const result = await executor.execute(workflow, input);
 
 ## 🤝 Getting Help
 
-- **Questions**: [GitHub Discussions](https://github.com/benoitpetit/societyai/discussions)
-- **Bugs**: [GitHub Issues](https://github.com/benoitpetit/societyai/issues)
-- **Examples**: [Browse examples](../examples/)
+- **Questions**: [GitHub Discussions](https://github.com/benoitpetit/societyai-package/discussions)
+- **Bugs**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
+- **Examples**: See [Examples Index](./examples.md) (examples folder coming soon)
 - **API Docs**: [API Reference](./api-reference.md)
 
 ## 🔗 External Resources
 
 - **npm Package**: [@societyai/core](https://www.npmjs.com/package/@societyai/core)
-- **GitHub**: [societyai-package](https://github.com/benoitpetit/societyai-package)
+- **GitHub**: [societyai-package](https://github.com/benoitpetit/societyai-package) (main repository)
 - **Changelog**: [CHANGELOG.md](../CHANGELOG.md)
 - **License**: [MIT](../LICENSE)
 

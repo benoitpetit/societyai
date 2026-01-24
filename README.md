@@ -9,6 +9,8 @@
 
 The library is **fully configurable**, **model-agnostic**, and **domain-independent** - use it for software development, research, content creation, business analysis, or any domain where multiple perspectives add value.
 
+> Status: Pre-release. The first public release will be `0.0.1` and the API may change.
+
 ## 🎯 Design Principles
 
 - **Model-Agnostic**: Works with any AI model (OpenAI, Anthropic, Google, local models, or custom APIs)
@@ -31,7 +33,7 @@ The library is **fully configurable**, **model-agnostic**, and **domain-independ
 - **🎯 Type-Safe**: Written in TypeScript with complete type definitions
 - **📦 Zero Dependencies**: No external runtime dependencies (only dev dependencies for testing)
 
-### Advanced Features (v2.0)
+### Advanced Features
 
 - **🏗️ Fluent Society Builder**: New `Society.create()` entry point with chainable methods
 - **🔀 Pipeline Patterns**: Scatter-Gather, Chain, Router, Splitter, Aggregator patterns
@@ -132,7 +134,7 @@ console.log(result.output);
 console.log(`Completed in ${result.duration}ms`);
 ```
 
-## 🆕 New in v2.0: Fluent Society Builder
+## 🆕 Fluent Society Builder
 
 ### Society Builder API
 
@@ -813,11 +815,11 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## 🔗 Links
 
-- **Documentation**: [https://github.com/benoitpetit/societyai-package](https://github.com/benoitpetit/societyai-package)
+- **Documentation**: [docs/](./docs/) - Full documentation
 - **npm Package**: [@societyai/core](https://www.npmjs.com/package/@societyai/core)
-- **Examples**: [./examples](./examples)
+- **Examples**: See [Examples Index](./docs/examples.md) (coming soon)
 - **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
-- **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai/issues)
+- **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
 
 ## 🙏 Acknowledgments
 
@@ -825,8 +827,8 @@ Built with TypeScript and designed for flexibility, extensibility, and developer
 
 ## 📞 Support
 
-- 📧 Email: [Create an issue](https://github.com/benoitpetit/societyai/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/benoitpetit/societyai/discussions)
+- 📧 Email: [Create an issue](https://github.com/benoitpetit/societyai-package/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/benoitpetit/societyai-package/discussions)
 - 📝 Documentation: [Full Documentation](./docs/)
 
 ---

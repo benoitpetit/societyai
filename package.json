@@ -1,6 +1,6 @@
 {
     "name": "@societyai/core",
-    "version": "1.0.0",
+    "version": "0.0.1",
     "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems. Build sophisticated workflows where AI agents with different roles work together to solve complex problems.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

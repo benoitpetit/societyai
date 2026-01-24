@@ -1,12 +1,13 @@
 # Examples Index
 
-Complete index of all example code in SocietyAI.
+> **Note**: SocietyAI is currently pre-release (`0.0.1`). The `examples/` directory is empty for now.
+> This document describes the planned examples structure for future reference.
 
 ## Overview
 
-The examples are organized by complexity and use case. Start with basic examples and progress to advanced patterns.
+The examples will be organized by complexity and use case. Start with basic examples and progress to advanced patterns.
 
-## Directory Structure
+## Planned Directory Structure
 
 ```
 examples/
@@ -18,11 +19,17 @@ examples/
 └── 06-advanced/           # Advanced features
 ```
 
-## 01-basic/ - Simple Usage Patterns
+---
 
-### [simple-society.ts](../examples/01-basic/simple-society.ts)
+## Planned Examples
 
-**Description**: The simplest way to use SocietyAI with the legacy API  
+The sections below describe examples that will be added progressively.
+
+### 01-basic/ - Simple Usage Patterns
+
+#### simple-society.ts
+
+**Description**: The simplest way to use SocietyAI with the fluent builder API  
 **Covers**:
 
 - Standard mode (multiple agents, same prompt)
@@ -32,7 +39,7 @@ examples/
 
 **When to use**: Quick prototyping, simple use cases, learning the basics
 
-### [multi-model.ts](../examples/01-basic/multi-model.ts)
+### multi-model.ts
 
 **Description**: Using multiple different AI models together  
 **Covers**:
@@ -43,7 +50,7 @@ examples/
 
 **When to use**: Combining different AI services, leveraging model strengths
 
-### [with-observer.ts](../examples/01-basic/with-observer.ts)
+### with-observer.ts
 
 **Description**: Monitoring execution with observers  
 **Covers**:
@@ -57,7 +64,7 @@ examples/
 
 ## 02-roles-and-agents/ - Custom Roles
 
-### [custom-roles.ts](../examples/02-roles-and-agents/custom-roles.ts)
+### custom-roles.ts
 
 **Description**: Defining custom agent roles with specific behaviors  
 **Covers**:
@@ -69,7 +76,7 @@ examples/
 
 **When to use**: Creating specialized agents, domain-specific behaviors
 
-### [agent-capabilities.ts](../examples/02-roles-and-agents/agent-capabilities.ts)
+### agent-capabilities.ts
 
 **Description**: Advanced agent configuration  
 **Covers**:
@@ -81,7 +88,7 @@ examples/
 
 **When to use**: Fine-tuning agent behavior, performance optimization
 
-### [agent-communication.ts](../examples/02-roles-and-agents/agent-communication.ts)
+### agent-communication.ts
 
 **Description**: Inter-agent communication  
 **Covers**:
@@ -95,7 +102,7 @@ examples/
 
 ## 03-workflows/ - Workflow Patterns
 
-### [sequential-workflow.ts](../examples/03-workflows/sequential-workflow.ts)
+### 
 
 **Description**: Step-by-step processing pipeline  
 **Covers**:
@@ -106,7 +113,7 @@ examples/
 
 **When to use**: Dependent tasks, progressive refinement, quality review
 
-### [parallel-workflow.ts](../examples/03-workflows/parallel-workflow.ts)
+### 
 
 **Description**: Concurrent agent execution  
 **Covers**:
@@ -117,7 +124,7 @@ examples/
 
 **When to use**: Independent tasks, speed optimization, multiple perspectives
 
-### [collaborative-workflow.ts](../examples/03-workflows/collaborative-workflow.ts)
+### 
 
 **Description**: Agents discussing and iterating together  
 **Covers**:
@@ -129,7 +136,7 @@ examples/
 
 **When to use**: Discussions, debates, iterative refinement
 
-### [conditional-workflow.ts](../examples/03-workflows/conditional-workflow.ts)
+### 
 
 **Description**: Dynamic workflows with branching logic  
 **Covers**:
@@ -143,7 +150,7 @@ examples/
 
 ## 04-domains/ - Domain-Specific Examples
 
-### [software-team.ts](../examples/04-domains/software-team.ts)
+### 
 
 **Description**: Software development team workflow  
 **Covers**:
@@ -156,7 +163,7 @@ examples/
 **Roles**: Project Manager, Architect, Developers, QA Tester  
 **Pattern**: Hierarchical with parallel development
 
-### [research-team.ts](../examples/04-domains/research-team.ts)
+### 
 
 **Description**: Academic research workflow  
 **Covers**:
@@ -169,7 +176,7 @@ examples/
 **Roles**: Researchers, Statistician, Writer  
 **Pattern**: Parallel research + synthesis
 
-### [creative-team.ts](../examples/04-domains/creative-team.ts)
+### 
 
 **Description**: Content creation workflow  
 **Covers**:
@@ -182,7 +189,7 @@ examples/
 **Roles**: Researcher, Writer, Editor, Designer  
 **Pattern**: Sequential with parallel polish
 
-### [business-team.ts](../examples/04-domains/business-team.ts)
+### 
 
 **Description**: Business analysis workflow  
 **Covers**:
@@ -197,7 +204,7 @@ examples/
 
 ## 05-integrations/ - AI Service Integrations
 
-### [openai-integration.ts](../examples/05-integrations/openai-integration.ts)
+### 
 
 **Description**: OpenAI GPT models integration  
 **Covers**:
@@ -209,7 +216,7 @@ examples/
 
 **Models**: GPT-4, GPT-3.5-turbo
 
-### [anthropic-integration.ts](../examples/05-integrations/anthropic-integration.ts)
+### 
 
 **Description**: Anthropic Claude integration  
 **Covers**:
@@ -220,7 +227,7 @@ examples/
 
 **Models**: Claude 3 Opus, Sonnet, Haiku
 
-### [custom-api.ts](../examples/05-integrations/custom-api.ts)
+### 
 
 **Description**: Custom AI API integration  
 **Covers**:
@@ -234,7 +241,7 @@ examples/
 
 ## 06-advanced/ - Advanced Features
 
-### [error-handling.ts](../examples/06-advanced/error-handling.ts)
+### 
 
 **Description**: Comprehensive error handling  
 **Covers**:
@@ -247,7 +254,7 @@ examples/
 
 **When to use**: Production systems, reliability requirements
 
-### [timeout-cancellation.ts](../examples/06-advanced/timeout-cancellation.ts)
+### 
 
 **Description**: Timeout and cancellation patterns  
 **Covers**:
@@ -259,7 +266,7 @@ examples/
 
 **When to use**: Long-running operations, user-facing applications
 
-### [lifecycle-hooks.ts](../examples/06-advanced/lifecycle-hooks.ts)
+### 
 
 **Description**: Workflow lifecycle hooks  
 **Covers**:
@@ -271,7 +278,7 @@ examples/
 
 **When to use**: Logging, metrics, dynamic behavior
 
-### [result-transformers.ts](../examples/06-advanced/result-transformers.ts)
+### 
 
 **Description**: Custom result processing  
 **Covers**:
@@ -321,21 +328,21 @@ node dist/examples/01-basic/simple-society.js
 
 ### Beginner
 
-1. [simple-society.ts](../examples/01-basic/simple-society.ts) - Understand basics
-2. [custom-roles.ts](../examples/02-roles-and-agents/custom-roles.ts) - Create roles
-3. [sequential-workflow.ts](../examples/03-workflows/sequential-workflow.ts) - Build workflows
+1. simple-society.ts - Understand basics
+2. custom-roles.ts - Create roles
+3.  - Build workflows
 
 ### Intermediate
 
-1. [parallel-workflow.ts](../examples/03-workflows/parallel-workflow.ts) - Optimize with parallelism
-2. [collaborative-workflow.ts](../examples/03-workflows/collaborative-workflow.ts) - Agent discussions
-3. [software-team.ts](../examples/04-domains/software-team.ts) - Complete use case
+1.  - Optimize with parallelism
+2.  - Agent discussions
+3.  - Complete use case
 
 ### Advanced
 
-1. [error-handling.ts](../examples/06-advanced/error-handling.ts) - Production-ready code
-2. [lifecycle-hooks.ts](../examples/06-advanced/lifecycle-hooks.ts) - Advanced patterns
-3. [conditional-workflow.ts](../examples/03-workflows/conditional-workflow.ts) - Dynamic routing
+1.  - Production-ready code
+2.  - Advanced patterns
+3.  - Dynamic routing
 
 ## Example Code Snippets
 
@@ -383,7 +390,7 @@ try {
   }
 }
 
-// See examples/06-advanced/error-handling.ts
+// Examples are being added progressively in `examples/`.
 ```
 
 ## Contributing Examples

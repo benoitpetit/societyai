@@ -72,7 +72,15 @@ export * from './models';
 // CORE SOCIETY (Main Logic)
 // ============================================================================
 
-export * from './society';
+// Export ciblé: on expose le système de workflow, sans ré-exporter les helpers legacy.
+export {
+  MessageBus,
+  RoleBuilder,
+  AgentBuilder,
+  StepBuilder,
+  WorkflowConfigBuilder,
+  DefaultWorkflowExecutor,
+} from './society';
 
 // ============================================================================
 // FLUENT BUILDER API
@@ -83,7 +91,7 @@ export {
   Society,
   SocietyPatterns,
   AggregationStrategies,
-  // Fluent builders (new v2.0)
+  // Fluent builders
   FluentRoleBuilder,
   FluentAgentBuilder,
   FluentStepBuilder,
@@ -93,8 +101,8 @@ export {
   createAgent,
 } from './builder';
 
-// Legacy builders from society.ts are exported via `export * from './society'`
-// They include: RoleBuilder, AgentBuilder, StepBuilder, WorkflowConfigBuilder
+// Note: les primitives workflow/builder issues de society.ts sont ré-exportées explicitement.
+// Cela évite d’exposer l’API legacy via un `export *`.
 
 // Builder types
 export type { PipelineConfig, PipelinePattern } from './builder';

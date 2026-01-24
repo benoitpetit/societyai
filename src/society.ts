@@ -1,9 +1,5 @@
 import {
   AIModel,
-  Agent,
-  SocietyConfig,
-  SocietyObserver,
-  CollaborativeContext,
   AgentConfig,
   AgentRole,
   AgentMessage,
@@ -15,12 +11,8 @@ import {
   WorkflowExecutor,
   StepResult,
   WorkflowStepExecutionType,
+  SocietyObserver,
 } from './types';
-import {
-  InvalidAgentCountError,
-  NoModelsSpecifiedError,
-  SynthesisModelRequiredError,
-} from './errors';
 import { getLogger } from './logger';
 import { WorkerPool } from './worker-pool';
 
@@ -560,6 +552,9 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
           this.observer.onAgentComplete(parseInt(agentId) || 0, agent.model.name(), content);
         }
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
         const result: StepResult = {
           agentId,
           stepId: step.id,
@@ -621,6 +616,9 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
 
         return result;
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
         if (this.observer) {
           this.observer.onAgentError(parseInt(agentId) || 0, agent.model.name(), error as Error);
         }
@@ -707,6 +705,9 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
           await this.messageBus.send(message);
           context.messageHistory.push(message);
         } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
           iterationResults.push({
             agentId,
             stepId: step.id,
@@ -797,6 +798,10 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
     const startTime = Date.now();
     const errors: Error[] = [];
 
+    if (signal?.aborted) {
+      throw new Error('Operation cancelled');
+    }
+
     this.logger.info(`Starting workflow: ${workflow.name}`);
 
     if (this.observer) {
@@ -833,8 +838,7 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
 
     while (currentStepId) {
       if (signal?.aborted) {
-        errors.push(new Error('Operation cancelled'));
-        break;
+        throw new Error('Operation cancelled');
       }
 
       const step = stepsMap.get(currentStepId);
@@ -852,11 +856,21 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
         const stepResults = await this.executeStep(step, agentsMap, context, signal);
         context.stepResults.set(step.id, stepResults);
 
+        // Remonter les erreurs au niveau workflow si un agent a échoué
+        for (const stepResult of stepResults) {
+          if (!stepResult.success && stepResult.error) {
+            errors.push(stepResult.error);
+          }
+        }
+
         // Hook après l'étape
         if (workflow.onAfterStep) {
           await workflow.onAfterStep(step, stepResults, context);
         }
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
         errors.push(error as Error);
         this.logger.error(`Step ${step.id} failed: ${(error as Error).message}`);
       }
@@ -920,610 +934,5 @@ export class DefaultWorkflowExecutor implements WorkflowExecutor {
       parts.push('');
     }
     return parts.join('\n');
-  }
-}
-
-// ============================================================================
-// LEGACY: SOCIÉTÉ D'AGENTS (RÉTROCOMPATIBILITÉ)
-// ============================================================================
-
-/**
- * Groupe de société d'agents (API legacy)
- * @deprecated Utilisez WorkflowConfigBuilder pour plus de flexibilité
- */
-export class SocietyGroup {
-  public agents: Agent[] = [];
-  public models: AIModel[];
-  public multiModel: boolean;
-  public context?: CollaborativeContext;
-  public observer?: SocietyObserver;
-
-  constructor(
-    agents: Agent[],
-    models: AIModel[],
-    multiModel = false,
-    context?: CollaborativeContext,
-    observer?: SocietyObserver
-  ) {
-    this.agents = agents;
-    this.models = models;
-    this.multiModel = multiModel;
-    this.context = context;
-    this.observer = observer;
-  }
-
-  /**
-   * Lance tous les agents en parallèle
-   */
-  async run(signal?: AbortSignal): Promise<void> {
-    const logger = getLogger();
-    logger.info(`Starting society with ${this.agents.length} agents`);
-
-    if (this.observer) {
-      this.observer.onSocietyStart(this.agents[0]?.prompt || '', this.agents.length);
-    }
-
-    const pool = new WorkerPool(this.agents.length, signal);
-
-    const tasks = this.agents.map((agent) => async () => {
-      logger.debug(`Agent ${agent.id} (${agent.model.name()}) starting processing`);
-
-      if (this.observer) {
-        this.observer.onAgentStart(agent.id, agent.model.name(), agent.prompt);
-      }
-
-      try {
-        const response = await agent.model.process(agent.prompt, signal);
-        logger.info(`Agent ${agent.id} (${agent.model.name()}) completed successfully`);
-
-        if (this.observer) {
-          this.observer.onAgentComplete(agent.id, agent.model.name(), response);
-        }
-
-        return response;
-      } catch (error) {
-        logger.error(`Agent ${agent.id} (${agent.model.name()}) failed: ${(error as Error).message}`);
-
-        if (this.observer) {
-          this.observer.onAgentError(agent.id, agent.model.name(), error as Error);
-        }
-
-        throw error;
-      }
-    });
-
-    await Promise.all(tasks.map((task) => pool.submit(task)));
-    await pool.waitAll();
-
-    logger.info('All agents completed');
-  }
-
-  /**
-   * Collecte les résultats de tous les agents
-   */
-  async collectResults(signal?: AbortSignal): Promise<string> {
-    const results: string[] = [];
-
-    for (const agent of this.agents) {
-      const response = await agent.model.process(agent.prompt, signal);
-      results.push(response);
-    }
-
-    let finalResult = 'Agent analysis synthesis:\n\n';
-    for (let i = 0; i < results.length; i++) {
-      finalResult += `Agent ${i + 1}: ${results[i]}\n\n`;
-    }
-
-    if (this.observer) {
-      this.observer.onSocietyComplete(finalResult);
-    }
-
-    return finalResult;
-  }
-
-  /**
-   * Collecte les résultats et utilise un modèle dédié pour la synthèse
-   */
-  async collectResultsWithSynthesisModel(
-    synthesisModel: AIModel,
-    signal?: AbortSignal
-  ): Promise<string> {
-    const results: string[] = [];
-
-    for (const agent of this.agents) {
-      const response = await agent.model.process(agent.prompt, signal);
-      results.push(response);
-    }
-
-    let finalResult = 'Agent analysis synthesis:\n\n';
-    for (let i = 0; i < results.length; i++) {
-      finalResult += `Agent ${i + 1}: ${results[i]}\n\n`;
-    }
-
-    try {
-      const synthesis = await synthesizeWithModel(results, synthesisModel, signal);
-      finalResult += '\nConsolidated conclusion (via synthesis model):\n' + synthesis;
-    } catch (error) {
-      finalResult +=
-        '\nConsolidated conclusion (simple method - synthesis model error):\n' +
-        synthesizeResults(results) +
-        '\n\nSynthesis error: ' +
-        (error as Error).message;
-    }
-
-    if (this.observer) {
-      this.observer.onSocietyComplete(finalResult);
-    }
-
-    return finalResult;
-  }
-
-  /**
-   * Effectue l'analyse initiale du prompt (mode collaboratif)
-   */
-  async performInitialAnalysis(signal?: AbortSignal): Promise<void> {
-    if (this.agents.length === 0) {
-      throw new Error('No agent available for analysis');
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseStart('Initial analysis');
-    }
-
-    const primaryAgent = this.agents[0];
-
-    const analysisPrompt =
-      'Deeply analyze this request to understand its essence, implicit and explicit expectations, ' +
-      'and the appropriate level of detail for an optimal response: ' +
-      primaryAgent.prompt;
-
-    const initialAnalysis = await primaryAgent.model.process(analysisPrompt, signal);
-
-    if (this.context) {
-      this.context.initialAnalysis = initialAnalysis;
-    }
-
-    for (const agent of this.agents) {
-      agent.sharedAnalysis = initialAnalysis;
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseComplete('Initial analysis');
-    }
-  }
-
-  /**
-   * Fait explorer les différentes dimensions du sujet par les agents
-   */
-  async exploreDimensions(signal?: AbortSignal): Promise<void> {
-    if (this.observer) {
-      this.observer.onPhaseStart('Dimension exploration');
-    }
-
-    const insights = await Promise.all(
-      this.agents.map(async (agent) => {
-        const explorationPrompt = 
-          `Based on this initial analysis:\n\n${agent.sharedAnalysis}\n\n` +
-          `Deeply explore this specific dimension: ${agent.dimensionToExplore}\n\n` +
-          `For the original question: ${agent.prompt}\n\n` +
-          `Analyze this dimension in a detailed and thorough manner, considering other aspects ` +
-          `but focusing particularly on this dimension. ` +
-          `Think step by step and develop a nuanced and complete analysis.`;
-
-        return await agent.model.process(explorationPrompt, signal);
-      })
-    );
-
-    if (this.context) {
-      this.context.sharedInsights = insights;
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseComplete('Dimension exploration');
-    }
-  }
-
-  /**
-   * Intègre les analyses des différentes dimensions
-   */
-  async integrateAnalyses(signal?: AbortSignal): Promise<void> {
-    if (this.agents.length === 0 || !this.context?.sharedInsights?.length) {
-      throw new Error('No analysis to integrate');
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseStart('Analysis integration');
-    }
-
-    const primaryAgent = this.agents[0];
-
-    let integrationPrompt =
-      'Organically integrate these different analyses into a coherent and unified understanding:\n\n';
-
-    integrationPrompt += 'Initial understanding of the request:\n' + this.context.initialAnalysis + '\n\n';
-
-    for (let i = 0; i < this.context.sharedInsights.length; i++) {
-      integrationPrompt +=
-        `Dimension: ${this.agents[i].dimensionToExplore}\n${this.context.sharedInsights[i]}\n\n`;
-    }
-
-    integrationPrompt +=
-      'Your task is to synthesize these analyses into an integrated understanding that organically combines ' +
-      'all dimensions, avoiding simply juxtaposing information. ' +
-      'Identify connections, patterns, and cross-cutting ideas. ' +
-      'Form a unified analysis representing deep collaborative reflection.';
-
-    const integratedAnalysis = await primaryAgent.model.process(integrationPrompt, signal);
-
-    if (this.context) {
-      this.context.integratedAnalysis = integratedAnalysis;
-    }
-
-    for (const agent of this.agents) {
-      agent.sharedAnalysis = integratedAnalysis;
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseComplete('Analysis integration');
-    }
-  }
-
-  /**
-   * Génère la réponse finale basée sur l'analyse intégrée
-   */
-  async generateFinalResponse(signal?: AbortSignal): Promise<string> {
-    if (this.agents.length === 0) {
-      throw new Error('No agent available to generate response');
-    }
-
-    if (this.observer) {
-      this.observer.onPhaseStart('Final response generation');
-    }
-
-    const primaryAgent = this.agents[0];
-
-    const responsePrompt =
-      `Based on this integrated and thorough analysis:\n\n${primaryAgent.sharedAnalysis}\n\n` +
-      `Formulate a direct, clear, and complete response to the original request: ${primaryAgent.prompt}\n\n` +
-      `The response must be perfectly adapted to the user's implicit and explicit needs, ` +
-      `harmoniously integrating perspectives from the different analyzed dimensions. ` +
-      `The response must be coherent, structured, and offer maximum value to the user. ` +
-      `Do not include mentions of the analytical process, focus only on answering the request.`;
-
-    const finalResponse = await primaryAgent.model.process(responsePrompt, signal);
-
-    if (this.observer) {
-      this.observer.onPhaseComplete('Final response generation');
-      this.observer.onSocietyComplete(finalResponse);
-    }
-
-    return finalResponse;
-  }
-}
-
-// ============================================================================
-// FONCTIONS DE CRÉATION (LEGACY)
-// ============================================================================
-
-/**
- * Crée une société d'agents
- * @deprecated Utilisez WorkflowConfigBuilder pour plus de flexibilité
- */
-export function createSociety(
-  config: SocietyConfig,
-  models: AIModel[],
-  observer?: SocietyObserver
-): SocietyGroup {
-  const agents: Agent[] = [];
-
-  // Utiliser les perspectives configurées ou les valeurs par défaut
-  const defaultPerspectives = [
-    'Analyze this request factually and concisely: ',
-    'Consider the implications and broader context of this request: ',
-    'Identify the specific requirements and purpose of this request: ',
-    'Think of the most innovative approaches to respond to this request: ',
-    'Examine the technical and practical aspects of this request: ',
-  ];
-
-  const perspectives = config.agentPerspectives ?? defaultPerspectives;
-
-  for (let i = 0; i < config.agentCount; i++) {
-    let model: AIModel;
-    if (config.multiModel && models.length > 1) {
-      model = models[i % models.length];
-    } else {
-      model = models[0];
-    }
-
-    const perspective = perspectives[i % perspectives.length];
-    const agentPrompt = config.promptTemplate 
-      ? config.promptTemplate.replace('{perspective}', perspective).replace('{input}', config.prompt)
-      : perspective + config.prompt;
-
-    const agent: Agent = {
-      id: i,
-      model,
-      prompt: agentPrompt,
-    };
-
-    agents.push(agent);
-  }
-
-  return new SocietyGroup(agents, models, config.multiModel, undefined, observer);
-}
-
-/**
- * Crée une société d'agents collaboratifs
- * @deprecated Utilisez WorkflowConfigBuilder pour plus de flexibilité
- */
-export function createCollaborativeSociety(
-  config: SocietyConfig,
-  models: AIModel[],
-  observer?: SocietyObserver
-): SocietyGroup {
-  // Utiliser les dimensions configurées ou les valeurs par défaut
-  const defaultDimensions = [
-    'Core understanding and factual aspects',
-    'Practical aspects and concrete implementation',
-    'Broader implications and context considerations',
-    'Potential challenges and approaches to overcome them',
-    'Practical applications and concrete examples',
-  ];
-
-  const dimensions = config.dimensions ?? defaultDimensions;
-  const limitedDimensions = dimensions.slice(0, Math.min(config.agentCount, dimensions.length));
-
-  const context: CollaborativeContext = {
-    dimensions: limitedDimensions,
-    sharedInsights: [],
-  };
-
-  const agents: Agent[] = [];
-
-  for (let i = 0; i < config.agentCount; i++) {
-    let model: AIModel;
-    if (config.multiModel && models.length > 1) {
-      model = models[i % models.length];
-    } else {
-      model = models[0];
-    }
-
-    const dimensionIndex = i % limitedDimensions.length;
-
-    const agent: Agent = {
-      id: i,
-      model,
-      prompt: config.prompt,
-      phase: 0,
-      dimensionToExplore: limitedDimensions[dimensionIndex],
-    };
-
-    agents.push(agent);
-  }
-
-  return new SocietyGroup(agents, models, config.multiModel, context, observer);
-}
-
-/**
- * Combine les résultats des agents en une réponse cohérente
- */
-function synthesizeResults(results: string[], template?: string): string {
-  if (template) {
-    return template.replace('{results}', results.map((r, i) => `Agent ${i + 1}: ${r}`).join('\n\n'));
-  }
-  let synthesis = 'Results synthesis:\n';
-  for (let i = 0; i < results.length; i++) {
-    synthesis += `\nAgent ${i + 1}:\n${results[i]}\n`;
-  }
-  return synthesis;
-}
-
-/**
- * Combine les résultats des agents en utilisant un modèle spécifique
- */
-async function synthesizeWithModel(
-  results: string[],
-  model: AIModel,
-  signal?: AbortSignal,
-  synthesisPromptTemplate?: string
-): Promise<string> {
-  let prompt: string;
-  
-  if (synthesisPromptTemplate) {
-    prompt = synthesisPromptTemplate.replace(
-      '{results}',
-      results.map((r, i) => `=== AGENT ${i + 1} ===\n${r}`).join('\n\n')
-    );
-  } else {
-    prompt = 'Analyze and synthesize the following agent perspectives into a coherent and comprehensive response:\n\n';
-    for (let i = 0; i < results.length; i++) {
-      prompt += `=== AGENT ${i + 1} ===\n${results[i]}\n\n`;
-    }
-    prompt +=
-      'Your task is to produce a complete synthesis that:\n' +
-      '1. Identifies points of agreement and disagreement between agents\n' +
-      '2. Combines unique perspectives into a coherent vision\n' +
-      '3. Presents a conclusion that integrates the best ideas from each agent\n' +
-      '4. Offers a final response more complete than any individual perspective\n\n' +
-      'Synthesis:';
-  }
-
-  return await model.process(prompt, signal);
-}
-
-/**
- * Crée une société d'agents qui analysent le prompt et travaillent ensemble
- * pour générer une réponse améliorée
- */
-export async function society(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel = false,
-  observer?: SocietyObserver
-): Promise<string> {
-  if (agentCount <= 0) {
-    throw new InvalidAgentCountError();
-  }
-
-  if (models.length === 0) {
-    throw new NoModelsSpecifiedError();
-  }
-
-  return await runSociety(
-    {
-      prompt,
-      agentCount,
-      multiModel,
-      observer,
-    },
-    models
-  );
-}
-
-/**
- * Crée une société d'agents qui analysent le prompt et utilise
- * un modèle dédié pour synthétiser les résultats des agents
- */
-export async function societyWithSynthesis(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel: boolean,
-  synthModel: AIModel,
-  observer?: SocietyObserver
-): Promise<string> {
-  if (agentCount <= 0) {
-    throw new InvalidAgentCountError();
-  }
-
-  if (models.length === 0) {
-    throw new NoModelsSpecifiedError();
-  }
-
-  if (!synthModel) {
-    throw new SynthesisModelRequiredError();
-  }
-
-  return await runSocietyWithSynthesis(
-    {
-      prompt,
-      agentCount,
-      multiModel,
-      observer,
-    },
-    models,
-    synthModel
-  );
-}
-
-/**
- * Crée une société d'agents qui travaillent ensemble de manière collaborative,
- * avec une analyse initiale commune et une exploration de dimensions complémentaires
- */
-export async function societyCollaborative(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel = false,
-  observer?: SocietyObserver
-): Promise<string> {
-  if (agentCount <= 0) {
-    throw new InvalidAgentCountError();
-  }
-
-  if (models.length === 0) {
-    throw new NoModelsSpecifiedError();
-  }
-
-  return await runSocietyCollaborative(
-    {
-      prompt,
-      agentCount,
-      multiModel,
-      collaborative: true,
-      observer,
-    },
-    models
-  );
-}
-
-/**
- * Exécute la société d'agents avec les configurations fournies
- */
-export async function runSociety(config: SocietyConfig, models: AIModel[]): Promise<string> {
-  const controller = new AbortController();
-  const timeoutId = config.timeout
-    ? setTimeout(() => controller.abort(), config.timeout)
-    : undefined;
-
-  try {
-    const societyGroup = createSociety(config, models, config.observer);
-    await societyGroup.run(controller.signal);
-    const result = await societyGroup.collectResults(controller.signal);
-
-    if (timeoutId) clearTimeout(timeoutId);
-    return result;
-  } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-/**
- * Exécute la société d'agents avec les configurations fournies
- * et utilise un modèle spécifique pour la synthèse finale
- */
-export async function runSocietyWithSynthesis(
-  config: SocietyConfig,
-  models: AIModel[],
-  synthModel: AIModel
-): Promise<string> {
-  const controller = new AbortController();
-  const timeoutId = config.timeout
-    ? setTimeout(() => controller.abort(), config.timeout)
-    : undefined;
-
-  try {
-    const societyGroup = createSociety(config, models, config.observer);
-    await societyGroup.run(controller.signal);
-    const result = await societyGroup.collectResultsWithSynthesisModel(
-      synthModel,
-      controller.signal
-    );
-
-    if (timeoutId) clearTimeout(timeoutId);
-    return result;
-  } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-/**
- * Exécute la société d'agents en mode collaboratif
- */
-export async function runSocietyCollaborative(
-  config: SocietyConfig,
-  models: AIModel[]
-): Promise<string> {
-  const controller = new AbortController();
-  const timeoutId = config.timeout
-    ? setTimeout(() => controller.abort(), config.timeout)
-    : undefined;
-
-  try {
-    const societyGroup = createCollaborativeSociety(config, models, config.observer);
-
-    await societyGroup.performInitialAnalysis(controller.signal);
-    await societyGroup.exploreDimensions(controller.signal);
-    await societyGroup.integrateAnalyses(controller.signal);
-    const result = await societyGroup.generateFinalResponse(controller.signal);
-
-    if (timeoutId) clearTimeout(timeoutId);
-    return result;
-  } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId);
-    throw error;
   }
 }

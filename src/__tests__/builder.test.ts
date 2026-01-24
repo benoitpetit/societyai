@@ -1,5 +1,5 @@
 /**
- * Tests for the new fluent Society Builder API (v2.0)
+ * Tests for the fluent Society Builder API
  */
 
 import { Society, Strategies, StandardModelBase, createRole, createAgent } from '..';
@@ -16,7 +16,7 @@ class MockModel extends StandardModelBase {
   }
 }
 
-describe('Society Builder API (v2.0)', () => {
+describe('Society Builder API', () => {
   beforeAll(() => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -71,7 +71,7 @@ describe('Society Builder API (v2.0)', () => {
       expect(result.stepResults.size).toBeGreaterThan(0);
     });
 
-    it.skip('should handle errors gracefully', async () => {
+    it('should handle errors gracefully', async () => {
       const errorModel = new StandardModelBase(
         { name: 'ErrorModel' },
         async () => {
@@ -79,15 +79,16 @@ describe('Society Builder API (v2.0)', () => {
         }
       );
 
-      await expect(
-        Society.create()
-          .addAgent(a => a
-            .withId('failing-agent')
-            .withRole(r => r.withSystemPrompt('Will fail'))
-            .withModel(errorModel))
-          .usePipeline(p => p.chain(['failing-agent']))
-          .execute('test')
-      ).rejects.toThrow();
+      const result = await Society.create()
+        .addAgent(a => a
+          .withId('failing-agent')
+          .withRole(r => r.withSystemPrompt('Will fail'))
+          .withModel(errorModel))
+        .usePipeline(p => p.chain(['failing-agent']))
+        .execute('test');
+
+      expect(result.success).toBe(false);
+      expect(result.errors?.length).toBeGreaterThan(0);
     });
   });
 
@@ -253,7 +254,7 @@ describe('Society Builder API (v2.0)', () => {
   });
 
   describe('Error handling', () => {
-    it.skip('should throw error for invalid configuration', async () => {
+    it('should throw error for invalid configuration', async () => {
       // Test avec aucun agent - devrait échouer
       await expect(
         Society.create()
@@ -262,7 +263,7 @@ describe('Society Builder API (v2.0)', () => {
       ).rejects.toThrow();
     });
 
-    it.skip('should handle abort signal', async () => {
+    it('should handle abort signal', async () => {
       const model = new StandardModelBase(
         { name: 'SlowModel' },
         async (_prompt, signal) => {

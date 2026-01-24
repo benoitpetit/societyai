@@ -567,40 +567,7 @@ const observer: SocietyObserver = {
 };
 ```
 
-## Legacy API
-
-### Simple Functions (Deprecated)
-
-For backwards compatibility only. Use WorkflowConfigBuilder for new projects.
-
-```typescript
-async function society(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel?: boolean,
-  observer?: SocietyObserver
-): Promise<string>;
-
-async function societyCollaborative(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel?: boolean,
-  observer?: SocietyObserver
-): Promise<string>;
-
-async function societyWithSynthesis(
-  prompt: string,
-  agentCount: number,
-  models: AIModel[],
-  multiModel: boolean,
-  synthModel: AIModel,
-  observer?: SocietyObserver
-): Promise<string>;
-```
-
-## v2.0 API: Fluent Society Builder
+## Fluent Society Builder API
 
 ### Society
 
@@ -659,10 +626,10 @@ const Pipelines = {
   // Debate pattern
   debate: (agent1Id: string, agent2Id: string, judgeId: string, rounds: number) => Pipeline;
 
-  // Review pattern (NEW in v1.0.1)
+  // Review pattern
   review: (drafterId: string, reviewerId: string) => Pipeline;
 
-  // Consensus building (NEW in v1.0.1)
+  // Consensus building
   consensus: (agentIds: string[], finalizerId: string, threshold: number) => Pipeline;
 };
 ```
