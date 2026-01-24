@@ -23,20 +23,10 @@ The new API offers:
 import { society, societyCollaborative } from '@societyai/core';
 
 // Simple usage
-const result = await society(
-  'What are the benefits of AI?',
-  3,
-  [model],
-  false
-);
+const result = await society('What are the benefits of AI?', 3, [model], false);
 
 // Collaborative
-const result = await societyCollaborative(
-  'How can we solve this problem?',
-  4,
-  [model],
-  false
-);
+const result = await societyCollaborative('How can we solve this problem?', 4, [model], false);
 ```
 
 ## New API (Recommended)
@@ -58,11 +48,7 @@ const role = RoleBuilder.create()
 
 // Create agents
 const agents = [
-  AgentBuilder.create()
-    .withId('agent-1')
-    .withRole(role)
-    .withModel(model)
-    .build(),
+  AgentBuilder.create().withId('agent-1').withRole(role).withModel(model).build(),
   // ...
 ];
 
@@ -89,17 +75,13 @@ const result = await executor.execute(workflow, 'Your input here');
 ### Example 1: Simple Society
 
 **Before**:
+
 ```typescript
-const result = await society(
-  'Analyze this data',
-  3,
-  [model],
-  false,
-  observer
-);
+const result = await society('Analyze this data', 3, [model], false, observer);
 ```
 
 **After**:
+
 ```typescript
 const analyst = RoleBuilder.create()
   .withId('analyst')
@@ -107,11 +89,7 @@ const analyst = RoleBuilder.create()
   .build();
 
 const agents = Array.from({ length: 3 }, (_, i) =>
-  AgentBuilder.create()
-    .withId(`analyst-${i}`)
-    .withRole(analyst)
-    .withModel(model)
-    .build()
+  AgentBuilder.create().withId(`analyst-${i}`).withRole(analyst).withModel(model).build()
 );
 
 const workflow = WorkflowConfigBuilder.create()
@@ -120,7 +98,7 @@ const workflow = WorkflowConfigBuilder.create()
   .addStep(
     StepBuilder.create()
       .withId('analyze')
-      .withAgents(agents.map(a => a.id))
+      .withAgents(agents.map((a) => a.id))
       .withExecutionType('parallel')
       .build()
   )
@@ -133,17 +111,13 @@ const result = await executor.execute(workflow, 'Analyze this data');
 ### Example 2: Collaborative Society
 
 **Before**:
+
 ```typescript
-const result = await societyCollaborative(
-  'Discuss this topic',
-  4,
-  [model],
-  false,
-  observer
-);
+const result = await societyCollaborative('Discuss this topic', 4, [model], false, observer);
 ```
 
 **After**:
+
 ```typescript
 const discussant = RoleBuilder.create()
   .withId('discussant')
@@ -151,11 +125,7 @@ const discussant = RoleBuilder.create()
   .build();
 
 const agents = Array.from({ length: 4 }, (_, i) =>
-  AgentBuilder.create()
-    .withId(`discussant-${i}`)
-    .withRole(discussant)
-    .withModel(model)
-    .build()
+  AgentBuilder.create().withId(`discussant-${i}`).withRole(discussant).withModel(model).build()
 );
 
 const workflow = WorkflowConfigBuilder.create()
@@ -164,7 +134,7 @@ const workflow = WorkflowConfigBuilder.create()
   .addStep(
     StepBuilder.create()
       .withId('discuss')
-      .withAgents(agents.map(a => a.id))
+      .withAgents(agents.map((a) => a.id))
       .withExecutionType('collaborative')
       .withMaxIterations(3)
       .build()
@@ -178,6 +148,7 @@ const result = await executor.execute(workflow, 'Discuss this topic');
 ### Example 3: Custom Perspectives
 
 **Before**:
+
 ```typescript
 const result = await runSociety(
   {
@@ -194,6 +165,7 @@ const result = await runSociety(
 ```
 
 **After**:
+
 ```typescript
 const perspectives = [
   { id: 'tech', prompt: 'Evaluate from a technical perspective' },
@@ -201,15 +173,10 @@ const perspectives = [
   { id: 'user', prompt: 'Evaluate from a user perspective' },
 ];
 
-const agents = perspectives.map(p =>
+const agents = perspectives.map((p) =>
   AgentBuilder.create()
     .withId(p.id)
-    .withRole(
-      RoleBuilder.create()
-        .withId(p.id)
-        .withSystemPrompt(p.prompt)
-        .build()
-    )
+    .withRole(RoleBuilder.create().withId(p.id).withSystemPrompt(p.prompt).build())
     .withModel(model)
     .build()
 );
@@ -220,7 +187,7 @@ const workflow = WorkflowConfigBuilder.create()
   .addStep(
     StepBuilder.create()
       .withId('evaluate')
-      .withAgents(agents.map(a => a.id))
+      .withAgents(agents.map((a) => a.id))
       .withExecutionType('parallel')
       .build()
   )
@@ -233,28 +200,22 @@ const result = await executor.execute(workflow, 'Evaluate this proposal');
 ### Example 4: Custom Dimensions
 
 **Before**:
+
 ```typescript
 const result = await runSocietyCollaborative(
   {
     prompt: 'Analyze market trends',
     agentCount: 3,
-    dimensions: [
-      'Economic factors',
-      'Technological disruption',
-      'Consumer behavior',
-    ],
+    dimensions: ['Economic factors', 'Technological disruption', 'Consumer behavior'],
   },
   [model]
 );
 ```
 
 **After**:
+
 ```typescript
-const dimensions = [
-  'Economic factors',
-  'Technological disruption',
-  'Consumer behavior',
-];
+const dimensions = ['Economic factors', 'Technological disruption', 'Consumer behavior'];
 
 const agents = dimensions.map((dim, i) =>
   AgentBuilder.create()
@@ -276,14 +237,14 @@ const workflow = WorkflowConfigBuilder.create()
     // Parallel analysis of each dimension
     StepBuilder.create()
       .withId('analyze-dimensions')
-      .withAgents(agents.map(a => a.id))
+      .withAgents(agents.map((a) => a.id))
       .withExecutionType('parallel')
       .build(),
-    
+
     // Collaborative integration
     StepBuilder.create()
       .withId('integrate')
-      .withAgents(agents.map(a => a.id))
+      .withAgents(agents.map((a) => a.id))
       .withExecutionType('collaborative')
       .withMaxIterations(2)
       .build(),

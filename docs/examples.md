@@ -21,8 +21,10 @@ examples/
 ## 01-basic/ - Simple Usage Patterns
 
 ### [simple-society.ts](../examples/01-basic/simple-society.ts)
+
 **Description**: The simplest way to use SocietyAI with the legacy API  
 **Covers**:
+
 - Standard mode (multiple agents, same prompt)
 - Collaborative mode (agents discuss together)
 - Custom perspectives
@@ -31,8 +33,10 @@ examples/
 **When to use**: Quick prototyping, simple use cases, learning the basics
 
 ### [multi-model.ts](../examples/01-basic/multi-model.ts)
+
 **Description**: Using multiple different AI models together  
 **Covers**:
+
 - Multi-model configuration
 - Model switching
 - Heterogeneous agent teams
@@ -40,8 +44,10 @@ examples/
 **When to use**: Combining different AI services, leveraging model strengths
 
 ### [with-observer.ts](../examples/01-basic/with-observer.ts)
+
 **Description**: Monitoring execution with observers  
 **Covers**:
+
 - Observer pattern
 - Lifecycle hooks
 - Logging and metrics
@@ -52,8 +58,10 @@ examples/
 ## 02-roles-and-agents/ - Custom Roles
 
 ### [custom-roles.ts](../examples/02-roles-and-agents/custom-roles.ts)
+
 **Description**: Defining custom agent roles with specific behaviors  
 **Covers**:
+
 - RoleBuilder API
 - System prompts
 - Capabilities and constraints
@@ -62,8 +70,10 @@ examples/
 **When to use**: Creating specialized agents, domain-specific behaviors
 
 ### [agent-capabilities.ts](../examples/02-roles-and-agents/agent-capabilities.ts)
+
 **Description**: Advanced agent configuration  
 **Covers**:
+
 - Agent priorities
 - Initial context
 - Retry configuration
@@ -72,8 +82,10 @@ examples/
 **When to use**: Fine-tuning agent behavior, performance optimization
 
 ### [agent-communication.ts](../examples/02-roles-and-agents/agent-communication.ts)
+
 **Description**: Inter-agent communication  
 **Covers**:
+
 - MessageBus
 - Agent-to-agent messaging
 - Communication restrictions
@@ -84,8 +96,10 @@ examples/
 ## 03-workflows/ - Workflow Patterns
 
 ### [sequential-workflow.ts](../examples/03-workflows/sequential-workflow.ts)
+
 **Description**: Step-by-step processing pipeline  
 **Covers**:
+
 - Sequential execution
 - Data flow between steps
 - Pipeline patterns
@@ -93,8 +107,10 @@ examples/
 **When to use**: Dependent tasks, progressive refinement, quality review
 
 ### [parallel-workflow.ts](../examples/03-workflows/parallel-workflow.ts)
+
 **Description**: Concurrent agent execution  
 **Covers**:
+
 - Parallel execution
 - Worker pools
 - Result aggregation
@@ -102,8 +118,10 @@ examples/
 **When to use**: Independent tasks, speed optimization, multiple perspectives
 
 ### [collaborative-workflow.ts](../examples/03-workflows/collaborative-workflow.ts)
+
 **Description**: Agents discussing and iterating together  
 **Covers**:
+
 - Collaborative execution
 - Multiple iterations
 - Completion conditions
@@ -112,8 +130,10 @@ examples/
 **When to use**: Discussions, debates, iterative refinement
 
 ### [conditional-workflow.ts](../examples/03-workflows/conditional-workflow.ts)
+
 **Description**: Dynamic workflows with branching logic  
 **Covers**:
+
 - Conditional execution
 - Dynamic routing
 - Step conditions
@@ -124,8 +144,10 @@ examples/
 ## 04-domains/ - Domain-Specific Examples
 
 ### [software-team.ts](../examples/04-domains/software-team.ts)
+
 **Description**: Software development team workflow  
 **Covers**:
+
 - Project manager role
 - Developer roles
 - QA testing
@@ -135,8 +157,10 @@ examples/
 **Pattern**: Hierarchical with parallel development
 
 ### [research-team.ts](../examples/04-domains/research-team.ts)
+
 **Description**: Academic research workflow  
 **Covers**:
+
 - Literature review
 - Statistical analysis
 - Paper writing
@@ -146,8 +170,10 @@ examples/
 **Pattern**: Parallel research + synthesis
 
 ### [creative-team.ts](../examples/04-domains/creative-team.ts)
+
 **Description**: Content creation workflow  
 **Covers**:
+
 - Research
 - Writing
 - Editing
@@ -157,8 +183,10 @@ examples/
 **Pattern**: Sequential with parallel polish
 
 ### [business-team.ts](../examples/04-domains/business-team.ts)
+
 **Description**: Business analysis workflow  
 **Covers**:
+
 - Market analysis
 - Financial analysis
 - Strategic planning
@@ -170,8 +198,10 @@ examples/
 ## 05-integrations/ - AI Service Integrations
 
 ### [openai-integration.ts](../examples/05-integrations/openai-integration.ts)
+
 **Description**: OpenAI GPT models integration  
 **Covers**:
+
 - OpenAI API client
 - Chat completions
 - Streaming responses
@@ -180,8 +210,10 @@ examples/
 **Models**: GPT-4, GPT-3.5-turbo
 
 ### [anthropic-integration.ts](../examples/05-integrations/anthropic-integration.ts)
+
 **Description**: Anthropic Claude integration  
 **Covers**:
+
 - Anthropic API client
 - Message formatting
 - Claude-specific features
@@ -189,8 +221,10 @@ examples/
 **Models**: Claude 3 Opus, Sonnet, Haiku
 
 ### [custom-api.ts](../examples/05-integrations/custom-api.ts)
+
 **Description**: Custom AI API integration  
 **Covers**:
+
 - HTTP API wrapper
 - Authentication
 - Request/response formatting
@@ -201,8 +235,10 @@ examples/
 ## 06-advanced/ - Advanced Features
 
 ### [error-handling.ts](../examples/06-advanced/error-handling.ts)
+
 **Description**: Comprehensive error handling  
 **Covers**:
+
 - Try-catch patterns
 - Error types
 - Retry logic
@@ -212,8 +248,10 @@ examples/
 **When to use**: Production systems, reliability requirements
 
 ### [timeout-cancellation.ts](../examples/06-advanced/timeout-cancellation.ts)
+
 **Description**: Timeout and cancellation patterns  
 **Covers**:
+
 - AbortController
 - Timeouts
 - User cancellation
@@ -222,8 +260,10 @@ examples/
 **When to use**: Long-running operations, user-facing applications
 
 ### [lifecycle-hooks.ts](../examples/06-advanced/lifecycle-hooks.ts)
+
 **Description**: Workflow lifecycle hooks  
 **Covers**:
+
 - onBeforeStep hooks
 - onAfterStep hooks
 - Context manipulation
@@ -232,8 +272,10 @@ examples/
 **When to use**: Logging, metrics, dynamic behavior
 
 ### [result-transformers.ts](../examples/06-advanced/result-transformers.ts)
+
 **Description**: Custom result processing  
 **Covers**:
+
 - Result transformers
 - Data normalization
 - Custom output generation
@@ -246,17 +288,20 @@ examples/
 ### Prerequisites
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Set up environment variables:
+
 ```bash
 export OPENAI_API_KEY="your-key-here"
 export ANTHROPIC_API_KEY="your-key-here"
 ```
 
 3. Build the library:
+
 ```bash
 npm run build
 ```
@@ -275,16 +320,19 @@ node dist/examples/01-basic/simple-society.js
 ## Learning Path
 
 ### Beginner
+
 1. [simple-society.ts](../examples/01-basic/simple-society.ts) - Understand basics
 2. [custom-roles.ts](../examples/02-roles-and-agents/custom-roles.ts) - Create roles
 3. [sequential-workflow.ts](../examples/03-workflows/sequential-workflow.ts) - Build workflows
 
 ### Intermediate
+
 1. [parallel-workflow.ts](../examples/03-workflows/parallel-workflow.ts) - Optimize with parallelism
 2. [collaborative-workflow.ts](../examples/03-workflows/collaborative-workflow.ts) - Agent discussions
 3. [software-team.ts](../examples/04-domains/software-team.ts) - Complete use case
 
 ### Advanced
+
 1. [error-handling.ts](../examples/06-advanced/error-handling.ts) - Production-ready code
 2. [lifecycle-hooks.ts](../examples/06-advanced/lifecycle-hooks.ts) - Advanced patterns
 3. [conditional-workflow.ts](../examples/03-workflows/conditional-workflow.ts) - Dynamic routing
@@ -292,6 +340,7 @@ node dist/examples/01-basic/simple-society.js
 ## Example Code Snippets
 
 ### Quick Start
+
 ```typescript
 import {
   RoleBuilder,
@@ -305,16 +354,15 @@ import {
 ```
 
 ### Custom Role
+
 ```typescript
-const role = RoleBuilder.create()
-  .withId('analyst')
-  .withSystemPrompt('You analyze data.')
-  .build();
+const role = RoleBuilder.create().withId('analyst').withSystemPrompt('You analyze data.').build();
 
 // See examples/02-roles-and-agents/custom-roles.ts
 ```
 
 ### Parallel Execution
+
 ```typescript
 const step = StepBuilder.create()
   .withAgents(['agent-1', 'agent-2'])
@@ -325,6 +373,7 @@ const step = StepBuilder.create()
 ```
 
 ### Error Handling
+
 ```typescript
 try {
   const result = await executor.execute(workflow, input);

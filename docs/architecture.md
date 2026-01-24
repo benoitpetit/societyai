@@ -16,18 +16,23 @@ This document explains the core architecture, design principles, and key concept
 SocietyAI is built on several key principles:
 
 ### 1. **Composability**
+
 Every component is designed to be composed with others. Roles, agents, and steps can be mixed and matched to create complex workflows.
 
 ### 2. **Configurability**
+
 Nothing is hardcoded. Users define their own roles, behaviors, and workflows. The library provides the infrastructure, you provide the intelligence.
 
 ### 3. **Model Agnosticism**
+
 SocietyAI doesn't depend on any specific AI provider. You bring your own AI model - OpenAI, Anthropic, Google, local models, or custom APIs.
 
 ### 4. **Type Safety**
+
 Built with TypeScript, providing full type definitions and compile-time safety.
 
 ### 5. **Observability**
+
 Every phase, agent action, and step is observable through hooks and observers.
 
 ## Core Components
@@ -40,16 +45,17 @@ The foundation of model integration. Any AI service can be wrapped in this inter
 interface AIModel {
   // Process a prompt and return a response
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
-  
+
   // Return the model name
   name(): string;
-  
+
   // Check if the model supports a prompt type
   supportsPromptType(promptType: string): boolean;
 }
 ```
 
 **StandardModelBase** provides a convenient base class with built-in:
+
 - Timeout handling
 - Retry logic with exponential backoff
 - Model adapters for different prompt formats
@@ -61,16 +67,17 @@ Defines the behavior and identity of an agent:
 
 ```typescript
 interface AgentRole {
-  id: string;              // Unique identifier
-  name: string;            // Display name
-  systemPrompt: string;    // Instructions defining behavior
+  id: string; // Unique identifier
+  name: string; // Display name
+  systemPrompt: string; // Instructions defining behavior
   capabilities?: string[]; // What the agent can do
-  constraints?: string[];  // What the agent should not do
+  constraints?: string[]; // What the agent should not do
   promptTemplate?: string; // Custom prompt formatting
 }
 ```
 
 **Example**:
+
 ```typescript
 const analyst = {
   id: 'data-analyst',
@@ -87,12 +94,12 @@ Combines a role with a model to create a functional agent:
 
 ```typescript
 interface AgentConfig {
-  id: string;                      // Unique agent ID
-  name?: string;                   // Optional display name
-  role: AgentRole;                 // The role this agent plays
-  model: AIModel;                  // The AI model it uses
-  canCommunicateWith?: string[];   // Which agents it can message
-  priority?: number;               // Execution priority (higher = first)
+  id: string; // Unique agent ID
+  name?: string; // Optional display name
+  role: AgentRole; // The role this agent plays
+  model: AIModel; // The AI model it uses
+  canCommunicateWith?: string[]; // Which agents it can message
+  priority?: number; // Execution priority (higher = first)
   initialContext?: Record<string, unknown>; // Starting data
 }
 ```
@@ -105,15 +112,15 @@ Defines a single step in a workflow:
 interface WorkflowStep {
   id: string;
   name: string;
-  agentIds: string[];              // Which agents participate
+  agentIds: string[]; // Which agents participate
   executionType: WorkflowStepExecutionType;
-  instructions?: string;           // Step-specific instructions
-  maxIterations?: number;          // For collaborative steps
-  completionCondition?: Function;  // When to stop iteration
-  resultTransformer?: Function;    // Transform step results
-  condition?: Function;            // Conditional execution
-  nextSteps?: string[];           // Possible next steps
-  nextStepResolver?: Function;     // Dynamic step routing
+  instructions?: string; // Step-specific instructions
+  maxIterations?: number; // For collaborative steps
+  completionCondition?: Function; // When to stop iteration
+  resultTransformer?: Function; // Transform step results
+  condition?: Function; // Conditional execution
+  nextSteps?: string[]; // Possible next steps
+  nextStepResolver?: Function; // Dynamic step routing
 }
 ```
 
@@ -125,12 +132,12 @@ Orchestrates the entire multi-agent system:
 interface WorkflowConfig {
   id: string;
   name: string;
-  steps: WorkflowStep[];           // Ordered workflow steps
-  agents: AgentConfig[];           // All participating agents
-  entryStepId?: string;           // Where to start
+  steps: WorkflowStep[]; // Ordered workflow steps
+  agents: AgentConfig[]; // All participating agents
+  entryStepId?: string; // Where to start
   globalContext?: Record<string, unknown>; // Shared data
-  onBeforeStep?: Function;        // Pre-step hook
-  onAfterStep?: Function;         // Post-step hook
+  onBeforeStep?: Function; // Pre-step hook
+  onAfterStep?: Function; // Post-step hook
   finalResultGenerator?: Function; // Custom output generation
 }
 ```
@@ -141,12 +148,8 @@ Executes workflows and manages their lifecycle:
 
 ```typescript
 interface WorkflowExecutor {
-  execute(
-    workflow: WorkflowConfig,
-    input: string,
-    signal?: AbortSignal
-  ): Promise<WorkflowResult>;
-  
+  execute(workflow: WorkflowConfig, input: string, signal?: AbortSignal): Promise<WorkflowResult>;
+
   executeStep(
     step: WorkflowStep,
     agents: Map<string, AgentConfig>,
@@ -306,14 +309,14 @@ interface CommunicationChannel {
 
 ```typescript
 interface AgentMessage {
-  from: string;          // Sender agent ID
-  to: string;            // Recipient (or 'broadcast')
-  type: MessageType;     // request/response/notification/data/feedback
-  content: string;       // Message content
-  data?: Object;         // Structured data
-  timestamp: number;     // When sent
-  messageId: string;     // Unique ID
-  replyTo?: string;      // Parent message ID
+  from: string; // Sender agent ID
+  to: string; // Recipient (or 'broadcast')
+  type: MessageType; // request/response/notification/data/feedback
+  content: string; // Message content
+  data?: Object; // Structured data
+  timestamp: number; // When sent
+  messageId: string; // Unique ID
+  replyTo?: string; // Parent message ID
 }
 ```
 
@@ -349,7 +352,8 @@ Agent 2 → Result 2
 Agent 3 → Result 3
 ```
 
-**Use cases**: 
+**Use cases**:
+
 - Pipeline processing
 - Dependent tasks
 - Step-by-step refinement
@@ -367,6 +371,7 @@ Start ─┼─ Agent 2 → Result 2 ─┼─ Collect
 ```
 
 **Use cases**:
+
 - Independent analyses
 - Speed optimization
 - Multiple perspectives
@@ -391,6 +396,7 @@ Iteration 3:
 ```
 
 **Use cases**:
+
 - Discussions
 - Consensus building
 - Iterative refinement
@@ -409,6 +415,7 @@ Previous Results
 ```
 
 **Use cases**:
+
 - Error handling
 - Dynamic workflows
 - Branching logic
@@ -422,17 +429,18 @@ The context is mutable and shared across all steps:
 
 ```typescript
 interface WorkflowContext {
-  input: string;                           // Original input
-  sharedData: Map<string, unknown>;        // Shared mutable data
-  stepResults: Map<string, StepResult[]>;  // All step results
-  messageHistory: AgentMessage[];          // All messages
-  metadata: Record<string, unknown>;       // Extra metadata
+  input: string; // Original input
+  sharedData: Map<string, unknown>; // Shared mutable data
+  stepResults: Map<string, StepResult[]>; // All step results
+  messageHistory: AgentMessage[]; // All messages
+  metadata: Record<string, unknown>; // Extra metadata
 }
 ```
 
 ### Data Sharing
 
 **Between steps**:
+
 ```typescript
 // Step 1 stores data
 context.sharedData.set('analysis', analysisResult);
@@ -442,9 +450,10 @@ const analysis = context.sharedData.get('analysis');
 ```
 
 **Accessing previous results**:
+
 ```typescript
 const previousStep = context.stepResults.get('step-1');
-previousStep.forEach(result => {
+previousStep.forEach((result) => {
   console.log(result.agentId, result.content);
 });
 ```
@@ -462,6 +471,7 @@ class WorkerPool {
 ```
 
 **Features**:
+
 - Concurrent task execution
 - Automatic queue management
 - Cancellation support
@@ -473,15 +483,16 @@ Built-in exponential backoff for AI model failures:
 
 ```typescript
 interface RetryOptions {
-  maxRetries: number;        // How many times to retry
-  initialBackoff: number;    // Initial delay (ms)
-  maxBackoff: number;        // Maximum delay (ms)
-  backoffFactor: number;     // Multiplier per retry
-  jitter: boolean;          // Add randomness to prevent thundering herd
+  maxRetries: number; // How many times to retry
+  initialBackoff: number; // Initial delay (ms)
+  maxBackoff: number; // Maximum delay (ms)
+  backoffFactor: number; // Multiplier per retry
+  jitter: boolean; // Add randomness to prevent thundering herd
 }
 ```
 
 **Retry Flow**:
+
 ```
 Attempt 1 ──fail──► Wait 1s ──► Attempt 2
                                      │
@@ -550,10 +561,10 @@ Built-in logger with configurable levels:
 
 ```typescript
 enum LogLevel {
-  SILENT = 0,  // No logs
-  ERROR = 1,   // Only errors
-  INFO = 2,    // Info + errors
-  DEBUG = 3,   // All logs
+  SILENT = 0, // No logs
+  ERROR = 1, // Only errors
+  INFO = 2, // Info + errors
+  DEBUG = 3, // All logs
 }
 
 import { setGlobalLogLevel, LogLevel } from '@societyai/core';
@@ -563,22 +574,28 @@ setGlobalLogLevel(LogLevel.DEBUG);
 ## Performance Considerations
 
 ### 1. Parallel Execution
+
 Use parallel execution for independent tasks to reduce total execution time.
 
 ### 2. Worker Pool
+
 The worker pool automatically manages concurrency based on the number of agents.
 
 ### 3. Timeouts
+
 Set appropriate timeouts to prevent hanging on slow API calls:
+
 ```typescript
 const model = new StandardModelBase(
-  { timeout: 30000 },  // 30 seconds
+  { timeout: 30000 }, // 30 seconds
   processFunc
 );
 ```
 
 ### 4. Cancellation
+
 Use AbortSignal to cancel long-running operations:
+
 ```typescript
 const controller = new AbortController();
 setTimeout(() => controller.abort(), 60000);
@@ -586,33 +603,39 @@ await executor.execute(workflow, input, controller.signal);
 ```
 
 ### 5. Result Caching
+
 Store expensive computation results in `context.sharedData` to avoid recomputation.
 
 ## Best Practices
 
 ### 1. Role Design
+
 - Keep system prompts clear and specific
 - Define concrete capabilities and constraints
 - Use prompt templates for consistency
 
 ### 2. Agent Configuration
+
 - Use meaningful IDs and names
 - Set appropriate priorities for execution order
 - Limit communication to necessary agents
 
 ### 3. Workflow Design
+
 - Break complex tasks into smaller steps
 - Use appropriate execution types
 - Add completion conditions for collaborative steps
 - Implement error handling in hooks
 
 ### 4. Performance
+
 - Use parallel execution when possible
 - Set reasonable timeouts
 - Implement cancellation for long operations
 - Consider result caching
 
 ### 5. Observability
+
 - Implement observers for production systems
 - Use appropriate log levels
 - Monitor execution duration and errors

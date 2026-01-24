@@ -25,16 +25,16 @@ describe('Society', () => {
   describe('society function', () => {
     it('should throw InvalidAgentCountError when agentCount is 0', async () => {
       const model = new MockModel();
-      await expect(society('test prompt', 0, [model])).rejects.toThrow('Le nombre d\'agents doit \u00eatre positif');
+      await expect(society('test prompt', 0, [model])).rejects.toThrow('The number of agents must be positive');
     });
 
     it('should throw InvalidAgentCountError when agentCount is negative', async () => {
       const model = new MockModel();
-      await expect(society('test prompt', -1, [model])).rejects.toThrow('Le nombre d\'agents doit \u00eatre positif');
+      await expect(society('test prompt', -1, [model])).rejects.toThrow('The number of agents must be positive');
     });
 
     it('should throw NoModelsSpecifiedError when models array is empty', async () => {
-      await expect(society('test prompt', 3, [])).rejects.toThrow('Au moins un mod\u00e8le AI doit \u00eatre sp\u00e9cifi\u00e9');
+      await expect(society('test prompt', 3, [])).rejects.toThrow('At least one AI model must be specified');
     });
 
     it('should successfully create and run a society with valid parameters', async () => {

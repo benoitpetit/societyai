@@ -25,11 +25,13 @@ const step = StepBuilder.create()
 ```
 
 **Execution Order**:
+
 ```
 Agent 1 → Agent 2 → Agent 3
 ```
 
 **When to use**:
+
 - Tasks with dependencies
 - Progressive refinement
 - Quality review processes
@@ -48,6 +50,7 @@ const step = StepBuilder.create()
 ```
 
 **Execution Order**:
+
 ```
 ┌─ Agent 1 ─┐
 ├─ Agent 2 ─┤ → All at once
@@ -55,6 +58,7 @@ const step = StepBuilder.create()
 ```
 
 **When to use**:
+
 - Independent analyses
 - Multiple perspectives
 - Speed optimization
@@ -78,6 +82,7 @@ const step = StepBuilder.create()
 ```
 
 **Execution Order**:
+
 ```
 Round 1: Agent 1, Agent 2, Agent 3 (all share messages)
 Round 2: Agent 1, Agent 2, Agent 3 (consider round 1)
@@ -85,6 +90,7 @@ Round 3: Agent 1, Agent 2, Agent 3 (consider rounds 1-2)
 ```
 
 **When to use**:
+
 - Discussions and debates
 - Consensus building
 - Iterative refinement
@@ -107,6 +113,7 @@ const step = StepBuilder.create()
 ```
 
 **When to use**:
+
 - Error handling
 - Dynamic workflows
 - Optimization (skip unnecessary work)
@@ -269,9 +276,7 @@ const workflow = WorkflowConfigBuilder.create()
       .withMaxIterations(5)
       .withCompletionCondition((results, iteration) => {
         // Check if all agents agree
-        const contents = results
-          .filter(r => r.iteration === iteration)
-          .map(r => r.content);
+        const contents = results.filter((r) => r.iteration === iteration).map((r) => r.content);
         return checkConsensus(contents) || iteration >= 4;
       })
       .build(),
@@ -281,9 +286,7 @@ const workflow = WorkflowConfigBuilder.create()
 function checkConsensus(contents: string[]): boolean {
   // Custom logic to detect consensus
   const keywords = ['agreed', 'consensus', 'accept'];
-  return contents.every(c => 
-    keywords.some(k => c.toLowerCase().includes(k))
-  );
+  return contents.every((c) => keywords.some((k) => c.toLowerCase().includes(k)));
 }
 ```
 
@@ -450,14 +453,14 @@ StepBuilder.create()
   .withExecutionType('sequential')
   .withNextStepResolver((results) => {
     const content = results[0]?.content || '';
-    
+
     if (content.includes('TECHNICAL')) return 'technical-step';
     if (content.includes('BUSINESS')) return 'business-step';
     if (content.includes('DESIGN')) return 'design-step';
-    
+
     return 'default-step';
   })
-  .build()
+  .build();
 ```
 
 ### Iterative Refinement
@@ -473,13 +476,13 @@ StepBuilder.create()
   .withNextStepResolver((results) => {
     iteration++;
     const quality = assessQuality(results[0]?.content);
-    
+
     if (quality >= 0.9 || iteration >= maxIterations) {
       return null; // Done
     }
     return 'refine'; // Loop back
   })
-  .build()
+  .build();
 ```
 
 ### Conditional Branching
@@ -493,7 +496,7 @@ const workflow = WorkflowConfigBuilder.create()
       .withAgents(['main-agent'])
       .withExecutionType('sequential')
       .build(),
-    
+
     // Branch A (if condition 1)
     StepBuilder.create()
       .withId('branch-a')
@@ -501,7 +504,7 @@ const workflow = WorkflowConfigBuilder.create()
       .withExecutionType('conditional')
       .withCondition((results) => checkConditionA(results))
       .build(),
-    
+
     // Branch B (if condition 2)
     StepBuilder.create()
       .withId('branch-b')
@@ -509,7 +512,7 @@ const workflow = WorkflowConfigBuilder.create()
       .withExecutionType('conditional')
       .withCondition((results) => checkConditionB(results))
       .build(),
-    
+
     // Merge step
     StepBuilder.create()
       .withId('merge')
@@ -537,7 +540,7 @@ const workflow = WorkflowConfigBuilder.create()
         return needsDeeper ? 'level-2' : null;
       })
       .build(),
-    
+
     // Level 2: Deeper analysis (conditional)
     StepBuilder.create()
       .withId('level-2')
@@ -549,7 +552,7 @@ const workflow = WorkflowConfigBuilder.create()
         return needsExpert ? 'level-3' : null;
       })
       .build(),
-    
+
     // Level 3: Expert analysis (conditional)
     StepBuilder.create()
       .withId('level-3')
@@ -565,14 +568,14 @@ const workflow = WorkflowConfigBuilder.create()
 
 ### 1. Choose the Right Execution Type
 
-| Pattern | Use Sequential | Use Parallel | Use Collaborative |
-|---------|---------------|--------------|-------------------|
-| Dependent tasks | ✅ | ❌ | ❌ |
-| Independent tasks | ❌ | ✅ | ❌ |
-| Need discussion | ❌ | ❌ | ✅ |
-| Quality review | ✅ | ❌ | ❌ |
-| Multiple perspectives | ❌ | ✅ | ✅ |
-| Consensus building | ❌ | ❌ | ✅ |
+| Pattern               | Use Sequential | Use Parallel | Use Collaborative |
+| --------------------- | -------------- | ------------ | ----------------- |
+| Dependent tasks       | ✅             | ❌           | ❌                |
+| Independent tasks     | ❌             | ✅           | ❌                |
+| Need discussion       | ❌             | ❌           | ✅                |
+| Quality review        | ✅             | ❌           | ❌                |
+| Multiple perspectives | ❌             | ✅           | ✅                |
+| Consensus building    | ❌             | ❌           | ✅                |
 
 ### 2. Optimize for Performance
 
@@ -619,18 +622,11 @@ class TestModel extends StandardModelBase {
 }
 
 // Test individual steps
-const testResult = await executor.executeStep(
-  step,
-  agentsMap,
-  testContext
-);
+const testResult = await executor.executeStep(step, agentsMap, testContext);
 
 // Test complete workflows
 const testWorkflow = workflow; // Your workflow
-const result = await executor.execute(
-  testWorkflow,
-  'test input'
-);
+const result = await executor.execute(testWorkflow, 'test input');
 
 expect(result.success).toBe(true);
 ```
@@ -640,7 +636,7 @@ expect(result.success).toBe(true);
 ```typescript
 /**
  * Research-Debate-Conclude Pattern
- * 
+ *
  * 1. Multiple researchers gather information (parallel)
  * 2. Experts debate findings (collaborative)
  * 3. Synthesizer creates final report (sequential)
@@ -667,12 +663,12 @@ const researchDebateWorkflow = WorkflowConfigBuilder.create()
       .withResultTransformer((results) => {
         // Combine research findings
         return {
-          findings: results.map(r => r.content),
+          findings: results.map((r) => r.content),
           sources: results.length,
         };
       })
       .build(),
-    
+
     // Phase 2: Expert debate (collaborative)
     StepBuilder.create()
       .withId('debate')
@@ -683,18 +679,19 @@ const researchDebateWorkflow = WorkflowConfigBuilder.create()
       .withInstructions('Discuss the research findings and reach expert consensus.')
       .withCompletionCondition((results, iteration) => {
         if (iteration < 2) return false;
-        
+
         // Check for consensus keywords
-        const lastRound = results.filter(r => r.iteration === iteration);
-        const consensusCount = lastRound.filter(r =>
-          r.content.toLowerCase().includes('agree') ||
-          r.content.toLowerCase().includes('consensus')
+        const lastRound = results.filter((r) => r.iteration === iteration);
+        const consensusCount = lastRound.filter(
+          (r) =>
+            r.content.toLowerCase().includes('agree') ||
+            r.content.toLowerCase().includes('consensus')
         ).length;
-        
+
         return consensusCount >= 2; // Majority agreement
       })
       .build(),
-    
+
     // Phase 3: Synthesis (sequential)
     StepBuilder.create()
       .withId('synthesis')
@@ -702,8 +699,7 @@ const researchDebateWorkflow = WorkflowConfigBuilder.create()
       .withAgents(['synthesizer'])
       .withExecutionType('sequential')
       .withInstructions(
-        'Create a comprehensive final report synthesizing ' +
-        'the research and expert debate.'
+        'Create a comprehensive final report synthesizing ' + 'the research and expert debate.'
       )
       .build(),
   ])
@@ -711,15 +707,18 @@ const researchDebateWorkflow = WorkflowConfigBuilder.create()
     const research = stepResults.get('research');
     const debate = stepResults.get('debate');
     const synthesis = stepResults.get('synthesis');
-    
+
     return `
 # Research-Debate-Conclude Report
 
 ## Research Phase
-${research?.map(r => `- ${r.agentId}: ${r.content}`).join('\n')}
+${research?.map((r) => `- ${r.agentId}: ${r.content}`).join('\n')}
 
 ## Expert Debate (${debate?.length} contributions)
-${debate?.slice(-3).map(r => `- ${r.agentId}: ${r.content.substring(0, 100)}...`).join('\n')}
+${debate
+  ?.slice(-3)
+  .map((r) => `- ${r.agentId}: ${r.content.substring(0, 100)}...`)
+  .join('\n')}
 
 ## Final Synthesis
 ${synthesis?.[0]?.content || 'No synthesis available'}

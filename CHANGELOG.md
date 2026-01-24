@@ -1,30 +1,52 @@
 # Changelog
 
+## [1.0.1] - 2026-01-24
+
+### Fixed
+
+- **Documentation**: Added missing `Pipelines.review()` and `Pipelines.consensus()` methods
+- **Internationalization**: Translated all French comments and error messages to English
+- **Exports**: Added `createRole()` and `createAgent()` helper functions to builder API
+- **Package.json**: Updated description to English and added author information
+- **API Documentation**: Completed API reference with Pipelines, Strategies, and Middlewares sections
+
+### Added
+
+- **Examples**: New `simple-society-v2.ts` example demonstrating the fluent Society.create() API
+- **Tests**: Comprehensive test suite for the new Society builder API (`builder.test.ts`)
+- **Documentation**: Enhanced API reference with complete v2.0 API documentation
+
+### Improved
+
+- Consistent English language across the entire codebase
+- Better examples showcasing the recommended v2.0 API
+- More comprehensive test coverage for modern API
+
 ## [1.0.0] - 2026-01-23
 
 ### Added
 
-- 🎉 Version initiale de SocietyAI en TypeScript
-- 🤖 Architecture multi-agents avec 3 modes de fonctionnement
-- ⚙️ Mode standard : distribution simple des tâches
-- 🔄 Mode synthèse : utilisation d'un modèle dédié pour la synthèse
-- 🤝 Mode collaboratif : analyse approfondie en 4 étapes
-- 🔌 Interface flexible pour intégrer n'importe quel modèle d'IA
-- 📦 Adaptateurs intégrés (TextModelAdapter, OpenAIAdapter, GeminiAdapter)
-- ⚡ Pool de workers pour parallélisation optimale
-- 🔄 Mécanisme de retry avec backoff exponentiel et jitter
-- 📊 Système de logging configurable
-- 👀 Interface SocietyObserver pour observer le cycle de vie
-- 🛡️ Gestion robuste des erreurs avec classes d'erreurs personnalisées
-- ⏱️ Support de AbortSignal pour annulation et timeouts
-- 📚 Documentation complète en français
-- 🧪 Exemples d'utilisation détaillés
-- 🎯 Types TypeScript stricts pour une meilleure DX
+- 🎉 Initial release of SocietyAI in TypeScript
+- 🤖 Multi-agent architecture with 3 operating modes
+- ⚙️ Standard mode: simple task distribution
+- 🔄 Synthesis mode: dedicated model for synthesis
+- 🤝 Collaborative mode: in-depth 4-phase analysis
+- 🔌 Flexible interface to integrate any AI model
+- 📦 Built-in adapters (TextModelAdapter, OpenAIAdapter, GeminiAdapter)
+- ⚡ Worker pool for optimal parallelization
+- 🔄 Retry mechanism with exponential backoff and jitter
+- 📊 Configurable logging system
+- 👀 SocietyObserver interface for lifecycle monitoring
+- 🛡️ Robust error handling with custom error classes
+- ⏱️ AbortSignal support for cancellation and timeouts
+- 📚 Complete documentation
+- 🧪 Detailed usage examples
+- 🎯 Strict TypeScript types for better DX
 
 ### Features
 
-- Support de prompts simples ou structurés
-- Personnalisation des perspectives par agent
-- Configuration flexible via SocietyConfig
-- Extensibilité via interfaces (ModelAdapter, PromptBuilder, etc.)
-- Compatibilité Node.js moderne (ES2020+)
+- Support for simple or structured prompts
+- Customizable agent perspectives
+- Flexible configuration via SocietyConfig
+- Extensibility via interfaces (ModelAdapter, PromptBuilder, etc.)
+- Modern Node.js compatibility (ES2020+)

@@ -1,117 +1,117 @@
 /**
- * Interface pour les modèles d'IA
- * Cette interface doit être implémentée par n'importe quel modèle
- * que le développeur souhaite utiliser avec SocietyAI
+ * Interface for AI models
+ * This interface must be implemented by any model
+ * that developers wish to use with SocietyAI
  */
 export interface AIModel {
   /**
-   * Traite un prompt et retourne une réponse
-   * @param prompt - Le prompt à traiter
-   * @param signal - Signal d'annulation optionnel
-   * @returns Une promesse contenant la réponse du modèle
+   * Process a prompt and return a response
+   * @param prompt - The prompt to process
+   * @param signal - Optional cancellation signal
+   * @returns A promise containing the model's response
    */
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
 
   /**
-   * Retourne le nom du modèle d'IA
+   * Return the name of the AI model
    */
   name(): string;
 
   /**
-   * Vérifie si le modèle supporte un type spécifique de prompt
-   * @param promptType - Le type de prompt à vérifier
+   * Check if the model supports a specific prompt type
+   * @param promptType - The prompt type to check
    */
   supportsPromptType(promptType: string): boolean;
 }
 
 // ============================================================================
-// SYSTÈME DE RÔLES ET AGENTS CONFIGURABLES
+// CONFIGURABLE ROLES AND AGENTS SYSTEM
 // ============================================================================
 
 /**
- * Définition d'un rôle d'agent configurable
- * Permet aux utilisateurs de créer des agents avec des comportements personnalisés
+ * Definition of a configurable agent role
+ * Allows users to create agents with custom behaviors
  */
 export interface AgentRole {
   /**
-   * Identifiant unique du rôle
+   * Unique role identifier
    */
   id: string;
 
   /**
-   * Nom lisible du rôle (ex: "Chef de projet", "Développeur", "Testeur")
+   * Readable role name (e.g., "Project Manager", "Developer", "Tester")
    */
   name: string;
 
   /**
-   * Description du rôle
+   * Role description
    */
   description?: string;
 
   /**
-   * Instructions système pour ce rôle
-   * Définit comment l'agent doit se comporter
+   * System instructions for this role
+   * Defines how the agent should behave
    */
   systemPrompt: string;
 
   /**
-   * Capacités spécifiques de ce rôle
+   * Specific capabilities of this role
    */
   capabilities?: string[];
 
   /**
-   * Contraintes ou limitations pour ce rôle
+   * Constraints or limitations for this role
    */
   constraints?: string[];
 
   /**
-   * Template pour formater les prompts de cet agent
-   * Utilise des placeholders: {input}, {context}, {history}, {sharedData}
+   * Template for formatting prompts for this agent
+   * Uses placeholders: {input}, {context}, {history}, {sharedData}
    */
   promptTemplate?: string;
 }
 
 /**
- * Configuration complète d'un agent
+ * Complete agent configuration
  */
 export interface AgentConfig {
   /**
-   * Identifiant unique de l'agent
+   * Unique agent ID
    */
   id: string;
 
   /**
-   * Nom de l'agent
+   * Agent name
    */
   name?: string;
 
   /**
-   * Rôle de l'agent
+   * Agent's role
    */
   role: AgentRole;
 
   /**
-   * Modèle IA à utiliser
+   * AI model to use
    */
   model: AIModel;
 
   /**
-   * Agents avec lesquels cet agent peut communiquer directement
+   * Agents with which this agent can directly communicate
    */
   canCommunicateWith?: string[];
 
   /**
-   * Priorité de l'agent (pour l'ordre d'exécution)
+   * Agent priority (for execution order)
    */
   priority?: number;
 
   /**
-   * Données de contexte initiales pour cet agent
+   * Initial context data for this agent
    */
   initialContext?: Record<string, unknown>;
 
   /**
-   * Configuration de retry spécifique à cet agent
+   * Agent-specific retry configuration
    */
   retryConfig?: {
     maxRetries?: number;
@@ -120,82 +120,82 @@ export interface AgentConfig {
 }
 
 /**
- * Message échangé entre agents
+ * Message exchanged between agents
  */
 export interface AgentMessage {
   /**
-   * ID de l'agent émetteur
+   * Sender agent ID
    */
   from: string;
 
   /**
-   * ID de l'agent destinataire (ou 'broadcast' pour tous)
+   * Recipient agent ID (or 'broadcast' for all)
    */
   to: string | 'broadcast';
 
   /**
-   * Type de message
+   * Message type
    */
   type: 'request' | 'response' | 'notification' | 'data' | 'feedback' | 'validation';
 
   /**
-   * Contenu du message
+   * Message content
    */
   content: string;
 
   /**
-   * Données structurées optionnelles
+   * Optional structured data
    */
   data?: Record<string, unknown>;
 
   /**
-   * Timestamp du message
+   * Message timestamp
    */
   timestamp: number;
 
   /**
-   * ID du message parent (pour les réponses)
+   * Parent message ID (for replies)
    */
   replyTo?: string;
 
   /**
-   * Identifiant unique du message
+   * Unique message identifier
    */
   messageId: string;
 }
 
 /**
- * Canal de communication entre agents
+ * Communication channel between agents
  */
 export interface CommunicationChannel {
   /**
-   * Envoie un message
+   * Send a message
    */
   send(message: AgentMessage): Promise<void>;
 
   /**
-   * S'abonne aux messages destinés à un agent
+   * Subscribe to messages intended for an agent
    */
   subscribe(agentId: string, handler: (message: AgentMessage) => void): void;
 
   /**
-   * Se désabonne
+   * Unsubscribe
    */
   unsubscribe(agentId: string): void;
 
   /**
-   * Récupère l'historique des messages
+   * Retrieve message history
    */
   getHistory(filter?: { from?: string; to?: string; type?: string }): AgentMessage[];
 
   /**
-   * Efface l'historique
+   * Clear history
    */
   clearHistory(): void;
 }
 
 // ============================================================================
-// SYSTÈME DE WORKFLOW CONFIGURABLE
+// CONFIGURABLE WORKFLOW SYSTEM
 // ============================================================================
 
 /**

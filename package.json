@@ -1,7 +1,7 @@
 {
     "name": "@societyai/core",
     "version": "1.0.0",
-    "description": "Bibliothèque pour créer une société d'agents d'intelligence artificielle collaborant ensemble pour analyser des prompts complexes et générer des réponses approfondies et cohérentes",
+    "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems. Build sophisticated workflows where AI agents with different roles work together to solve complex problems.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
@@ -27,7 +27,7 @@
         "society",
         "typescript"
     ],
-    "author": "",
+    "author": "Benoit Petit <contact@societyai.dev> (https://github.com/benoitpetit)",
     "license": "MIT",
     "devDependencies": {
         "@types/jest": "^29.5.11",

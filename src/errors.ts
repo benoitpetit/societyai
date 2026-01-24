@@ -1,5 +1,5 @@
 /**
- * Classe d'erreur personnalisée pour SocietyAI
+ * Custom error class for SocietyAI
  */
 export class SocietyError extends Error {
   public readonly code: string;
@@ -13,87 +13,87 @@ export class SocietyError extends Error {
 }
 
 /**
- * Erreur quand un modèle n'est pas supporté
+ * Error when a model is not supported
  */
 export class ModelNotSupportedError extends SocietyError {
-  constructor(message = 'Modèle d\'IA non supporté') {
+  constructor(message = 'AI model not supported') {
     super(message, 'MODEL_NOT_SUPPORTED');
     this.name = 'ModelNotSupportedError';
   }
 }
 
 /**
- * Erreur quand le traitement du prompt échoue
+ * Error when prompt processing fails
  */
 export class ProcessingFailedError extends SocietyError {
-  constructor(message = 'Échec du traitement du prompt') {
+  constructor(message = 'Prompt processing failed') {
     super(message, 'PROCESSING_FAILED');
     this.name = 'ProcessingFailedError';
   }
 }
 
 /**
- * Erreur quand le nombre d'agents est invalide
+ * Error when the number of agents is invalid
  */
 export class InvalidAgentCountError extends SocietyError {
-  constructor(message = 'Le nombre d\'agents doit être positif') {
+  constructor(message = 'The number of agents must be positive') {
     super(message, 'INVALID_AGENT_COUNT');
     this.name = 'InvalidAgentCountError';
   }
 }
 
 /**
- * Erreur quand aucun modèle n'est spécifié
+ * Error when no model is specified
  */
 export class NoModelsSpecifiedError extends SocietyError {
-  constructor(message = 'Au moins un modèle AI doit être spécifié') {
+  constructor(message = 'At least one AI model must be specified') {
     super(message, 'NO_MODELS');
     this.name = 'NoModelsSpecifiedError';
   }
 }
 
 /**
- * Erreur quand aucun modèle de synthèse n'est fourni
+ * Error when no synthesis model is provided
  */
 export class SynthesisModelRequiredError extends SocietyError {
-  constructor(message = 'Un modèle de synthèse est requis pour ce mode') {
+  constructor(message = 'A synthesis model is required for this mode') {
     super(message, 'NO_SYNTHESIS_MODEL');
     this.name = 'SynthesisModelRequiredError';
   }
 }
 
 /**
- * Erreur quand l'opération est annulée
+ * Error when the operation is cancelled
  */
 export class OperationCancelledError extends SocietyError {
-  constructor(message = 'L\'opération a été annulée') {
+  constructor(message = 'The operation was cancelled') {
     super(message, 'OPERATION_CANCELLED');
     this.name = 'OperationCancelledError';
   }
 }
 
 /**
- * Erreur quand le délai d'exécution est dépassé
+ * Error when execution timeout is exceeded
  */
 export class TimeoutError extends SocietyError {
-  constructor(message = 'Délai d\'exécution dépassé') {
+  constructor(message = 'Execution timeout exceeded') {
     super(message, 'TIMEOUT');
     this.name = 'TimeoutError';
   }
 }
 
 /**
- * Erreur quand la configuration est invalide
+ * Error when configuration is invalid
  */
 export class InvalidConfigurationError extends SocietyError {
-  constructor(message = 'Configuration invalide') {
+  constructor(message = 'Invalid configuration') {
     super(message, 'INVALID_CONFIG');
     this.name = 'InvalidConfigurationError';
   }
 }
 
 /**
- * Vérifie si une erreur est liée à une annulation ou un timeout
+ * Check if an error is related to cancellation or timeout
  */
 export function isAbortError(error: Error): boolean {
   return (
@@ -104,7 +104,7 @@ export function isAbortError(error: Error): boolean {
 }
 
 /**
- * Enveloppe une erreur avec un message contextuel
+ * Wrap an error with contextual message
  */
 export function wrapError(error: Error, message: string): SocietyError {
   if (error.name === 'AbortError') {

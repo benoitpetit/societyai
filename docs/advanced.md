@@ -73,11 +73,8 @@ for (const [stepId, stepResults] of result.stepResults) {
 const workflow = WorkflowConfigBuilder.create()
   .addSteps([
     // Main step
-    StepBuilder.create()
-      .withId('main')
-      .withAgents(['main-agent'])
-      .build(),
-    
+    StepBuilder.create().withId('main').withAgents(['main-agent']).build(),
+
     // Error recovery step
     StepBuilder.create()
       .withId('recovery')
@@ -85,7 +82,7 @@ const workflow = WorkflowConfigBuilder.create()
       .withExecutionType('conditional')
       .withCondition((results) => {
         const mainResults = results.get('main');
-        return mainResults?.some(r => !r.success) ?? false;
+        return mainResults?.some((r) => !r.success) ?? false;
       })
       .build(),
   ])
@@ -97,21 +94,21 @@ const workflow = WorkflowConfigBuilder.create()
 ```typescript
 const workflow = WorkflowConfigBuilder.create()
   .onAfterStep(async (step, results, context) => {
-    const failures = results.filter(r => !r.success);
-    
+    const failures = results.filter((r) => !r.success);
+
     if (failures.length > 0) {
       console.error(`Step ${step.id} had ${failures.length} failures`);
-      
+
       // Store error info in context
       context.metadata.errors = context.metadata.errors || [];
       context.metadata.errors.push({
         step: step.id,
-        failures: failures.map(f => ({
+        failures: failures.map((f) => ({
           agent: f.agentId,
           error: f.error?.message,
         })),
       });
-      
+
       // Optionally throw to stop workflow
       if (failures.length === results.length) {
         throw new Error(`All agents failed in step ${step.id}`);
@@ -135,10 +132,10 @@ const model = new StandardModelBase(
     name: 'MyModel',
     retryOptions: {
       maxRetries: 3,
-      initialBackoff: 1000,    // 1 second
-      maxBackoff: 10000,       // 10 seconds
-      backoffFactor: 2,        // Double each retry
-      jitter: true,           // Add randomness
+      initialBackoff: 1000, // 1 second
+      maxBackoff: 10000, // 10 seconds
+      backoffFactor: 2, // Double each retry
+      jitter: true, // Add randomness
     },
   },
   async (prompt) => {
@@ -211,11 +208,7 @@ const timeoutId = setTimeout(() => {
 }, 60000); // 60 seconds
 
 try {
-  const result = await executor.execute(
-    workflow,
-    input,
-    controller.signal
-  );
+  const result = await executor.execute(workflow, input, controller.signal);
   clearTimeout(timeoutId);
 } catch (error) {
   clearTimeout(timeoutId);
@@ -260,37 +253,37 @@ import { SocietyObserver } from '@societyai/core';
 class MetricsObserver implements SocietyObserver {
   private startTime: number = 0;
   private agentTimes: Map<number, number> = new Map();
-  
+
   onSocietyStart(prompt: string, agentCount: number): void {
     this.startTime = Date.now();
     console.log(`[SOCIETY] Starting with ${agentCount} agents`);
     console.log(`[SOCIETY] Prompt: ${prompt.substring(0, 100)}...`);
   }
-  
+
   onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
     this.agentTimes.set(agentId, Date.now());
     console.log(`[AGENT ${agentId}] Started using ${modelName}`);
   }
-  
+
   onAgentComplete(agentId: number, modelName: string, result: string): void {
     const duration = Date.now() - (this.agentTimes.get(agentId) || 0);
     console.log(`[AGENT ${agentId}] Completed in ${duration}ms`);
     console.log(`[AGENT ${agentId}] Result length: ${result.length} chars`);
   }
-  
+
   onAgentError(agentId: number, modelName: string, error: Error): void {
     const duration = Date.now() - (this.agentTimes.get(agentId) || 0);
     console.error(`[AGENT ${agentId}] Failed after ${duration}ms: ${error.message}`);
   }
-  
+
   onPhaseStart(phase: string): void {
     console.log(`[PHASE] Starting: ${phase}`);
   }
-  
+
   onPhaseComplete(phase: string): void {
     console.log(`[PHASE] Completed: ${phase}`);
   }
-  
+
   onSocietyComplete(finalResult: string): void {
     const totalDuration = Date.now() - this.startTime;
     console.log(`[SOCIETY] Completed in ${totalDuration}ms`);
@@ -324,20 +317,20 @@ import { Logger, LogLevel } from '@societyai/core';
 
 class CustomLogger implements Logger {
   private level: LogLevel = LogLevel.INFO;
-  
+
   debug(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.DEBUG) {
       // Send to external logging service
       logService.debug(message, ...args);
     }
   }
-  
+
   info(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.INFO) {
       logService.info(message, ...args);
     }
   }
-  
+
   error(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.ERROR) {
       logService.error(message, ...args);
@@ -345,7 +338,7 @@ class CustomLogger implements Logger {
       alerting.sendAlert(message);
     }
   }
-  
+
   setLevel(level: LogLevel): void {
     this.level = level;
   }
@@ -384,7 +377,7 @@ const workflow = WorkflowConfigBuilder.create()
   })
   .addSteps([
     expensiveAnalysisStep,
-    
+
     StepBuilder.create()
       .withId('use-cached')
       .withExecutionType('conditional')
@@ -427,7 +420,7 @@ For large outputs, use result transformers to reduce data size:
 const step = StepBuilder.create()
   .withResultTransformer((results) => {
     // Only keep essential data
-    return results.map(r => ({
+    return results.map((r) => ({
       agentId: r.agentId,
       summary: r.content.substring(0, 500),
       keywords: extractKeywords(r.content),
@@ -461,44 +454,33 @@ class MockModel extends StandardModelBase {
 describe('MyWorkflow', () => {
   it('should complete successfully', async () => {
     const model = new MockModel('test', 'Mock response');
-    
-    const role = RoleBuilder.create()
-      .withId('test-role')
-      .withSystemPrompt('Test prompt')
-      .build();
-    
+
+    const role = RoleBuilder.create().withId('test-role').withSystemPrompt('Test prompt').build();
+
     const agent = AgentBuilder.create()
       .withId('test-agent')
       .withRole(role)
       .withModel(model)
       .build();
-    
+
     const workflow = WorkflowConfigBuilder.create()
       .withId('test-workflow')
       .addAgent(agent)
-      .addStep(
-        StepBuilder.create()
-          .withId('test-step')
-          .withAgents(['test-agent'])
-          .build()
-      )
+      .addStep(StepBuilder.create().withId('test-step').withAgents(['test-agent']).build())
       .build();
-    
+
     const executor = new DefaultWorkflowExecutor();
     const result = await executor.execute(workflow, 'test input');
-    
+
     expect(result.success).toBe(true);
     expect(result.output).toContain('Mock response');
   });
-  
+
   it('should handle errors gracefully', async () => {
-    const errorModel = new StandardModelBase(
-      { name: 'error-model' },
-      async () => {
-        throw new Error('Test error');
-      }
-    );
-    
+    const errorModel = new StandardModelBase({ name: 'error-model' }, async () => {
+      throw new Error('Test error');
+    });
+
     // Test error handling...
   });
 });
@@ -514,7 +496,7 @@ describe('Integration Tests', () => {
       console.log('Skipping integration test (no API key)');
       return;
     }
-    
+
     const model = new OpenAIModel(apiKey);
     // Test with real model...
   });
@@ -550,17 +532,17 @@ class ProductionObserver implements SocietyObserver {
     metrics.increment('workflow.started');
     metrics.gauge('workflow.agent_count', agentCount);
   }
-  
+
   onAgentComplete(agentId: number, modelName: string, result: string): void {
     metrics.increment('agent.completed');
     metrics.histogram('agent.result_length', result.length);
   }
-  
+
   onAgentError(agentId: number, modelName: string, error: Error): void {
     metrics.increment('agent.error');
     errorTracking.captureException(error);
   }
-  
+
   onSocietyComplete(finalResult: string): void {
     metrics.increment('workflow.completed');
   }
@@ -574,7 +556,7 @@ class RateLimitedModel extends StandardModelBase {
   private queue: Array<() => void> = [];
   private activeRequests = 0;
   private maxConcurrent = 5;
-  
+
   constructor(baseModel: AIModel) {
     super({ name: baseModel.name() }, async (prompt, signal) => {
       await this.acquireSlot();
@@ -585,18 +567,18 @@ class RateLimitedModel extends StandardModelBase {
       }
     });
   }
-  
+
   private async acquireSlot(): Promise<void> {
     if (this.activeRequests < this.maxConcurrent) {
       this.activeRequests++;
       return;
     }
-    
-    return new Promise(resolve => {
+
+    return new Promise((resolve) => {
       this.queue.push(resolve);
     });
   }
-  
+
   private releaseSlot(): void {
     this.activeRequests--;
     const next = this.queue.shift();

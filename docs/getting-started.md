@@ -72,10 +72,10 @@ import OpenAI from 'openai';
 
 class OpenAIModel extends StandardModelBase {
   private client: OpenAI;
-  
+
   constructor(apiKey: string) {
     const client = new OpenAI({ apiKey });
-    
+
     super({ name: 'gpt-4-turbo' }, async (prompt) => {
       const response = await client.chat.completions.create({
         model: 'gpt-4-turbo',
@@ -83,7 +83,7 @@ class OpenAIModel extends StandardModelBase {
       });
       return response.choices[0].message.content || '';
     });
-    
+
     this.client = client;
   }
 }
@@ -105,8 +105,8 @@ const analystRole = RoleBuilder.create()
   .withName('Data Analyst')
   .withSystemPrompt(
     'You are a data analyst. Your job is to examine information ' +
-    'objectively, identify patterns, and provide clear insights. ' +
-    'Focus on facts and data-driven conclusions.'
+      'objectively, identify patterns, and provide clear insights. ' +
+      'Focus on facts and data-driven conclusions.'
   )
   .withCapabilities(['data-analysis', 'pattern-recognition', 'statistics'])
   .build();
@@ -117,8 +117,8 @@ const reviewerRole = RoleBuilder.create()
   .withName('Critical Reviewer')
   .withSystemPrompt(
     'You are a critical reviewer. Your job is to challenge assumptions, ' +
-    'identify potential issues, and ensure quality. ' +
-    'Be thorough and constructive in your feedback.'
+      'identify potential issues, and ensure quality. ' +
+      'Be thorough and constructive in your feedback.'
   )
   .withCapabilities(['critical-thinking', 'quality-assurance'])
   .build();
@@ -132,17 +132,9 @@ Build agents by combining roles with models:
 import { AgentBuilder } from '@societyai/core';
 
 const agents = [
-  AgentBuilder.create()
-    .withId('analyst-1')
-    .withRole(analystRole)
-    .withModel(model)
-    .build(),
-    
-  AgentBuilder.create()
-    .withId('reviewer-1')
-    .withRole(reviewerRole)
-    .withModel(model)
-    .build(),
+  AgentBuilder.create().withId('analyst-1').withRole(analystRole).withModel(model).build(),
+
+  AgentBuilder.create().withId('reviewer-1').withRole(reviewerRole).withModel(model).build(),
 ];
 ```
 
@@ -161,11 +153,10 @@ const steps = [
     .withAgents(['analyst-1'])
     .withExecutionType('sequential')
     .withInstructions(
-      'Analyze the provided data thoroughly. ' +
-      'Identify key patterns, trends, and insights.'
+      'Analyze the provided data thoroughly. ' + 'Identify key patterns, trends, and insights.'
     )
     .build(),
-    
+
   // Step 2: Review
   StepBuilder.create()
     .withId('review')
@@ -174,8 +165,8 @@ const steps = [
     .withExecutionType('sequential')
     .withInstructions(
       'Review the analysis provided. ' +
-      'Check for accuracy, completeness, and potential issues. ' +
-      'Provide constructive feedback.'
+        'Check for accuracy, completeness, and potential issues. ' +
+        'Provide constructive feedback.'
     )
     .build(),
 ];
@@ -206,14 +197,14 @@ import { DefaultWorkflowExecutor } from '@societyai/core';
 
 async function main() {
   const executor = new DefaultWorkflowExecutor();
-  
+
   const result = await executor.execute(
     workflow,
     'Analyze the sales data from Q4 2024. ' +
-    'Sales increased by 15% year-over-year, ' +
-    'with the highest growth in the APAC region (+25%).'
+      'Sales increased by 15% year-over-year, ' +
+      'with the highest growth in the APAC region (+25%).'
   );
-  
+
   console.log('Workflow completed!');
   console.log('Duration:', result.duration, 'ms');
   console.log('\nFinal Output:');
@@ -241,7 +232,7 @@ import OpenAI from 'openai';
 // 1. Create AI Model
 class OpenAIModel extends StandardModelBase {
   private client: OpenAI;
-  
+
   constructor(apiKey: string) {
     const client = new OpenAI({ apiKey });
     super({ name: 'gpt-4-turbo' }, async (prompt) => {
@@ -272,16 +263,8 @@ const reviewerRole = RoleBuilder.create()
 const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
 
 const agents = [
-  AgentBuilder.create()
-    .withId('analyst-1')
-    .withRole(analystRole)
-    .withModel(model)
-    .build(),
-  AgentBuilder.create()
-    .withId('reviewer-1')
-    .withRole(reviewerRole)
-    .withModel(model)
-    .build(),
+  AgentBuilder.create().withId('analyst-1').withRole(analystRole).withModel(model).build(),
+  AgentBuilder.create().withId('reviewer-1').withRole(reviewerRole).withModel(model).build(),
 ];
 
 // 4. Define Steps
@@ -385,14 +368,16 @@ Now that you've created your first society, explore more advanced features:
 ### Quick Examples
 
 **Parallel Analysis**:
+
 ```typescript
 StepBuilder.create()
   .withAgents(['agent-1', 'agent-2', 'agent-3'])
-  .withExecutionType('parallel')  // All agents work simultaneously
-  .build()
+  .withExecutionType('parallel') // All agents work simultaneously
+  .build();
 ```
 
 **Collaborative Discussion**:
+
 ```typescript
 StepBuilder.create()
   .withAgents(['agent-1', 'agent-2', 'agent-3'])
@@ -401,17 +386,18 @@ StepBuilder.create()
   .withCompletionCondition((results, iteration) => {
     return iteration >= 2 || consensusReached(results);
   })
-  .build()
+  .build();
 ```
 
 **Custom Result Generation**:
+
 ```typescript
 WorkflowConfigBuilder.create()
   .withFinalResultGenerator(async (stepResults, context) => {
     // Your custom logic to combine results
     return customFormattedOutput;
   })
-  .build()
+  .build();
 ```
 
 ## Common Issues
@@ -419,6 +405,7 @@ WorkflowConfigBuilder.create()
 ### Issue: "Cannot find module '@societyai/core'"
 
 **Solution**: Make sure you've installed the package:
+
 ```bash
 npm install @societyai/core
 ```
@@ -426,6 +413,7 @@ npm install @societyai/core
 ### Issue: API Key Errors
 
 **Solution**: Set your API key as an environment variable:
+
 ```bash
 export OPENAI_API_KEY="your-key-here"
 # or

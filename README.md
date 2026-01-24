@@ -3,12 +3,22 @@
 [![npm version](https://img.shields.io/npm/v/@societyai/core.svg)](https://www.npmjs.com/package/@societyai/core)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
 **SocietyAI** is a powerful TypeScript library for creating collaborative multi-agent AI systems. Build sophisticated workflows where AI agents with different roles and capabilities work together to solve complex problems, analyze information from multiple perspectives, and generate comprehensive responses.
 
 The library is **fully configurable**, **model-agnostic**, and **domain-independent** - use it for software development, research, content creation, business analysis, or any domain where multiple perspectives add value.
 
+## 🎯 Design Principles
+
+- **Model-Agnostic**: Works with any AI model (OpenAI, Anthropic, Google, local models, or custom APIs)
+- **Domain-Independent**: No hardcoded prompts or business logic - fully configurable for any use case
+- **Zero Runtime Dependencies**: Pure TypeScript with no external runtime dependencies
+- **Fluent Builder API**: Intuitive chainable interfaces for configuring agents, roles, and workflows
+
 ## ✨ Features
+
+### Core Capabilities
 
 - **🤖 Configurable Multi-Agent System**: Define custom roles, behaviors, capabilities, and constraints for each agent
 - **🔄 Flexible Workflow Engine**: Sequential, parallel, collaborative, and conditional execution patterns
@@ -20,6 +30,15 @@ The library is **fully configurable**, **model-agnostic**, and **domain-independ
 - **📊 Full Observability**: Logging system and observer pattern for monitoring and debugging
 - **🎯 Type-Safe**: Written in TypeScript with complete type definitions
 - **📦 Zero Dependencies**: No external runtime dependencies (only dev dependencies for testing)
+
+### Advanced Features (v2.0)
+
+- **🏗️ Fluent Society Builder**: New `Society.create()` entry point with chainable methods
+- **🔀 Pipeline Patterns**: Scatter-Gather, Chain, Router, Splitter, Aggregator patterns
+- **🔌 Middleware System**: Interceptors for logging, caching, rate limiting, retry, circuit breaker
+- **📊 Aggregation Strategies**: Consensus, majority vote, weighted, best-of, custom reducers
+- **🗂️ Context System**: Type-safe context injection for sharing state between agents
+- **📡 Event System**: Typed events for lifecycle monitoring, progress tracking, debugging
 
 ## 📦 Installation
 
@@ -59,7 +78,9 @@ class MyAIModel extends StandardModelBase {
 const analyst = RoleBuilder.create()
   .withId('analyst')
   .withName('Data Analyst')
-  .withSystemPrompt('You are a data analyst. Examine information objectively and identify patterns.')
+  .withSystemPrompt(
+    'You are a data analyst. Examine information objectively and identify patterns.'
+  )
   .withCapabilities(['data-analysis', 'pattern-recognition'])
   .build();
 
@@ -73,17 +94,9 @@ const reviewer = RoleBuilder.create()
 const model = new MyAIModel();
 
 const agents = [
-  AgentBuilder.create()
-    .withId('analyst-1')
-    .withRole(analyst)
-    .withModel(model)
-    .build(),
-    
-  AgentBuilder.create()
-    .withId('reviewer-1')
-    .withRole(reviewer)
-    .withModel(model)
-    .build(),
+  AgentBuilder.create().withId('analyst-1').withRole(analyst).withModel(model).build(),
+
+  AgentBuilder.create().withId('reviewer-1').withRole(reviewer).withModel(model).build(),
 ];
 
 // 4. Define workflow steps
@@ -119,16 +132,184 @@ console.log(result.output);
 console.log(`Completed in ${result.duration}ms`);
 ```
 
+## 🆕 New in v2.0: Fluent Society Builder
+
+### Society Builder API
+
+The new `Society.create()` provides a simpler, more intuitive way to create agent societies:
+
+```typescript
+import { Society, Strategies } from '@societyai/core';
+
+// Create and execute a society in one fluent chain
+const result = await Society.create()
+  .withName('Analysis Team')
+  .addAgent((a) =>
+    a
+      .withId('analyst')
+      .withRole((r) =>
+        r
+          .withSystemPrompt('You are a data analyst. Examine patterns objectively.')
+          .withCapabilities(['analysis', 'pattern-recognition'])
+      )
+      .withModel(model)
+  )
+  .addAgent((a) =>
+    a
+      .withId('critic')
+      .withRole((r) => r.withSystemPrompt('You are a critical reviewer. Challenge assumptions.'))
+      .withModel(model)
+  )
+  .scatterGather(Strategies.consensus(0.7).aggregate)
+  .execute('Analyze the impact of AI on healthcare');
+
+console.log(result.output);
+```
+
+### Pipeline Patterns
+
+Use pre-built execution patterns for common workflows:
+
+```typescript
+import { Society, Pipelines, Strategies } from '@societyai/core';
+
+// Use a pre-built pipeline pattern
+const society = Society.create()
+  .withName('Content Pipeline')
+  .useAgents([writer, editor, reviewer])
+  .usePipeline(
+    (p) =>
+      p
+        .then('writer') // First, writer creates draft
+        .then('editor') // Then, editor improves it
+        .scatterGather(['reviewer', 'editor'], Strategies.concat()) // Both review
+  );
+
+const result = await society.execute('Write a blog post about TypeScript');
+```
+
+Available patterns:
+
+- `Pipelines.chain('a', 'b', 'c')` - Sequential execution
+- `Pipelines.scatterGather(['a', 'b'], strategy)` - Parallel with aggregation
+- `Pipelines.review('drafter', 'reviewer')` - Draft and review pattern
+- `Pipelines.consensus(['a', 'b', 'c'], 'finalizer', 0.6)` - Consensus building
+- `Pipelines.debate('agent1', 'agent2', 'judge', rounds)` - Debate pattern
+- `Pipelines.iterativeRefinement('agent', iterations)` - Iterative improvement
+
+### Aggregation Strategies
+
+Combine results from multiple agents:
+
+```typescript
+import { Strategies } from '@societyai/core';
+
+// Basic strategies
+Strategies.concat('\n\n'); // Concatenate all results
+Strategies.first(); // First successful result
+Strategies.last(); // Last successful result
+Strategies.longest(); // Longest result
+Strategies.shortest(); // Shortest result
+
+// Voting strategies
+Strategies.majority(); // Most common response
+Strategies.consensus(0.7); // Requires 70% agreement
+Strategies.weighted(weights); // Weighted by agent
+Strategies.best(scorer); // Best by custom score
+
+// Composition
+Strategies.compose(s1, s2, s3); // Chain strategies
+Strategies.fallback(primary, backup);
+```
+
+### Middleware System
+
+Add cross-cutting concerns with composable middleware:
+
+```typescript
+import { MiddlewareChain, Middlewares } from '@societyai/core';
+
+// Create a middleware chain
+const middleware = MiddlewareChain.create()
+  .use(Middlewares.logging({ logInput: true, logOutput: true }))
+  .use(Middlewares.timing())
+  .use(Middlewares.retry({ maxAttempts: 3, delay: 1000 }))
+  .use(Middlewares.cache({ ttl: 60000 }))
+  .use(Middlewares.rateLimit({ maxRequests: 10, windowMs: 60000 }));
+
+// Wrap your model with middleware
+const enhancedModel = middleware.wrap(originalModel);
+```
+
+Available middlewares:
+
+- `Middlewares.logging(options)` - Log requests/responses
+- `Middlewares.timing(onComplete)` - Measure duration
+- `Middlewares.retry(options)` - Retry on failure
+- `Middlewares.cache(options)` - Cache responses
+- `Middlewares.rateLimit(options)` - Limit request rate
+- `Middlewares.timeout(ms)` - Enforce timeout
+- `Middlewares.circuitBreaker(options)` - Circuit breaker pattern
+- `Middlewares.dedupe()` - Deduplicate concurrent requests
+
+### Context System
+
+Type-safe state sharing between agents:
+
+```typescript
+import { createContextToken, ContextProvider, CommonContexts } from '@societyai/core';
+
+// Define custom context tokens
+const UserContext = createContextToken<User>('user');
+const ConfigContext = createContextToken<Config>('config', defaultConfig);
+
+// Create provider
+const context = ContextProvider.create()
+  .provide(UserContext, currentUser)
+  .provideFactory(ConfigContext, () => loadConfig())
+  .build();
+
+// Access context
+const user = context.get(UserContext);
+const config = context.getOptional(ConfigContext);
+
+// Use in society
+const society = Society.create().withGlobalContext({ user, config }).addAgent(/* ... */).chain();
+```
+
+### Event System
+
+Monitor execution with typed events:
+
+```typescript
+import { createEventEmitter, createProgressTracker } from '@societyai/core';
+
+const emitter = createEventEmitter();
+
+// Subscribe to events
+emitter.on('workflow:start', (e) => console.log('Started'));
+emitter.on('agent:complete', (e) => console.log(`Agent done: ${e.agentId}`));
+emitter.on('progress', (e) => updateUI(e.percent));
+
+// Event types: workflow:start, workflow:complete, workflow:error
+//              step:start, step:complete, step:error
+//              agent:start, agent:complete, agent:error, agent:retry
+//              progress, message:sent, message:received, debug
+
+// Use the observer in your society
+const society = Society.create().withObserver(emitter.toObserver()).addAgent(/* ... */).chain();
+```
+
 ## 📚 Key Concepts
 
 ### Execution Types
 
-| Type            | Description                                               | Use Case                                |
-| --------------- | --------------------------------------------------------- | --------------------------------------- |
-| `sequential`    | Agents execute one after another in order                 | Pipeline processing, step-by-step tasks |
-| `parallel`      | All agents execute simultaneously                         | Independent analyses, speed optimization|
-| `collaborative` | Agents exchange messages across multiple iterations       | Discussions, consensus building         |
-| `conditional`   | Step executes only if condition is met                    | Dynamic workflows, branching logic      |
+| Type            | Description                                         | Use Case                                 |
+| --------------- | --------------------------------------------------- | ---------------------------------------- |
+| `sequential`    | Agents execute one after another in order           | Pipeline processing, step-by-step tasks  |
+| `parallel`      | All agents execute simultaneously                   | Independent analyses, speed optimization |
+| `collaborative` | Agents exchange messages across multiple iterations | Discussions, consensus building          |
+| `conditional`   | Step executes only if condition is met              | Dynamic workflows, branching logic       |
 
 ### Architecture Overview
 
@@ -179,7 +360,7 @@ const qaRole = RoleBuilder.create()
 const devWorkflow = WorkflowConfigBuilder.create()
   .addAgents([pmAgent, dev1Agent, dev2Agent, qaAgent])
   .addStep(planningStep)
-  .addStep(parallelDevStep)  // Both devs work simultaneously
+  .addStep(parallelDevStep) // Both devs work simultaneously
   .addStep(testingStep)
   .build();
 ```
@@ -212,7 +393,7 @@ const discussionStep = StepBuilder.create()
   .withId('discussion')
   .withAgents(['participant-1', 'participant-2', 'participant-3'])
   .withExecutionType('collaborative')
-  .withMaxIterations(3)  // Up to 3 rounds
+  .withMaxIterations(3) // Up to 3 rounds
   .withCompletionCondition((results, iteration) => {
     // Custom completion logic
     return iteration >= 2 || consensusReached(results);
@@ -242,16 +423,16 @@ WorkflowConfigBuilder.create()
   .withFinalResultGenerator(async (stepResults, context) => {
     // Custom logic to combine all step results
     let summary = 'Executive Summary:\n';
-    
+
     for (const [stepId, results] of stepResults) {
       summary += `\n${stepId}:\n`;
-      results.forEach(r => {
+      results.forEach((r) => {
         if (r.success) {
           summary += `  - ${r.agentId}: ${r.content.substring(0, 100)}...\n`;
         }
       });
     }
-    
+
     return summary;
   })
   .build();
@@ -313,11 +494,7 @@ setTimeout(() => controller.abort(), 30000); // 30 seconds
 
 // Execute with cancellation support
 try {
-  const result = await executor.execute(
-    workflow, 
-    input, 
-    controller.signal
-  );
+  const result = await executor.execute(workflow, input, controller.signal);
 } catch (error) {
   if (error.name === 'AbortError') {
     console.log('Operation cancelled');
@@ -328,11 +505,11 @@ try {
 ### Error Handling
 
 ```typescript
-import { 
-  SocietyError, 
+import {
+  SocietyError,
   ProcessingFailedError,
   TimeoutError,
-  InvalidConfigurationError 
+  InvalidConfigurationError,
 } from '@societyai/core';
 
 try {
@@ -358,10 +535,10 @@ import { StandardModelBase } from '@societyai/core';
 
 class OpenAIModel extends StandardModelBase {
   private client: OpenAI;
-  
+
   constructor(apiKey: string, model = 'gpt-4-turbo') {
     const client = new OpenAI({ apiKey });
-    
+
     super({ name: model }, async (prompt) => {
       const response = await client.chat.completions.create({
         model,
@@ -369,7 +546,7 @@ class OpenAIModel extends StandardModelBase {
       });
       return response.choices[0].message.content || '';
     });
-    
+
     this.client = client;
   }
 }
@@ -383,21 +560,19 @@ import { StandardModelBase } from '@societyai/core';
 
 class ClaudeModel extends StandardModelBase {
   private client: Anthropic;
-  
+
   constructor(apiKey: string, model = 'claude-3-5-sonnet-20241022') {
     const client = new Anthropic({ apiKey });
-    
+
     super({ name: model }, async (prompt) => {
       const response = await client.messages.create({
         model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: String(prompt) }],
       });
-      return response.content[0].type === 'text' 
-        ? response.content[0].text 
-        : '';
+      return response.content[0].type === 'text' ? response.content[0].text : '';
     });
-    
+
     this.client = client;
   }
 }
@@ -412,17 +587,17 @@ class CustomAIModel extends StandardModelBase {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prompt: String(prompt) }),
         signal, // Support cancellation
       });
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       return data.result;
     });
@@ -435,6 +610,7 @@ class CustomAIModel extends StandardModelBase {
 ### Core Classes
 
 #### `RoleBuilder`
+
 Create agent roles with specific behaviors.
 
 ```typescript
@@ -449,6 +625,7 @@ RoleBuilder.create()
 ```
 
 #### `AgentBuilder`
+
 Configure individual agents.
 
 ```typescript
@@ -464,6 +641,7 @@ AgentBuilder.create()
 ```
 
 #### `StepBuilder`
+
 Define workflow steps.
 
 ```typescript
@@ -480,6 +658,7 @@ StepBuilder.create()
 ```
 
 #### `WorkflowConfigBuilder`
+
 Build complete workflows.
 
 ```typescript
@@ -497,6 +676,7 @@ WorkflowConfigBuilder.create()
 ```
 
 #### `DefaultWorkflowExecutor`
+
 Execute workflows.
 
 ```typescript

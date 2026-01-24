@@ -21,7 +21,7 @@ Create agent roles with specific behaviors.
 ```typescript
 class RoleBuilder {
   static create(): RoleBuilder;
-  
+
   withId(id: string): this;
   withName(name: string): this;
   withDescription(description: string): this;
@@ -29,12 +29,13 @@ class RoleBuilder {
   withCapabilities(capabilities: string[]): this;
   withConstraints(constraints: string[]): this;
   withPromptTemplate(template: string): this;
-  
+
   build(): AgentRole;
 }
 ```
 
 **Example**:
+
 ```typescript
 const role = RoleBuilder.create()
   .withId('analyst')
@@ -52,7 +53,7 @@ Configure individual agents.
 ```typescript
 class AgentBuilder {
   static create(): AgentBuilder;
-  
+
   withId(id: string): this;
   withName(name: string): this;
   withRole(role: AgentRole): this;
@@ -60,12 +61,13 @@ class AgentBuilder {
   canCommunicateWith(agentIds: string[]): this;
   withPriority(priority: number): this;
   withInitialContext(context: Record<string, unknown>): this;
-  
+
   build(): AgentConfig;
 }
 ```
 
 **Example**:
+
 ```typescript
 const agent = AgentBuilder.create()
   .withId('analyst-1')
@@ -83,7 +85,7 @@ Define workflow steps.
 ```typescript
 class StepBuilder {
   static create(): StepBuilder;
-  
+
   withId(id: string): this;
   withName(name: string): this;
   withDescription(description: string): this;
@@ -97,12 +99,13 @@ class StepBuilder {
   withCondition(condition: (previousResults: Map<string, StepResult[]>) => boolean): this;
   withNextSteps(stepIds: string[]): this;
   withNextStepResolver(resolver: (results: StepResult[]) => string | null): this;
-  
+
   build(): WorkflowStep;
 }
 ```
 
 **Example**:
+
 ```typescript
 const step = StepBuilder.create()
   .withId('analysis')
@@ -121,7 +124,7 @@ Build complete workflows.
 ```typescript
 class WorkflowConfigBuilder {
   static create(): WorkflowConfigBuilder;
-  
+
   withId(id: string): this;
   withName(name: string): this;
   withDescription(description: string): this;
@@ -132,14 +135,19 @@ class WorkflowConfigBuilder {
   withEntryStep(stepId: string): this;
   withGlobalContext(context: Record<string, unknown>): this;
   onBeforeStep(handler: (step: WorkflowStep, context: WorkflowContext) => Promise<void>): this;
-  onAfterStep(handler: (step: WorkflowStep, results: StepResult[], context: WorkflowContext) => Promise<void>): this;
-  withFinalResultGenerator(generator: (results: Map<string, StepResult[]>, context: WorkflowContext) => Promise<string>): this;
-  
+  onAfterStep(
+    handler: (step: WorkflowStep, results: StepResult[], context: WorkflowContext) => Promise<void>
+  ): this;
+  withFinalResultGenerator(
+    generator: (results: Map<string, StepResult[]>, context: WorkflowContext) => Promise<string>
+  ): this;
+
   build(): WorkflowConfig;
 }
 ```
 
 **Example**:
+
 ```typescript
 const workflow = WorkflowConfigBuilder.create()
   .withId('my-workflow')
@@ -261,8 +269,15 @@ interface WorkflowConfig {
   agents: AgentConfig[];
   globalContext?: Record<string, unknown>;
   onBeforeStep?: (step: WorkflowStep, context: WorkflowContext) => Promise<void>;
-  onAfterStep?: (step: WorkflowStep, results: StepResult[], context: WorkflowContext) => Promise<void>;
-  finalResultGenerator?: (results: Map<string, StepResult[]>, context: WorkflowContext) => Promise<string>;
+  onAfterStep?: (
+    step: WorkflowStep,
+    results: StepResult[],
+    context: WorkflowContext
+  ) => Promise<void>;
+  finalResultGenerator?: (
+    results: Map<string, StepResult[]>,
+    context: WorkflowContext
+  ) => Promise<string>;
 }
 ```
 
@@ -304,13 +319,9 @@ Executes workflows.
 ```typescript
 class DefaultWorkflowExecutor implements WorkflowExecutor {
   constructor(observer?: SocietyObserver);
-  
-  execute(
-    workflow: WorkflowConfig,
-    input: string,
-    signal?: AbortSignal
-  ): Promise<WorkflowResult>;
-  
+
+  execute(workflow: WorkflowConfig, input: string, signal?: AbortSignal): Promise<WorkflowResult>;
+
   executeStep(
     step: WorkflowStep,
     agents: Map<string, AgentConfig>,
@@ -321,6 +332,7 @@ class DefaultWorkflowExecutor implements WorkflowExecutor {
 ```
 
 **Example**:
+
 ```typescript
 const executor = new DefaultWorkflowExecutor(observer);
 const result = await executor.execute(workflow, 'Input text');
@@ -338,11 +350,11 @@ class StandardModelBase implements AIModel {
     options?: Partial<StandardModelOptions>,
     processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<string>
   );
-  
+
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
   name(): string;
   supportsPromptType(promptType: string): boolean;
-  
+
   withName(name: string): this;
   withAdapter(adapter: ModelAdapter): this;
   withTimeout(timeout: number): this;
@@ -351,6 +363,7 @@ class StandardModelBase implements AIModel {
 ```
 
 **Example**:
+
 ```typescript
 class MyModel extends StandardModelBase {
   constructor() {
@@ -450,6 +463,7 @@ function getLogger(): Logger;
 ```
 
 **Example**:
+
 ```typescript
 import { setGlobalLogLevel, LogLevel } from '@societyai/core';
 setGlobalLogLevel(LogLevel.DEBUG);
@@ -482,7 +496,7 @@ Parallel task execution.
 ```typescript
 class WorkerPool {
   constructor(maxWorkers: number, signal?: AbortSignal);
-  
+
   submit<T>(task: () => Promise<T>): Promise<T>;
   waitAll(): Promise<void>;
 }
@@ -540,6 +554,7 @@ interface SocietyObserver {
 ```
 
 **Example**:
+
 ```typescript
 const observer: SocietyObserver = {
   onSocietyStart: (prompt, count) => console.log(`Starting with ${count} agents`),
@@ -583,6 +598,203 @@ async function societyWithSynthesis(
   synthModel: AIModel,
   observer?: SocietyObserver
 ): Promise<string>;
+```
+
+## v2.0 API: Fluent Society Builder
+
+### Society
+
+Main entry point for creating agent societies with fluent API.
+
+```typescript
+class Society {
+  static create(): Society;
+
+  withName(name: string): this;
+  withGlobalContext(context: Record<string, unknown>): this;
+  withObserver(observer: SocietyObserver): this;
+
+  addAgent(builderFn: (builder: FluentAgentBuilder) => FluentAgentBuilder): this;
+  addAgents(configs: AgentConfig[]): this;
+
+  // Pipeline patterns
+  chain(agentIds: string[]): this;
+  scatterGather(aggregateFn: (results: StepResult[]) => string): this;
+  usePipeline(builderFn: (builder: FluentPipelineBuilder) => FluentPipelineBuilder): this;
+
+  execute(input: string, signal?: AbortSignal): Promise<WorkflowResult>;
+}
+```
+
+**Example**:
+
+```typescript
+const result = await Society.create()
+  .withName('Analysis Team')
+  .addAgent((a) =>
+    a
+      .withId('analyst')
+      .withRole((r) => r.withSystemPrompt('Analyze data'))
+      .withModel(model)
+  )
+  .scatterGather(Strategies.consensus(0.7).aggregate)
+  .execute('Analyze market trends');
+```
+
+### Pipelines
+
+Pre-built pipeline patterns for common workflows.
+
+```typescript
+const Pipelines = {
+  // Sequential chain execution
+  chain: (agentIds: string[]) => Pipeline;
+
+  // Parallel scatter-gather
+  scatterGather: (agentIds: string[], strategy: AggregationStrategy) => Pipeline;
+
+  // Iterative refinement
+  iterativeRefinement: (agentId: string, iterations: number) => Pipeline;
+
+  // Debate pattern
+  debate: (agent1Id: string, agent2Id: string, judgeId: string, rounds: number) => Pipeline;
+
+  // Review pattern (NEW in v1.0.1)
+  review: (drafterId: string, reviewerId: string) => Pipeline;
+
+  // Consensus building (NEW in v1.0.1)
+  consensus: (agentIds: string[], finalizerId: string, threshold: number) => Pipeline;
+};
+```
+
+**Example**:
+
+```typescript
+const pipeline = Pipelines.review('writer', 'editor');
+const result = await pipeline.execute(input, agents);
+```
+
+### Strategies
+
+Result aggregation strategies for combining multiple agent outputs.
+
+```typescript
+const Strategies = {
+  // Basic strategies
+  concat: (separator?: string) => AggregationStrategy;
+  merge: () => AggregationStrategy;
+  first: () => AggregationStrategy;
+  last: () => AggregationStrategy;
+  longest: () => AggregationStrategy;
+  shortest: () => AggregationStrategy;
+
+  // Voting strategies
+  majority: () => AggregationStrategy;
+  consensus: (threshold: number) => AggregationStrategy;
+  weighted: (weights: Record<string, number>) => AggregationStrategy;
+
+  // Formatting
+  format: (format: 'json' | 'markdown' | 'yaml') => AggregationStrategy;
+
+  // Composition
+  compose: (...strategies: AggregationStrategy[]) => AggregationStrategy;
+  fallback: (primary: AggregationStrategy, backup: AggregationStrategy) => AggregationStrategy;
+};
+```
+
+**Example**:
+
+```typescript
+// Use consensus with 70% threshold
+const strategy = Strategies.consensus(0.7);
+
+// Compose multiple strategies
+const composedStrategy = Strategies.compose(
+  Strategies.filter((r) => r.success),
+  Strategies.longest(),
+  Strategies.format('markdown')
+);
+```
+
+### Middlewares
+
+Composable middleware for cross-cutting concerns.
+
+```typescript
+const Middlewares = {
+  // Logging
+  logging: (options?: { logInput?: boolean; logOutput?: boolean }) => Middleware;
+
+  // Performance
+  timing: (onComplete?: (duration: number) => void) => Middleware;
+
+  // Reliability
+  retry: (options: { maxAttempts: number; delay?: number }) => Middleware;
+  cache: (options: { ttl: number }) => Middleware;
+  circuitBreaker: (options: { threshold: number; timeout: number }) => Middleware;
+
+  // Rate limiting
+  rateLimit: (options: { maxRequests: number; windowMs: number }) => Middleware;
+  timeout: (ms: number) => Middleware;
+
+  // Utilities
+  dedupe: () => Middleware;
+  transform: (transformFn: (input: unknown) => unknown) => Middleware;
+};
+```
+
+**Example**:
+
+```typescript
+const middleware = MiddlewareChain.create()
+  .use(Middlewares.logging({ logInput: true }))
+  .use(Middlewares.retry({ maxAttempts: 3 }))
+  .use(Middlewares.cache({ ttl: 60000 }))
+  .build();
+
+const enhancedModel = middleware.wrap(originalModel);
+```
+
+### Helper Functions
+
+Quick helpers for creating roles and agents.
+
+```typescript
+function createRole(
+  id: string,
+  systemPrompt: string,
+  options?: {
+    name?: string;
+    description?: string;
+    capabilities?: string[];
+    constraints?: string[];
+    promptTemplate?: string;
+  }
+): AgentRole;
+
+function createAgent(
+  id: string,
+  role: AgentRole,
+  model: AIModel,
+  options?: {
+    name?: string;
+    priority?: number;
+    canCommunicateWith?: string[];
+  }
+): AgentConfig;
+```
+
+**Example**:
+
+```typescript
+const analystRole = createRole('analyst', 'You analyze data objectively', {
+  capabilities: ['data-analysis', 'statistics'],
+  constraints: ['No subjective opinions'],
+});
+
+const agent = createAgent('analyst-1', analystRole, model, {
+  priority: 10,
+});
 ```
 
 ---
