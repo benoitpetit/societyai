@@ -1,108 +1,268 @@
 # Examples Index
 
-> **Note**: SocietyAI is currently pre-release (`0.0.1`). The `examples/` directory is empty for now.
-> This document describes the planned examples structure for future reference.
+This document provides an overview of all examples in the `examples/` directory and references to comprehensive feature guides.
 
 ## Overview
 
-The examples will be organized by complexity and use case. Start with basic examples and progress to advanced patterns.
+The examples demonstrate various SocietyAI features from basic usage to advanced patterns. Each example is fully functional and includes detailed comments.
 
-## Planned Directory Structure
+## Available Examples
 
+### Graph Workflow (`graph-workflow.ts`)
+
+**Description**: Demonstrates graph-based execution with DAG and cyclic workflows  
+**Features**:
+
+- START, END, AGENT, PARALLEL, CONDITION nodes
+- Conditional branching based on runtime conditions
+- Parallel execution of multiple agents
+- Cyclic graphs with loop detection
+
+**Related guide**: [Graph Execution](./graph-execution.md)
+
+```bash
+npx ts-node examples/graph-workflow.ts
 ```
-examples/
-├── 01-basic/              # Simple usage patterns
-├── 02-roles-and-agents/   # Custom roles and agent configuration
-├── 03-workflows/          # Workflow patterns
-├── 04-domains/            # Domain-specific examples
-├── 05-integrations/       # AI service integrations
-└── 06-advanced/           # Advanced features
+
+### Tool Calling (`tool-calling.ts`)
+
+**Description**: Shows how to give agents access to external tools  
+**Features**:
+
+- Tool definition with ToolBuilder
+- ToolRegistry for managing multiple tools
+- Parameter validation with JSON Schema
+- Built-in tools (calculator, string manipulation)
+- Agent-tool interaction loop
+
+**Related guide**: [Tool Calling](./tool-calling.md)
+
+```bash
+npx ts-node examples/tool-calling.ts
 ```
+
+### Memory System (`memory-system.ts`)
+
+**Description**: Demonstrates multi-level memory management  
+**Features**:
+
+- ShortTermMemory with decay and auto-summarization
+- LongTermMemory with RAG integration
+- EntityMemory for tracking facts
+- Memory importance scoring
+- Pruning strategies (LRU, importance-based, FIFO)
+
+**Related guide**: [Memory System](./memory-system.md)
+
+```bash
+npx ts-node examples/memory-system.ts
+```
+
+### Structured Output (`structured-output.ts`)
+
+**Description**: Validates AI outputs against JSON schemas  
+**Features**:
+
+- JSON Schema validation
+- Automatic retry with error feedback
+- Complex schema support (nested objects, arrays)
+- Schema definition helpers
+- Markdown code block extraction
+
+**Related guide**: [Structured Output](./structured-output.md)
+
+```bash
+npx ts-node examples/structured-output.ts
+```
+
+### Metrics Tracking (`metrics-tracking.ts`)
+
+**Description**: Tracks performance, tokens, and costs  
+**Features**:
+
+- MetricsTracker for workflow metrics
+- TokenCounter for cost estimation
+- Cost configuration for major AI models
+- Custom metrics tracking
+- OpenTelemetry export
+
+**Related guide**: [Metrics & Observability](./metrics-observability.md)
+
+```bash
+npx ts-node examples/metrics-tracking.ts
+```
+
+### Complete Integration (`complete-integration.ts`)
+
+**Description**: Full-featured example combining all systems  
+**Features**:
+
+- Graph-based workflow
+- Tool calling integration
+- Memory system integration
+- Structured output validation
+- Metrics tracking
+- End-to-end multi-agent system
+
+**Related guides**: All feature guides
+
+```bash
+npx ts-node examples/complete-integration.ts
+```
+
+## Running Examples
+
+### Prerequisites
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Set up environment variables (if using real AI models):
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+# or
+export ANTHROPIC_API_KEY="your-key-here"
+```
+
+### Run Specific Example
+
+```bash
+npx ts-node examples/<example-name>.ts
+```
+
+### Run All Examples
+
+```bash
+npm run examples
+```
+
+## Feature Guides
+
+For comprehensive documentation on each feature:
+
+- **[Graph Execution](./graph-execution.md)**: DAG/Cyclic workflows, node types, conditional branching
+- **[Tool Calling](./tool-calling.md)**: Tool definition, registry, executor, parameter validation
+- **[Memory System](./memory-system.md)**: Short-term, long-term, entity memory, RAG integration
+- **[Structured Output](./structured-output.md)**: JSON Schema validation, automatic retry
+- **[Metrics & Observability](./metrics-observability.md)**: Performance tracking, cost calculation
+
+## Example Categories
+
+### Basic Usage
+
+Perfect for getting started:
+
+- `graph-workflow.ts` - Basic graph patterns
+- `tool-calling.ts` - Simple tool integration
+- `structured-output.ts` - Output validation
+
+### Advanced Patterns
+
+For production systems:
+
+- `memory-system.ts` - Context management
+- `metrics-tracking.ts` - Observability
+- `complete-integration.ts` - Full system integration
+
+## Code Snippets
+
+### Quick Graph Example
+
+```typescript
+import { GraphBuilder, NodeType } from 'societyai';
+
+const graph = GraphBuilder.create()
+  .addNode('start', NodeType.START)
+  .addNode('agent1', NodeType.AGENT, { agentId: 'analyst' })
+  .addNode('end', NodeType.END)
+  .addEdge('start', 'agent1')
+  .addEdge('agent1', 'end')
+  .build();
+
+const result = await graph.execute('Analyze data', agents);
+```
+
+### Quick Tool Example
+
+```typescript
+import { ToolBuilder, ToolRegistry } from 'societyai';
+
+const tool = ToolBuilder.create()
+  .withName('add')
+  .withDescription('Add two numbers')
+  .withParameter('a', 'number', 'First number', true)
+  .withParameter('b', 'number', 'Second number', true)
+  .withExecutor(async ({ a, b }) => a + b)
+  .build();
+
+const registry = new ToolRegistry();
+registry.register(tool);
+```
+
+### Quick Memory Example
+
+```typescript
+import { MemoryBuilder } from 'societyai';
+
+const memory = MemoryBuilder.create()
+  .withShortTermMemory({ maxSize: 10 })
+  .withLongTermMemory({ maxSize: 100 })
+  .build();
+
+await memory.addShortTerm('Important context', 0.9);
+```
+
+## Troubleshooting
+
+### TypeScript Errors
+
+Ensure your `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "strict": true
+  }
+}
+```
+
+### Module Not Found
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+### Examples Not Working
+
+Make sure you have:
+
+1. Installed dependencies (`npm install`)
+2. Built the project (`npm run build`)
+3. Set environment variables (if using real AI models)
+
+## Next Steps
+
+- Read the [Getting Started Guide](./getting-started.md)
+- Explore [Architecture Overview](./architecture.md)
+- Check [API Reference](./api-reference.md)
+- Review [Best Practices](./workflows.md)
 
 ---
 
-## Planned Examples
-
-The sections below describe examples that will be added progressively.
-
-### 01-basic/ - Simple Usage Patterns
-
-#### simple-society.ts
-
-**Description**: The simplest way to use SocietyAI with the fluent builder API  
-**Covers**:
-
-- Standard mode (multiple agents, same prompt)
-- Collaborative mode (agents discuss together)
-- Custom perspectives
-- Simulated AI model
-
-**When to use**: Quick prototyping, simple use cases, learning the basics
-
-### multi-model.ts
-
-**Description**: Using multiple different AI models together  
-**Covers**:
-
-- Multi-model configuration
-- Model switching
-- Heterogeneous agent teams
-
-**When to use**: Combining different AI services, leveraging model strengths
-
-### with-observer.ts
-
-**Description**: Monitoring execution with observers  
-**Covers**:
-
-- Observer pattern
-- Lifecycle hooks
-- Logging and metrics
-- Progress tracking
-
-**When to use**: Production deployments, debugging, monitoring
-
-## 02-roles-and-agents/ - Custom Roles
-
-### custom-roles.ts
-
-**Description**: Defining custom agent roles with specific behaviors  
-**Covers**:
-
-- RoleBuilder API
-- System prompts
-- Capabilities and constraints
-- Role templates
-
-**When to use**: Creating specialized agents, domain-specific behaviors
-
-### agent-capabilities.ts
-
-**Description**: Advanced agent configuration  
-**Covers**:
-
-- Agent priorities
-- Initial context
-- Retry configuration
-- Agent metadata
-
-**When to use**: Fine-tuning agent behavior, performance optimization
-
-### agent-communication.ts
-
-**Description**: Inter-agent communication  
-**Covers**:
-
-- MessageBus
-- Agent-to-agent messaging
-- Communication restrictions
-- Message history
-
-**When to use**: Collaborative workflows, information sharing
+**Questions?** Open an issue on [GitHub](https://github.com/benoitpetit/societyai-package/issues)**When to use**: Collaborative workflows, information sharing
 
 ## 03-workflows/ - Workflow Patterns
 
-### 
+###
 
 **Description**: Step-by-step processing pipeline  
 **Covers**:
@@ -113,7 +273,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Dependent tasks, progressive refinement, quality review
 
-### 
+###
 
 **Description**: Concurrent agent execution  
 **Covers**:
@@ -124,7 +284,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Independent tasks, speed optimization, multiple perspectives
 
-### 
+###
 
 **Description**: Agents discussing and iterating together  
 **Covers**:
@@ -136,7 +296,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Discussions, debates, iterative refinement
 
-### 
+###
 
 **Description**: Dynamic workflows with branching logic  
 **Covers**:
@@ -150,7 +310,7 @@ The sections below describe examples that will be added progressively.
 
 ## 04-domains/ - Domain-Specific Examples
 
-### 
+###
 
 **Description**: Software development team workflow  
 **Covers**:
@@ -163,7 +323,7 @@ The sections below describe examples that will be added progressively.
 **Roles**: Project Manager, Architect, Developers, QA Tester  
 **Pattern**: Hierarchical with parallel development
 
-### 
+###
 
 **Description**: Academic research workflow  
 **Covers**:
@@ -176,7 +336,7 @@ The sections below describe examples that will be added progressively.
 **Roles**: Researchers, Statistician, Writer  
 **Pattern**: Parallel research + synthesis
 
-### 
+###
 
 **Description**: Content creation workflow  
 **Covers**:
@@ -189,7 +349,7 @@ The sections below describe examples that will be added progressively.
 **Roles**: Researcher, Writer, Editor, Designer  
 **Pattern**: Sequential with parallel polish
 
-### 
+###
 
 **Description**: Business analysis workflow  
 **Covers**:
@@ -204,7 +364,7 @@ The sections below describe examples that will be added progressively.
 
 ## 05-integrations/ - AI Service Integrations
 
-### 
+###
 
 **Description**: OpenAI GPT models integration  
 **Covers**:
@@ -216,7 +376,7 @@ The sections below describe examples that will be added progressively.
 
 **Models**: GPT-4, GPT-3.5-turbo
 
-### 
+###
 
 **Description**: Anthropic Claude integration  
 **Covers**:
@@ -227,7 +387,7 @@ The sections below describe examples that will be added progressively.
 
 **Models**: Claude 3 Opus, Sonnet, Haiku
 
-### 
+###
 
 **Description**: Custom AI API integration  
 **Covers**:
@@ -241,7 +401,7 @@ The sections below describe examples that will be added progressively.
 
 ## 06-advanced/ - Advanced Features
 
-### 
+###
 
 **Description**: Comprehensive error handling  
 **Covers**:
@@ -254,7 +414,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Production systems, reliability requirements
 
-### 
+###
 
 **Description**: Timeout and cancellation patterns  
 **Covers**:
@@ -266,7 +426,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Long-running operations, user-facing applications
 
-### 
+###
 
 **Description**: Workflow lifecycle hooks  
 **Covers**:
@@ -278,7 +438,7 @@ The sections below describe examples that will be added progressively.
 
 **When to use**: Logging, metrics, dynamic behavior
 
-### 
+###
 
 **Description**: Custom result processing  
 **Covers**:
@@ -330,7 +490,7 @@ node dist/examples/01-basic/simple-society.js
 
 1. simple-society.ts - Understand basics
 2. custom-roles.ts - Create roles
-3.  - Build workflows
+3. - Build workflows
 
 ### Intermediate
 
@@ -355,7 +515,7 @@ import {
   StepBuilder,
   WorkflowConfigBuilder,
   DefaultWorkflowExecutor,
-} from '@societyai/core';
+} from 'societyai';
 
 // See examples/01-basic/simple-society.ts
 ```

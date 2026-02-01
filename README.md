@@ -1,6 +1,6 @@
 # SocietyAI
 
-[![npm version](https://img.shields.io/npm/v/@societyai/core.svg)](https://www.npmjs.com/package/@societyai/core)
+[![npm version](https://img.shields.io/npm/v/societyai.svg)](https://www.npmjs.com/package/societyai)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
@@ -24,6 +24,9 @@ The library is **fully configurable**, **model-agnostic**, and **domain-independ
 
 - **🤖 Configurable Multi-Agent System**: Define custom roles, behaviors, capabilities, and constraints for each agent
 - **🔄 Flexible Workflow Engine**: Sequential, parallel, collaborative, and conditional execution patterns
+- **🎯 Graph-Based Execution**: DAG/Cyclic graphs with conditional branching and loops for complex workflows
+- **🛠️ Tool Calling System**: Enable agents to interact with external functions and APIs with JSON Schema validation
+- **🧠 Multi-Level Memory**: Intelligent context management with short-term, long-term, and entity memory
 - **💬 Inter-Agent Communication**: Built-in message bus for agent-to-agent information exchange
 - **🔌 Model-Agnostic**: Works with any AI model - OpenAI, Anthropic, Google, local models, or custom APIs
 - **🏗️ Builder Pattern API**: Intuitive fluent interfaces for creating agents, roles, and workflows
@@ -35,17 +38,33 @@ The library is **fully configurable**, **model-agnostic**, and **domain-independ
 
 ### Advanced Features
 
-- **🏗️ Fluent Society Builder**: New `Society.create()` entry point with chainable methods
-- **🔀 Pipeline Patterns**: Scatter-Gather, Chain, Router, Splitter, Aggregator patterns
-- **🔌 Middleware System**: Interceptors for logging, caching, rate limiting, retry, circuit breaker
-- **📊 Aggregation Strategies**: Consensus, majority vote, weighted, best-of, custom reducers
-- **🗂️ Context System**: Type-safe context injection for sharing state between agents
-- **📡 Event System**: Typed events for lifecycle monitoring, progress tracking, debugging
+#### Builder & Orchestration
+
+- **🏗️ Fluent Society Builder**: `Society.create()` entry point with chainable methods
+- **🔀 Pipeline Patterns**: Chain, Scatter-Gather, Router, Splitter, Map-Reduce, Saga patterns
+- **📊 SocietyGraph**: Graph-based execution with 8 node types (START, END, AGENT, PARALLEL, AGGREGATE, CONDITION, TRANSFORM, LOOP)
+- **🎨 Pre-built Patterns**: Self-correction, multi-perspective debate, hierarchical review, ensemble patterns
+
+#### Data & State Management
+
+- **🔧 Tool Registry**: Register and execute tools with JSON Schema validation and error handling
+- **💾 Memory System**: ShortTermMemory with auto-summarization, LongTermMemory with RAG, EntityMemory for facts tracking
+- **🗂️ Context System**: Type-safe context injection with tokens, providers, scopes (global, workflow, step, agent)
+- **✅ Structured Output**: JSON Schema validation with automatic retry and error feedback
+- **📡 Event System**: Typed events for lifecycle (workflow, step, agent), progress tracking, and debugging
+
+#### Performance & Reliability
+
+- **📈 Metrics & Observability**: Token counting, cost estimation, performance profiling, OpenTelemetry export support
+- **🔌 Middleware System**: Composable interceptors for logging, caching, rate limiting, retry, circuit breaker, timeout
+- **📊 Aggregation Strategies**: Consensus, majority vote, weighted vote, best-of, ranking, unanimous, custom reducers
+- **🔄 Retry Mechanisms**: Exponential backoff, conditional retry, circuit breaker protection
+- **⏱️ Timeout & Cancellation**: AbortSignal support, configurable timeouts per agent or workflow
 
 ## 📦 Installation
 
 ```bash
-npm install @societyai/core
+npm install societyai
 ```
 
 ## 🚀 Quick Start
@@ -60,7 +79,7 @@ import {
   WorkflowConfigBuilder,
   DefaultWorkflowExecutor,
   StandardModelBase,
-} from '@societyai/core';
+} from 'societyai';
 
 // 1. Create your AI model (connect to any AI API)
 class MyAIModel extends StandardModelBase {
@@ -141,7 +160,7 @@ console.log(`Completed in ${result.duration}ms`);
 The new `Society.create()` provides a simpler, more intuitive way to create agent societies:
 
 ```typescript
-import { Society, Strategies } from '@societyai/core';
+import { Society, Strategies } from 'societyai';
 
 // Create and execute a society in one fluent chain
 const result = await Society.create()
@@ -173,7 +192,7 @@ console.log(result.output);
 Use pre-built execution patterns for common workflows:
 
 ```typescript
-import { Society, Pipelines, Strategies } from '@societyai/core';
+import { Society, Pipelines, Strategies } from 'societyai';
 
 // Use a pre-built pipeline pattern
 const society = Society.create()
@@ -204,7 +223,7 @@ Available patterns:
 Combine results from multiple agents:
 
 ```typescript
-import { Strategies } from '@societyai/core';
+import { Strategies } from 'societyai';
 
 // Basic strategies
 Strategies.concat('\n\n'); // Concatenate all results
@@ -229,7 +248,7 @@ Strategies.fallback(primary, backup);
 Add cross-cutting concerns with composable middleware:
 
 ```typescript
-import { MiddlewareChain, Middlewares } from '@societyai/core';
+import { MiddlewareChain, Middlewares } from 'societyai';
 
 // Create a middleware chain
 const middleware = MiddlewareChain.create()
@@ -259,7 +278,7 @@ Available middlewares:
 Type-safe state sharing between agents:
 
 ```typescript
-import { createContextToken, ContextProvider, CommonContexts } from '@societyai/core';
+import { createContextToken, ContextProvider, CommonContexts } from 'societyai';
 
 // Define custom context tokens
 const UserContext = createContextToken<User>('user');
@@ -284,7 +303,7 @@ const society = Society.create().withGlobalContext({ user, config }).addAgent(/*
 Monitor execution with typed events:
 
 ```typescript
-import { createEventEmitter, createProgressTracker } from '@societyai/core';
+import { createEventEmitter, createProgressTracker } from 'societyai';
 
 const emitter = createEventEmitter();
 
@@ -512,7 +531,7 @@ import {
   ProcessingFailedError,
   TimeoutError,
   InvalidConfigurationError,
-} from '@societyai/core';
+} from 'societyai';
 
 try {
   const result = await executor.execute(workflow, input);
@@ -533,7 +552,7 @@ try {
 
 ```typescript
 import OpenAI from 'openai';
-import { StandardModelBase } from '@societyai/core';
+import { StandardModelBase } from 'societyai';
 
 class OpenAIModel extends StandardModelBase {
   private client: OpenAI;
@@ -558,7 +577,7 @@ class OpenAIModel extends StandardModelBase {
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
-import { StandardModelBase } from '@societyai/core';
+import { StandardModelBase } from 'societyai';
 
 class ClaudeModel extends StandardModelBase {
   private client: Anthropic;
@@ -734,13 +753,37 @@ interface StepResult {
 
 ## 📘 Documentation
 
-- [Getting Started Guide](./docs/getting-started.md) - Installation and first steps
-- [Architecture Overview](./docs/architecture.md) - Core concepts and design
-- [Workflow Patterns](./docs/workflows.md) - Common workflow configurations
-- [API Reference](./docs/api-reference.md) - Complete API documentation
-- [Advanced Features](./docs/advanced.md) - Error handling, retry, observability
-- [Migration Guide](./docs/migration.md) - Upgrading from legacy API
-- [Examples](./docs/examples.md) - Real-world usage examples
+### Getting Started
+
+- [Getting Started Guide](./docs/getting-started.md) - Installation, setup, and your first workflow
+- [Architecture Overview](./docs/architecture.md) - Core concepts, design principles, and system overview
+- [Examples Index](./docs/examples.md) - Browse all code examples and use cases
+
+### Core Features
+
+- [Workflows](./docs/workflows.md) - Sequential, parallel, collaborative, and conditional patterns
+- [Graph Execution](./docs/graph-execution.md) - DAG/Cyclic workflows with complex logic and loops
+- [Pipeline Patterns](./docs/pipeline-patterns.md) - Chain, scatter-gather, router, splitter, saga patterns
+- [Aggregation Strategies](./docs/aggregation-strategies.md) - Consensus, voting, weighted, best-of, custom reducers
+
+### Data & State
+
+- [Tool Calling](./docs/tool-calling.md) - External tools and APIs integration with JSON Schema validation
+- [Memory System](./docs/memory-system.md) - Multi-level context (short-term, long-term, entity memory)
+- [Context System](./docs/context-system.md) - Type-safe state sharing with tokens and providers
+- [Structured Output](./docs/structured-output.md) - JSON Schema validation with automatic retry
+
+### Observability & Performance
+
+- [Event System](./docs/event-system.md) - Lifecycle events, progress tracking, and debugging hooks
+- [Metrics & Observability](./docs/metrics-observability.md) - Token counting, cost estimation, performance profiling
+- [Middleware System](./docs/middleware-system.md) - Logging, caching, retry, circuit breaker, rate limiting
+
+### Reference
+
+- [API Reference](./docs/api-reference.md) - Complete API documentation with all interfaces and methods
+- [Advanced Features](./docs/advanced.md) - Error handling, timeout, cancellation, performance tuning
+- [Migration Guide](./docs/migration.md) - Upgrading from legacy API to modern fluent builder API
 
 ## 💡 Examples
 
@@ -816,7 +859,7 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 ## 🔗 Links
 
 - **Documentation**: [docs/](./docs/) - Full documentation
-- **npm Package**: [@societyai/core](https://www.npmjs.com/package/@societyai/core)
+- **npm Package**: [societyai](https://www.npmjs.com/package/societyai)
 - **Examples**: See [Examples Index](./docs/examples.md) (coming soon)
 - **Changelog**: [CHANGELOG.md](./CHANGELOG.md)
 - **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)

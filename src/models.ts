@@ -27,7 +27,7 @@ export class StandardModelBase implements AIModel {
 
   constructor(
     options?: Partial<StandardModelOptions>,
-    protected processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<string>
+    protected processFunc?: (prompt: unknown, signal?: AbortSignal) => Promise<unknown>
   ) {
     this.options = { ...defaultStandardModelOptions(), ...options };
   }
@@ -77,6 +77,10 @@ export class StandardModelBase implements AIModel {
           // Convertir la réponse via l'adaptateur si disponible
           if (this.options.adapter) {
             return await this.options.adapter.convertResponse(resp);
+          }
+
+          if (typeof resp !== 'string') {
+            throw new Error('Le modèle a renvoyé une réponse non-string sans adaptateur configuré');
           }
 
           return resp;

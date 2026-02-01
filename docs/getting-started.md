@@ -8,6 +8,7 @@ Welcome to SocietyAI! This guide will help you get up and running with creating 
 - [Prerequisites](#prerequisites)
 - [Your First Society](#your-first-society)
 - [Understanding the Basics](#understanding-the-basics)
+- [Advanced Features](#advanced-features)
 - [Next Steps](#next-steps)
 
 ## Installation
@@ -15,19 +16,19 @@ Welcome to SocietyAI! This guide will help you get up and running with creating 
 Install SocietyAI via npm:
 
 ```bash
-npm install @societyai/core
+npm install societyai
 ```
 
 Or using yarn:
 
 ```bash
-yarn add @societyai/core
+yarn add societyai
 ```
 
 Or using pnpm:
 
 ```bash
-pnpm add @societyai/core
+pnpm add societyai
 ```
 
 ## Prerequisites
@@ -67,7 +68,7 @@ Let's create a simple two-agent system where one agent analyzes data and another
 First, create a model that connects to your AI service:
 
 ```typescript
-import { StandardModelBase } from '@societyai/core';
+import { StandardModelBase } from 'societyai';
 import OpenAI from 'openai';
 
 class OpenAIModel extends StandardModelBase {
@@ -97,7 +98,7 @@ const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
 Create roles that define how agents behave:
 
 ```typescript
-import { RoleBuilder } from '@societyai/core';
+import { RoleBuilder } from 'societyai';
 
 // Analyst role
 const analystRole = RoleBuilder.create()
@@ -129,7 +130,7 @@ const reviewerRole = RoleBuilder.create()
 Build agents by combining roles with models:
 
 ```typescript
-import { AgentBuilder } from '@societyai/core';
+import { AgentBuilder } from 'societyai';
 
 const agents = [
   AgentBuilder.create().withId('analyst-1').withRole(analystRole).withModel(model).build(),
@@ -143,7 +144,7 @@ const agents = [
 Create steps that define what agents do:
 
 ```typescript
-import { StepBuilder } from '@societyai/core';
+import { StepBuilder } from 'societyai';
 
 const steps = [
   // Step 1: Analysis
@@ -177,7 +178,7 @@ const steps = [
 Combine everything into a workflow:
 
 ```typescript
-import { WorkflowConfigBuilder } from '@societyai/core';
+import { WorkflowConfigBuilder } from 'societyai';
 
 const workflow = WorkflowConfigBuilder.create()
   .withId('analysis-workflow')
@@ -193,7 +194,7 @@ const workflow = WorkflowConfigBuilder.create()
 Run the workflow:
 
 ```typescript
-import { DefaultWorkflowExecutor } from '@societyai/core';
+import { DefaultWorkflowExecutor } from 'societyai';
 
 async function main() {
   const executor = new DefaultWorkflowExecutor();
@@ -226,7 +227,7 @@ import {
   StepBuilder,
   WorkflowConfigBuilder,
   DefaultWorkflowExecutor,
-} from '@societyai/core';
+} from 'societyai';
 import OpenAI from 'openai';
 
 // 1. Create AI Model
@@ -400,14 +401,141 @@ WorkflowConfigBuilder.create()
   .build();
 ```
 
+## Advanced Features
+
+SocietyAI provides powerful features for complex multi-agent systems:
+
+### Graph-Based Execution
+
+Execute agents in complex DAG or cyclic workflows:
+
+```typescript
+import { GraphBuilder, NodeType } from 'societyai';
+
+const graph = GraphBuilder.create()
+  .addNode('start', NodeType.START)
+  .addNode('analyze', NodeType.AGENT, { agentId: 'analyst' })
+  .addNode('condition', NodeType.CONDITION, {
+    condition: (ctx) => ctx.data.requiresReview,
+  })
+  .addNode('review', NodeType.AGENT, { agentId: 'reviewer' })
+  .addNode('end', NodeType.END)
+  .addEdge('start', 'analyze')
+  .addEdge('analyze', 'condition')
+  .addEdge('condition', 'review', true) // if true
+  .addEdge('condition', 'end', false) // if false
+  .addEdge('review', 'end')
+  .build();
+
+const result = await graph.execute('Analyze this data', agents);
+```
+
+**Learn more**: [Graph Execution Guide](./graph-execution.md)
+
+### Tool Calling
+
+Give agents access to external tools:
+
+```typescript
+import { ToolBuilder, ToolRegistry } from 'societyai';
+
+const weatherTool = ToolBuilder.create()
+  .withName('get_weather')
+  .withDescription('Get current weather for a location')
+  .withParameter('location', 'string', 'City name', true)
+  .withExecutor(async (params) => {
+    const { location } = params;
+    return `Weather in ${location}: Sunny, 72°F`;
+  })
+  .build();
+
+const registry = new ToolRegistry();
+registry.register(weatherTool);
+```
+
+**Learn more**: [Tool Calling Guide](./tool-calling.md)
+
+### Memory System
+
+Multi-level memory for context management:
+
+```typescript
+import { MemoryBuilder } from 'societyai';
+
+const memory = MemoryBuilder.create()
+  .withShortTermMemory({ maxSize: 10, decayRate: 0.1 })
+  .withLongTermMemory({ maxSize: 100, similarityThreshold: 0.7 })
+  .withEntityMemory({ maxEntities: 50 })
+  .build();
+
+// Add memories
+await memory.addShortTerm('User prefers detailed explanations', 0.9);
+await memory.addLongTerm('Project uses React and TypeScript');
+await memory.addEntity('ProjectX', 'uses microservices architecture');
+```
+
+**Learn more**: [Memory System Guide](./memory-system.md)
+
+### Structured Output
+
+Validate AI outputs with JSON schemas:
+
+```typescript
+import { StructuredOutputValidator } from 'societyai';
+
+const validator = new StructuredOutputValidator({
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    age: { type: 'number', minimum: 0 },
+  },
+  required: ['name', 'age'],
+});
+
+const result = await validator.validateAndRetry(
+  async (previousError) => {
+    const prompt = previousError
+      ? `Previous output was invalid: ${previousError}\nPlease fix it.`
+      : 'Generate user JSON';
+    return await model.process(prompt);
+  },
+  3 // Max retries
+);
+```
+
+**Learn more**: [Structured Output Guide](./structured-output.md)
+
+### Metrics & Observability
+
+Track performance, costs, and custom metrics:
+
+```typescript
+import { MetricsBuilder, CommonCostConfigs } from 'societyai';
+
+const tracker = MetricsBuilder.create()
+  .withTokenTracking()
+  .withCostTracking(CommonCostConfigs['gpt-4'])
+  .withCustomMetrics(['api_calls'])
+  .build();
+
+tracker.start('workflow-1');
+// ... execute workflow ...
+const snapshot = tracker.end('workflow-1');
+
+console.log(`Cost: $${snapshot.costs?.totalCost?.toFixed(4)}`);
+console.log(`Tokens: ${snapshot.tokens?.totalTokens}`);
+```
+
+**Learn more**: [Metrics & Observability Guide](./metrics-observability.md)
+
 ## Common Issues
 
-### Issue: "Cannot find module '@societyai/core'"
+### Issue: "Cannot find module 'societyai'"
 
 **Solution**: Make sure you've installed the package:
 
 ```bash
-npm install @societyai/core
+npm install societyai
 ```
 
 ### Issue: API Key Errors
@@ -427,7 +555,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 ## Getting Help
 
 - **Documentation**: [Full docs](../README.md)
-- **Examples**: See [Examples Index](./examples.md) (folder coming soon)
+- **Examples**: See [Examples Index](./examples.md)
 - **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/benoitpetit/societyai-package/discussions)
 

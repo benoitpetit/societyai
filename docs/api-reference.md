@@ -465,7 +465,7 @@ function getLogger(): Logger;
 **Example**:
 
 ```typescript
-import { setGlobalLogLevel, LogLevel } from '@societyai/core';
+import { setGlobalLogLevel, LogLevel } from 'societyai';
 setGlobalLogLevel(LogLevel.DEBUG);
 ```
 

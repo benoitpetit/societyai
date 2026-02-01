@@ -1,11 +1,24 @@
 {
-    "name": "@societyai/core",
+    "name": "societyai",
     "version": "0.0.1",
     "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems. Build sophisticated workflows where AI agents with different roles work together to solve complex problems.",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "module": "dist/index.js",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.js"
+        }
+    },
+    "engines": {
+        "node": ">=16.0.0",
+        "npm": ">=7.0.0"
+    },
     "scripts": {
         "build": "tsc",
+        "build:watch": "tsc --watch",
         "watch": "tsc --watch",
         "test": "jest",
         "test:watch": "jest --watch",
@@ -13,19 +26,41 @@
         "lint": "eslint src --ext .ts",
         "lint:fix": "eslint src --ext .ts --fix",
         "format": "prettier --write \"src/**/*.ts\"",
-        "prepublishOnly": "npm run build",
-        "clean": "rm -rf dist"
+        "format:check": "prettier --check \"src/**/*.ts\"",
+        "typecheck": "tsc --noEmit",
+        "validate": "npm run typecheck && npm run lint && npm run test",
+        "prepare": "npm run build",
+        "prepublishOnly": "npm run validate && npm run build",
+        "prepack": "npm run build",
+        "check": "node scripts/check-package.js",
+        "clean": "rm -rf dist",
+        "clean:all": "rm -rf dist node_modules package-lock.json"
     },
     "keywords": [
         "ai",
         "artificial-intelligence",
         "agents",
         "multi-agent",
+        "multi-agent-systems",
         "collaboration",
         "llm",
+        "large-language-models",
         "prompt",
+        "prompt-engineering",
         "society",
-        "typescript"
+        "workflow",
+        "orchestration",
+        "typescript",
+        "openai",
+        "anthropic",
+        "claude",
+        "gpt",
+        "chatgpt",
+        "model-agnostic",
+        "rag",
+        "memory",
+        "tools",
+        "function-calling"
     ],
     "author": "Benoit Petit <contact@societyai.dev> (https://github.com/benoitpetit)",
     "license": "MIT",
@@ -43,7 +78,10 @@
     "files": [
         "dist",
         "README.md",
-        "LICENSE"
+        "LICENSE",
+        "CHANGELOG.md",
+        "docs",
+        "examples"
     ],
     "repository": {
         "type": "git",

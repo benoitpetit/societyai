@@ -25,7 +25,7 @@ import {
   TimeoutError,
   InvalidConfigurationError,
   OperationCancelledError,
-} from '@societyai/core';
+} from 'societyai';
 
 try {
   const result = await executor.execute(workflow, input);
@@ -125,7 +125,7 @@ const workflow = WorkflowConfigBuilder.create()
 StandardModelBase includes automatic retry with exponential backoff:
 
 ```typescript
-import { StandardModelBase, defaultRetryOptions } from '@societyai/core';
+import { StandardModelBase, defaultRetryOptions } from 'societyai';
 
 const model = new StandardModelBase(
   {
@@ -164,7 +164,7 @@ const agent = AgentBuilder.create()
 ### Custom Retry Logic
 
 ```typescript
-import { withRetry } from '@societyai/core';
+import { withRetry } from 'societyai';
 
 const result = await withRetry(
   async () => {
@@ -248,7 +248,7 @@ try {
 ### Complete Observer Implementation
 
 ```typescript
-import { SocietyObserver } from '@societyai/core';
+import { SocietyObserver } from 'societyai';
 
 class MetricsObserver implements SocietyObserver {
   private startTime: number = 0;
@@ -298,7 +298,7 @@ const executor = new DefaultWorkflowExecutor(observer);
 ### Logging Configuration
 
 ```typescript
-import { setGlobalLogLevel, LogLevel } from '@societyai/core';
+import { setGlobalLogLevel, LogLevel } from 'societyai';
 
 // Development
 setGlobalLogLevel(LogLevel.DEBUG);
@@ -313,7 +313,7 @@ setGlobalLogLevel(LogLevel.SILENT);
 ### Custom Logger
 
 ```typescript
-import { Logger, LogLevel } from '@societyai/core';
+import { Logger, LogLevel } from 'societyai';
 
 class CustomLogger implements Logger {
   private level: LogLevel = LogLevel.INFO;
@@ -442,7 +442,7 @@ import {
   RoleBuilder,
   StandardModelBase,
   DefaultWorkflowExecutor,
-} from '@societyai/core';
+} from 'societyai';
 
 // Mock model for testing
 class MockModel extends StandardModelBase {

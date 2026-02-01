@@ -23,7 +23,7 @@ The new API offers:
 > If you used them in older code, migrate using the patterns below.
 
 ```typescript
-import { society, societyCollaborative } from '@societyai/core';
+import { society, societyCollaborative } from 'societyai';
 
 // Simple usage
 const result = await society('What are the benefits of AI?', 3, [model], false);
@@ -41,7 +41,7 @@ import {
   StepBuilder,
   WorkflowConfigBuilder,
   DefaultWorkflowExecutor,
-} from '@societyai/core';
+} from 'societyai';
 
 // Define roles
 const role = RoleBuilder.create()

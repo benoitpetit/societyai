@@ -567,7 +567,7 @@ enum LogLevel {
   DEBUG = 3, // All logs
 }
 
-import { setGlobalLogLevel, LogLevel } from '@societyai/core';
+import { setGlobalLogLevel, LogLevel } from 'societyai';
 setGlobalLogLevel(LogLevel.DEBUG);
 ```
 

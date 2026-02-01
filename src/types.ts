@@ -13,6 +13,14 @@ export interface AIModel {
   process(prompt: unknown, signal?: AbortSignal): Promise<string>;
 
   /**
+   * Process a prompt and return a streaming response
+   * @param prompt - The prompt to process
+   * @param signal - Optional cancellation signal
+   * @returns An async iterable of string chunks
+   */
+  stream?(prompt: unknown, signal?: AbortSignal): AsyncIterable<string>;
+
+  /**
    * Return the name of the AI model
    */
   name(): string;
@@ -22,6 +30,11 @@ export interface AIModel {
    * @param promptType - The prompt type to check
    */
   supportsPromptType(promptType: string): boolean;
+
+  /**
+   * Check if the model supports streaming
+   */
+  supportsStreaming?(): boolean;
 }
 
 // ============================================================================

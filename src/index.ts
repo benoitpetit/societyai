@@ -14,7 +14,7 @@
  *
  * @example
  * ```typescript
- * import { Society, createRole, Strategies, Pipelines } from '@societyai/core';
+ * import { Society, createRole, Strategies, Pipelines } from 'societyai';
  *
  * // Create a simple society
  * const result = await Society.create()
@@ -268,3 +268,100 @@ export type {
   // Summary
   EventSummary,
 } from './events';
+
+// ============================================================================
+// NEW: GRAPH-BASED EXECUTION ENGINE (Phase 1)
+// ============================================================================
+
+export {
+  // Core graph
+  SocietyGraph,
+  GraphBuilder,
+  // Types
+  NodeType,
+  GraphNode,
+  GraphEdge,
+  ConditionalEdge,
+  GraphContext,
+  GraphResult,
+} from './graph';
+
+// ============================================================================
+// NEW: TOOL CALLING SYSTEM (Phase 2)
+// ============================================================================
+
+export {
+  // Core tools
+  ToolRegistry,
+  ToolExecutor,
+  ToolBuilder,
+  // Built-in tools
+  BuiltInTools,
+  // Types
+  Tool,
+  ToolCall,
+  ToolResult,
+  ToolContext,
+  ToolParameterSchema,
+} from './tools';
+
+// ============================================================================
+// NEW: MEMORY SYSTEM (Phase 2)
+// ============================================================================
+
+export {
+  // Memory systems
+  MemorySystem,
+  MemoryBuilder,
+  ShortTermMemory,
+  LongTermMemory,
+  EntityMemory,
+  // Types
+  MemoryEntry,
+  MemoryQuery,
+  MemoryRetrievalResult,
+  VectorProvider,
+  Entity,
+} from './memory';
+
+// ============================================================================
+// NEW: STRUCTURED OUTPUT VALIDATION (Phase 3)
+// ============================================================================
+
+export {
+  // Validator
+  StructuredOutputValidator,
+  StructuredOutputBuilder,
+  // Helpers
+  validateJSON,
+  createSchema,
+  // Types
+  JSONSchema,
+  ValidationError,
+  ValidationResult,
+} from './validation';
+
+// ============================================================================
+// NEW: METRICS AND OBSERVABILITY (Phase 3)
+// ============================================================================
+
+export {
+  // Tracker
+  MetricsTracker,
+  MetricsBuilder,
+  // Utilities
+  TokenCounter,
+  PerformanceProfiler,
+  // Common configs
+  CommonCostConfigs,
+  // Types
+  TokenMetrics,
+  ExecutionMetrics,
+  CostMetrics,
+  MetricsSnapshot,
+  AggregatedMetrics,
+  CostConfig,
+  OTelTrace,
+} from './metrics';
+export * from './graph';
+export * from './patterns';
