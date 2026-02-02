@@ -273,7 +273,9 @@ class MetricsObserver implements SocietyObserver {
 
   onAgentError(agentId: number, modelName: string, error: Error): void {
     const duration = Date.now() - (this.agentTimes.get(agentId) || 0);
-    console.error(`[AGENT ${agentId}] Failed after ${duration}ms: ${error.message}`);
+    console.error(
+      `[AGENT ${agentId}] Failed after ${duration}ms: ${error.message}`
+    );
   }
 
   onPhaseStart(phase: string): void {
@@ -406,7 +408,8 @@ const step = StepBuilder.create()
 
 ### 4. Worker Pool Sizing
 
-The worker pool automatically sizes based on the number of agents, but you can optimize by:
+The worker pool automatically sizes based on the number of agents, but you can
+optimize by:
 
 - Grouping agents with similar workloads
 - Balancing parallel steps
@@ -455,7 +458,10 @@ describe('MyWorkflow', () => {
   it('should complete successfully', async () => {
     const model = new MockModel('test', 'Mock response');
 
-    const role = RoleBuilder.create().withId('test-role').withSystemPrompt('Test prompt').build();
+    const role = RoleBuilder.create()
+      .withId('test-role')
+      .withSystemPrompt('Test prompt')
+      .build();
 
     const agent = AgentBuilder.create()
       .withId('test-agent')
@@ -466,7 +472,12 @@ describe('MyWorkflow', () => {
     const workflow = WorkflowConfigBuilder.create()
       .withId('test-workflow')
       .addAgent(agent)
-      .addStep(StepBuilder.create().withId('test-step').withAgents(['test-agent']).build())
+      .addStep(
+        StepBuilder.create()
+          .withId('test-step')
+          .withAgents(['test-agent'])
+          .build()
+      )
       .build();
 
     const executor = new DefaultWorkflowExecutor();
@@ -477,9 +488,12 @@ describe('MyWorkflow', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    const errorModel = new StandardModelBase({ name: 'error-model' }, async () => {
-      throw new Error('Test error');
-    });
+    const errorModel = new StandardModelBase(
+      { name: 'error-model' },
+      async () => {
+        throw new Error('Test error');
+      }
+    );
 
     // Test error handling...
   });
@@ -610,7 +624,5 @@ try {
 ```
 
 ---
-
-**Next**: [Migration Guide](./migration.md) →
 
 **Previous**: [API Reference](./api-reference.md) ←

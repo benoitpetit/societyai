@@ -1,16 +1,19 @@
 # Examples Index
 
-This document provides an overview of all examples in the `examples/` directory and references to comprehensive feature guides.
+This document provides an overview of all examples in the `examples/` directory
+and references to comprehensive feature guides.
 
 ## Overview
 
-The examples demonstrate various SocietyAI features from basic usage to advanced patterns. Each example is fully functional and includes detailed comments.
+The examples demonstrate various SocietyAI features from basic usage to advanced
+patterns. Each example is fully functional and includes detailed comments.
 
 ## Available Examples
 
 ### Graph Workflow (`graph-workflow.ts`)
 
-**Description**: Demonstrates graph-based execution with DAG and cyclic workflows  
+**Description**: Demonstrates graph-based execution with DAG and cyclic
+workflows  
 **Features**:
 
 - START, END, AGENT, PARALLEL, CONDITION nodes
@@ -144,11 +147,16 @@ npm run examples
 
 For comprehensive documentation on each feature:
 
-- **[Graph Execution](./graph-execution.md)**: DAG/Cyclic workflows, node types, conditional branching
-- **[Tool Calling](./tool-calling.md)**: Tool definition, registry, executor, parameter validation
-- **[Memory System](./memory-system.md)**: Short-term, long-term, entity memory, RAG integration
-- **[Structured Output](./structured-output.md)**: JSON Schema validation, automatic retry
-- **[Metrics & Observability](./metrics-observability.md)**: Performance tracking, cost calculation
+- **[Graph Execution](./graph-execution.md)**: DAG/Cyclic workflows, node types,
+  conditional branching
+- **[Tool Calling](./tool-calling.md)**: Tool definition, registry, executor,
+  parameter validation
+- **[Memory System](./memory-system.md)**: Short-term, long-term, entity memory,
+  RAG integration
+- **[Structured Output](./structured-output.md)**: JSON Schema validation,
+  automatic retry
+- **[Metrics & Observability](./metrics-observability.md)**: Performance
+  tracking, cost calculation
 
 ## Example Categories
 
@@ -258,7 +266,9 @@ Make sure you have:
 
 ---
 
-**Questions?** Open an issue on [GitHub](https://github.com/benoitpetit/societyai-package/issues)**When to use**: Collaborative workflows, information sharing
+**Questions?** Open an issue on
+[GitHub](https://github.com/benoitpetit/societyai-package/issues)**When to
+use**: Collaborative workflows, information sharing
 
 ## 03-workflows/ - Workflow Patterns
 
@@ -523,7 +533,10 @@ import {
 ### Custom Role
 
 ```typescript
-const role = RoleBuilder.create().withId('analyst').withSystemPrompt('You analyze data.').build();
+const role = RoleBuilder.create()
+  .withId('analyst')
+  .withSystemPrompt('You analyze data.')
+  .build();
 
 // See examples/02-roles-and-agents/custom-roles.ts
 ```
@@ -570,7 +583,3 @@ We welcome example contributions! Please:
 - [Workflow Patterns](./workflows.md)
 - [API Reference](./api-reference.md)
 - [Advanced Features](./advanced.md)
-
----
-
-**Previous**: [Migration Guide](./migration.md) ←

@@ -35,38 +35,38 @@
 // CORE TYPES AND INTERFACES
 // ============================================================================
 
-export * from './types';
-export * from './config';
+export * from './core/types';
+export * from './core/config';
 
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
 
-export * from './errors';
+export * from './core/errors';
 
 // ============================================================================
 // LOGGING
 // ============================================================================
 
-export * from './logger';
+export * from './observability/logger';
 
 // ============================================================================
 // RETRY MECHANISM
 // ============================================================================
 
-export * from './retry';
+export * from './utils/retry';
 
 // ============================================================================
 // WORKER POOL (Parallel Execution)
 // ============================================================================
 
-export * from './worker-pool';
+export * from './utils/worker-pool';
 
 // ============================================================================
 // MODEL ADAPTERS
 // ============================================================================
 
-export * from './models';
+export * from './core/models';
 
 // ============================================================================
 // CORE SOCIETY (Main Logic)
@@ -75,12 +75,12 @@ export * from './models';
 // Export ciblé: on expose le système de workflow, sans ré-exporter les helpers legacy.
 export {
   MessageBus,
-  RoleBuilder,
-  AgentBuilder,
-  StepBuilder,
+  RoleBuilder as LegacyRoleBuilder,
+  AgentBuilder as LegacyAgentBuilder,
+  StepBuilder as LegacyStepBuilder,
   WorkflowConfigBuilder,
   DefaultWorkflowExecutor,
-} from './society';
+} from './agents/society';
 
 // ============================================================================
 // FLUENT BUILDER API
@@ -96,16 +96,20 @@ export {
   FluentAgentBuilder,
   FluentStepBuilder,
   FluentPipelineBuilder,
+  // Aliases for better DX
+  FluentRoleBuilder as RoleBuilder,
+  FluentAgentBuilder as AgentBuilder,
+  FluentStepBuilder as StepBuilder,
   // Quick helpers
   createRole,
   createAgent,
-} from './builder';
+} from './builders/builder';
 
 // Note: les primitives workflow/builder issues de society.ts sont ré-exportées explicitement.
 // Cela évite d’exposer l’API legacy via un `export *`.
 
 // Builder types
-export type { PipelineConfig, PipelinePattern } from './builder';
+export type { PipelineConfig, PipelinePattern } from './builders/builder';
 
 // ============================================================================
 // MIDDLEWARE SYSTEM
@@ -122,7 +126,7 @@ export {
   StepMiddlewares,
   // Metrics
   InMemoryMetricsCollector,
-} from './middleware';
+} from './core/middleware';
 
 // Middleware types
 export type {
@@ -135,7 +139,7 @@ export type {
   StepMiddleware,
   StepMiddlewareFn,
   StepMiddlewareContext,
-} from './middleware';
+} from './core/middleware';
 
 // ============================================================================
 // AGGREGATION STRATEGIES
@@ -150,14 +154,14 @@ export {
   createStrategy,
   chainStrategies,
   parallelStrategies,
-} from './strategies';
+} from './execution/strategies';
 
 // Strategy types
 export type {
   AggregationStrategy,
   AggregationResult,
   StrategyFactory,
-} from './strategies';
+} from './execution/strategies';
 
 // ============================================================================
 // PIPELINE PATTERNS
@@ -171,15 +175,10 @@ export {
   // Pipeline composition
   composePipelines,
   parallelPipelines,
-} from './pipeline';
+} from './execution/pipeline';
 
 // Pipeline types
-export type {
-  Pipeline,
-  PipelineContext,
-  PipelineResult,
-  PipelineStep,
-} from './pipeline';
+export type { Pipeline, PipelineContext, PipelineResult, PipelineStep } from './execution/pipeline';
 
 // ============================================================================
 // CONTEXT SYSTEM
@@ -206,14 +205,10 @@ export {
   // Agent context injection
   AgentContextInjector,
   ContextAwarePromptBuilder,
-} from './context';
+} from './core/context';
 
 // Context types
-export type {
-  ContextToken,
-  IContextProvider,
-  IMutableContextProvider,
-} from './context';
+export type { ContextToken, IContextProvider, IMutableContextProvider } from './core/context';
 
 // ============================================================================
 // EVENT SYSTEM
@@ -233,7 +228,7 @@ export {
   createEventEmitter,
   createProgressTracker,
   createEventLogger,
-} from './events';
+} from './observability/events';
 
 // Event types
 export type {
@@ -267,7 +262,7 @@ export type {
   EventTransformer,
   // Summary
   EventSummary,
-} from './events';
+} from './observability/events';
 
 // ============================================================================
 // NEW: GRAPH-BASED EXECUTION ENGINE (Phase 1)
@@ -284,7 +279,7 @@ export {
   ConditionalEdge,
   GraphContext,
   GraphResult,
-} from './graph';
+} from './execution/graph';
 
 // ============================================================================
 // NEW: TOOL CALLING SYSTEM (Phase 2)
@@ -303,7 +298,7 @@ export {
   ToolResult,
   ToolContext,
   ToolParameterSchema,
-} from './tools';
+} from './capabilities/tools';
 
 // ============================================================================
 // NEW: MEMORY SYSTEM (Phase 2)
@@ -322,7 +317,7 @@ export {
   MemoryRetrievalResult,
   VectorProvider,
   Entity,
-} from './memory';
+} from './capabilities/memory';
 
 // ============================================================================
 // NEW: STRUCTURED OUTPUT VALIDATION (Phase 3)
@@ -339,7 +334,7 @@ export {
   JSONSchema,
   ValidationError,
   ValidationResult,
-} from './validation';
+} from './capabilities/validation';
 
 // ============================================================================
 // NEW: METRICS AND OBSERVABILITY (Phase 3)
@@ -362,6 +357,6 @@ export {
   AggregatedMetrics,
   CostConfig,
   OTelTrace,
-} from './metrics';
-export * from './graph';
-export * from './patterns';
+} from './observability/metrics';
+export * from './execution/graph';
+export * from './execution/patterns';

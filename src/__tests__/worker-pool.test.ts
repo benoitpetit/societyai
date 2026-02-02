@@ -1,4 +1,4 @@
-import { WorkerPool } from '../worker-pool';
+import { WorkerPool } from '../utils/worker-pool';
 
 describe('WorkerPool', () => {
   // Mock console pour éviter les logs dans la sortie des tests
@@ -38,12 +38,7 @@ describe('WorkerPool', () => {
       concurrent--;
     };
 
-    await Promise.all([
-      pool.submit(task),
-      pool.submit(task),
-      pool.submit(task),
-      pool.submit(task),
-    ]);
+    await Promise.all([pool.submit(task), pool.submit(task), pool.submit(task), pool.submit(task)]);
 
     expect(maxConcurrent).toBeLessThanOrEqual(2);
   });

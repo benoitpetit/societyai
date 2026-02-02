@@ -7,3 +7,4 @@ coverage
 .env.local
 .vscode
 .idea
+Rapport_Audit_*

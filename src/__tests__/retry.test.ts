@@ -1,4 +1,4 @@
-import { withRetry, sleep } from '../retry';
+import { withRetry, sleep } from '../utils/retry';
 
 describe('Retry Mechanism', () => {
   // Mock console pour éviter les logs dans la sortie des tests
@@ -35,9 +35,7 @@ describe('Retry Mechanism', () => {
     it('should throw after max retries', async () => {
       const fn = jest.fn().mockRejectedValue(new Error('persistent failure'));
 
-      await expect(
-        withRetry(fn, { maxRetries: 2, initialBackoff: 10 })
-      ).rejects.toThrow();
+      await expect(withRetry(fn, { maxRetries: 2, initialBackoff: 10 })).rejects.toThrow();
 
       expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
     });

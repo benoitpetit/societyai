@@ -12,7 +12,10 @@ import {
  * Mock AI Model for testing
  */
 class MockModel extends StandardModelBase {
-  constructor(name = 'MockModel', private response = 'Mock response') {
+  constructor(
+    name = 'MockModel',
+    private response = 'Mock response'
+  ) {
     super({ name, timeout: 5000 }, async () => this.response);
   }
 
@@ -43,30 +46,20 @@ describe('Workflow System', () => {
       expect(role.promptTemplate).toBe('{systemPrompt}\n\n{input}');
     });
 
-    it('should throw error if id is missing', () => {
-      expect(() => {
-        RoleBuilder.create()
-          .withName('Test')
-          .withSystemPrompt('Test')
-          .build();
-      }).toThrow('Role id is required');
+    it('should auto-generate id if missing', () => {
+      const role = RoleBuilder.create().withName('Test').withSystemPrompt('Test').build();
+      expect(role.id).toBeDefined();
+      expect(role.id).toContain('role-');
     });
 
-    it('should throw error if name is missing', () => {
-      expect(() => {
-        RoleBuilder.create()
-          .withId('test')
-          .withSystemPrompt('Test')
-          .build();
-      }).toThrow('Role name is required');
+    it('should default name to id if missing', () => {
+      const role = RoleBuilder.create().withId('test-id').withSystemPrompt('Test').build();
+      expect(role.name).toBe('test-id');
     });
 
     it('should throw error if systemPrompt is missing', () => {
       expect(() => {
-        RoleBuilder.create()
-          .withId('test')
-          .withName('Test')
-          .build();
+        RoleBuilder.create().withId('test').withName('Test').build();
       }).toThrow('Role systemPrompt is required');
     });
   });
@@ -102,28 +95,19 @@ describe('Workflow System', () => {
 
     it('should throw error if id is missing', () => {
       expect(() => {
-        AgentBuilder.create()
-          .withRole(testRole)
-          .withModel(testModel)
-          .build();
+        AgentBuilder.create().withRole(testRole).withModel(testModel).build();
       }).toThrow('Agent id is required');
     });
 
     it('should throw error if role is missing', () => {
       expect(() => {
-        AgentBuilder.create()
-          .withId('test')
-          .withModel(testModel)
-          .build();
+        AgentBuilder.create().withId('test').withModel(testModel).build();
       }).toThrow('Agent role is required');
     });
 
     it('should throw error if model is missing', () => {
       expect(() => {
-        AgentBuilder.create()
-          .withId('test')
-          .withRole(testRole)
-          .build();
+        AgentBuilder.create().withId('test').withRole(testRole).build();
       }).toThrow('Agent model is required');
     });
   });
@@ -161,10 +145,7 @@ describe('Workflow System', () => {
 
     it('should throw error if agents are missing', () => {
       expect(() => {
-        StepBuilder.create()
-          .withId('step-1')
-          .withName('Test Step')
-          .build();
+        StepBuilder.create().withId('step-1').withName('Test Step').build();
       }).toThrow('Step must have at least one agent');
     });
   });
@@ -352,16 +333,8 @@ describe('Workflow System', () => {
       const model2 = new MockModel('Model2', 'Result 2');
 
       const agents = [
-        AgentBuilder.create()
-          .withId('agent-1')
-          .withRole(testRole)
-          .withModel(model1)
-          .build(),
-        AgentBuilder.create()
-          .withId('agent-2')
-          .withRole(testRole)
-          .withModel(model2)
-          .build(),
+        AgentBuilder.create().withId('agent-1').withRole(testRole).withModel(model1).build(),
+        AgentBuilder.create().withId('agent-2').withRole(testRole).withModel(model2).build(),
       ];
 
       const step = StepBuilder.create()
@@ -390,16 +363,8 @@ describe('Workflow System', () => {
       const model = new MockModel('Model', 'Step result');
 
       const agents = [
-        AgentBuilder.create()
-          .withId('agent-1')
-          .withRole(testRole)
-          .withModel(model)
-          .build(),
-        AgentBuilder.create()
-          .withId('agent-2')
-          .withRole(testRole)
-          .withModel(model)
-          .build(),
+        AgentBuilder.create().withId('agent-1').withRole(testRole).withModel(model).build(),
+        AgentBuilder.create().withId('agent-2').withRole(testRole).withModel(model).build(),
       ];
 
       const steps = [
