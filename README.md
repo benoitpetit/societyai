@@ -54,36 +54,36 @@ npm install societyai
 ### Basic Example
 
 ```typescript
-import {
-  FluentAgentBuilder,
-  FluentRoleBuilder,
-  FluentWorkflowBuilder,
-} from 'societyai';
+import { Society } from 'societyai';
 
-// Create an agent with a custom role
-const agent = new FluentAgentBuilder()
-  .withId('analyst')
-  .withRole((role) =>
-    role
-      .withId('data-analyst')
-      .withSystemPrompt('You analyze data and provide insights')
-  )
-  .withModel(yourAIModel)
-  .build();
-
-// Build a workflow with dependencies
-const workflow = new FluentWorkflowBuilder()
+// Create a society with agents and workflow
+const result = await Society.create()
   .withId('data-pipeline')
+  .addAgent((agent) =>
+    agent
+      .withId('analyst')
+      .withRole((role) =>
+        role
+          .withId('data-analyst')
+          .withSystemPrompt('You analyze data and provide insights')
+      )
+      .withModel(yourAIModel)
+  )
   .addStep((step) =>
-    step.withId('extract').withAgents(['extractor']).sequential()
+    step
+      .withId('extract')
+      .withAgents(['analyst'])
+      .withInstructions('Extract key information')
+      .sequential()
   )
   .addStep((step) =>
     step
       .withId('transform')
       .dependsOn('extract') // DAG dependency
-      .withAgents(['transformer'])
+      .withAgents(['analyst'])
+      .withInstructions('Transform data format')
   )
-  .build();
+  .execute('Process this input data');
 ```
 
 ## 📚 Documentation
@@ -177,4 +177,4 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 
 ---
 
-**Made with ❤️ by the SocietyAI community**
+**Made with ❤️ by devbyben**

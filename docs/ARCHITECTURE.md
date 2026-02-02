@@ -55,10 +55,10 @@ Fluent API for constructing agents and workflows:
 
 - **RoleBuilder**: Defines agent roles with system prompts and capabilities
 - **AgentBuilder**: Constructs agents with roles and AI models
-- **WorkflowBuilder**: Creates workflows with step dependencies
+- **Society**: Main builder for creating complete societies/workflows with step dependencies
 
 ```typescript
-const workflow = new FluentWorkflowBuilder()
+const society = Society.create()
   .withId('data-pipeline')
   .addStep((step) =>
     step
