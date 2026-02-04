@@ -36,8 +36,8 @@ export class FluentTaskBuilder {
   private _resultTransformer?: (results: TaskResult[] | TaskResult) => unknown;
   private _condition?: (previousResults: Map<string, TaskResult[]>) => boolean;
   private _outputSchema?: JSONSchema;
-  private _nextTasks?: string[]; // Renamed from _nextSteps
-  private _nextTaskResolver?: (results: TaskResult[]) => string | null; // Renamed from _nextStepResolver
+  private _nextTasks?: string[];
+  private _nextTaskResolver?: (results: TaskResult[]) => string | null;
   private _timeout?: number;
   private _dependencies: string[] = [];
 
@@ -148,10 +148,10 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Define dependencies (steps that must be completed before this one)
+   * Define dependencies (tasks that must be completed before this one)
    */
-  dependsOn(stepIds: string | string[]): this {
-    const ids = Array.isArray(stepIds) ? stepIds : [stepIds];
+  dependsOn(taskIds: string | string[]): this {
+    const ids = Array.isArray(taskIds) ? taskIds : [taskIds];
     this._dependencies.push(...ids);
     return this;
   }
@@ -221,27 +221,27 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Define static next steps
+   * Define static next tasks
    */
-  thenGoto(stepIds: string[]): this {
-    this._nextTasks = stepIds;
+  thenGoto(taskIds: string[]): this {
+    this._nextTasks = taskIds;
     return this;
   }
 
   /**
-   * Define static next steps (alias for thenGoto)
+   * Define static next tasks (alias for thenGoto)
    */
-  withNextSteps(stepIds: string[]): this {
-    this._nextTasks = stepIds;
+  withNextSteps(taskIds: string[]): this {
+    this._nextTasks = taskIds;
     return this;
   }
 
   /**
-   * Create a conditional branch: execute different next steps based on a condition
+   * Create a conditional branch: execute different next tasks based on a condition
    *
    * @param condition Function that evaluates previous results
-   * @param trueSteps Steps to execute if condition is true
-   * @param falseSteps Steps to execute if condition is false
+   * @param trueTasks Tasks to execute if condition is true
+   * @param falseTasks Tasks to execute if condition is false
    *
    * @example
    * ```typescript
@@ -259,15 +259,15 @@ export class FluentTaskBuilder {
    */
   withBranch(
     condition: (previousResults: Map<string, TaskResult[]>) => boolean,
-    trueSteps: string[],
-    falseSteps: string[]
+    trueTasks: string[],
+    falseTasks: string[]
   ): this {
     this._condition = condition;
     // NOTE: We keep the existing executionType (usually 'sequential')
-    // The step itself executes normally, and nextStepResolver handles the routing
+    // The task itself executes normally, and nextTaskResolver handles the routing
 
     // Store both paths - we'll need to handle this in the executor
-    // For now, we use nextTaskResolver to dynamically choose
+    // Use nextTaskResolver to dynamically choose the next task
     this._nextTaskResolver = (results: TaskResult[]) => {
       // Convert results array to Map format expected by condition
       const resultsMap = new Map<string, TaskResult[]>();
@@ -280,18 +280,18 @@ export class FluentTaskBuilder {
       }
 
       const conditionMet = condition(resultsMap);
-      const targetSteps = conditionMet ? trueSteps : falseSteps;
-      return targetSteps[0] || null;
+      const targetTasks = conditionMet ? trueTasks : falseTasks;
+      return targetTasks[0] || null;
     };
 
     return this;
   }
 
   /**
-   * Create a conditional next step (simpler than withBranch)
-   * @param condition Function that evaluates to determine next step
-   * @param nextStepId Step ID to go to if condition is true
-   * @param fallbackStepId Optional step ID if condition is false
+   * Create a conditional next task (simpler than withBranch)
+   * @param condition Function that evaluates to determine next task
+   * @param nextTaskId Task ID to go to if condition is true
+   * @param fallbackTaskId Optional task ID if condition is false
    *
    * @example
    * ```typescript
@@ -309,14 +309,14 @@ export class FluentTaskBuilder {
    */
   withConditionalNext(
     condition: (previousResults: Map<string, TaskResult[]>) => boolean,
-    nextStepId: string,
-    fallbackStepId?: string
+    nextTaskId: string,
+    fallbackTaskId?: string
   ): this {
-    return this.withBranch(condition, [nextStepId], fallbackStepId ? [fallbackStepId] : []);
+    return this.withBranch(condition, [nextTaskId], fallbackTaskId ? [fallbackTaskId] : []);
   }
 
   /**
-   * Dynamically determine next step based on results
+   * Dynamically determine next task based on results
    */
   thenResolve(resolver: (results: TaskResult[]) => string | null): this {
     this._nextTaskResolver = resolver;
@@ -324,7 +324,7 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Set a timeout for this step
+   * Set a timeout for this task
    */
   withTimeout(ms: number): this {
     this._timeout = ms;
@@ -332,11 +332,11 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Build the step configuration
+   * Build the task configuration
    */
   build(): Task & { timeout?: number; dependencies?: string[] } {
-    if (!this._id) throw new InvalidConfigurationError('Step id is required');
-    if (!this._name) throw new InvalidConfigurationError('Step name is required');
+    if (!this._id) throw new InvalidConfigurationError('Task id is required');
+    if (!this._name) throw new InvalidConfigurationError('Task name is required');
     if (this._agentIds.length === 0)
       throw new InvalidConfigurationError('Step must have at least one agent');
 
@@ -353,8 +353,8 @@ export class FluentTaskBuilder {
       resultTransformer: this._resultTransformer,
       condition: this._condition,
       outputSchema: this._outputSchema,
-      nextTasks: this._nextTasks, // New property name
-      nextTaskResolver: this._nextTaskResolver, // New property name
+      nextTasks: this._nextTasks,
+      nextTaskResolver: this._nextTaskResolver,
       timeout: this._timeout,
       dependencies: this._dependencies.length > 0 ? this._dependencies : undefined,
     };

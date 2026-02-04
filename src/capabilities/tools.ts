@@ -40,22 +40,13 @@ import { ProcessingFailedError } from '../core/errors';
 // TOOL TYPES
 // ============================================================================
 
+import { JSONSchema } from './validation';
+
 /**
- * JSON Schema for tool parameters
+ * JSON Schema for tool parameters.
+ * Alias for JSONSchema for better semantic clarity in tool context.
  */
-export interface ToolParameterSchema {
-  type: 'object' | 'string' | 'number' | 'boolean' | 'array';
-  properties?: Record<string, ToolParameterSchema>;
-  items?: ToolParameterSchema;
-  required?: string[];
-  description?: string;
-  enum?: unknown[];
-  default?: unknown;
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-}
+export type ToolParameterSchema = JSONSchema;
 
 /**
  * Tool definition

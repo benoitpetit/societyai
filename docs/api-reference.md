@@ -22,7 +22,6 @@ This is the central index for the SocietyAI API documentation. The reference is 
 - **[Patterns](./core/patterns.md)**
   - `SocietyPatterns` (Sequential, ScatterGather, etc.)
   - `AggregationStrategies` (concat, first, last, best, reduce, structured)
-    - Note: `consensus()` and `voting()` are planned for future release
 
 ## 🤖 Agents & Builders
 

@@ -136,8 +136,8 @@ export class SocietyExecutor {
               // Exception: if next step has a resolver, we can go there implicitly
               throw new InvalidWorkflowRoutingError(
                 `Task '${task.id}' (position ${i}) has no explicit nextTasks defined. ` +
-                  `In strict routing mode, all intermediate steps must explicitly define their transitions. ` +
-                  `Use .withNextTasks([...]) or disable strict mode with .withStrictRouting(false).`
+                  `In strict routing mode, all intermediate tasks must explicitly define their transitions. ` +
+                  `Use .withNextSteps([...]) or .thenGoto([...]) to define routing, or disable strict mode with .withStrictRouting(false).`
               );
             }
 

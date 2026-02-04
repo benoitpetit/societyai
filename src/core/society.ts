@@ -36,7 +36,7 @@ export class Society {
   private _name: string = '';
   private _description?: string;
   private _agents: Agent[] = [];
-  private _steps: Task[] = [];
+  private _tasks: Task[] = [];
   private _entryStepId?: string;
   private _globalContext: Record<string, unknown> = {};
   private _observer?: SocietyObserver;
@@ -120,7 +120,7 @@ export class Society {
    */
   addTask(builderFn: (builder: FluentTaskBuilder) => FluentTaskBuilder): this {
     const builder = new FluentTaskBuilder();
-    this._steps.push(builderFn(builder).build());
+    this._tasks.push(builderFn(builder).build());
     return this;
   }
 
@@ -128,7 +128,7 @@ export class Society {
    * Add a task directly
    */
   useTask(task: Task): this {
-    this._steps.push(task);
+    this._tasks.push(task);
     return this;
   }
 
@@ -136,7 +136,7 @@ export class Society {
    * Add multiple tasks at once
    */
   useTasks(tasks: Task[]): this {
-    this._steps.push(...tasks);
+    this._tasks.push(...tasks);
     return this;
   }
 
@@ -146,8 +146,8 @@ export class Society {
   usePipeline(builderFn: (builder: FluentPipelineBuilder) => FluentPipelineBuilder): this {
     const builder = new FluentPipelineBuilder();
     const pipeline = builderFn(builder);
-    // Pipeline config is stored implicitly through steps
-    this._steps = pipeline.toSteps();
+    // Pipeline config is stored implicitly through tasks
+    this._tasks = pipeline.toSteps();
     return this;
   }
 
@@ -238,7 +238,7 @@ export class Society {
    */
   scatterGather(aggregator?: (results: TaskResult[]) => string): this {
     const agentIds = this._agents.map((a) => a.id);
-    this._steps = [
+    this._tasks = [
       {
         id: 'scatter-gather',
         name: 'Parallel Processing',
@@ -258,7 +258,7 @@ export class Society {
    */
   chain(): this {
     const agentIds = this._agents.map((a) => a.id);
-    this._steps = agentIds.map((agentId, index) => ({
+    this._tasks = agentIds.map((agentId, index) => ({
       id: `step-${index + 1}`,
       name: `Step ${index + 1}`,
       agentIds: [agentId],
@@ -273,7 +273,7 @@ export class Society {
    */
   collaborate(maxIterations: number = 3): this {
     const agentIds = this._agents.map((a) => a.id);
-    this._steps = [
+    this._tasks = [
       {
         id: 'collaborate',
         name: 'Collaborative Processing',
@@ -303,8 +303,8 @@ export class Society {
       name: this._name,
       description: this._description,
       agents: this._agents,
-      tasks: this._steps, // New property name
-      entryTaskId: this._entryStepId ?? this._steps[0].id,
+      tasks: this._tasks,
+      entryTaskId: this._entryStepId ?? this._tasks[0]?.id,
       globalContext: this._globalContext,
       strictRouting: this._strictRouting,
       onBeforeTask: this._onBeforeTask,
@@ -328,16 +328,16 @@ export class Society {
       );
     }
 
-    if (this._steps.length === 0) {
+    if (this._tasks.length === 0) {
       errors.push(
         `Society '${this._id || 'unnamed'}' must have at least one task. ` +
           `Use .addTask() or .useTask() to add workflow tasks.`
       );
     }
 
-    // 2. Validate agent references in steps
+    // 2. Validate agent references in tasks
     const agentIds = new Set(this._agents.map((a) => a.id));
-    for (const step of this._steps) {
+    for (const step of this._tasks) {
       for (const agentId of step.agentIds) {
         if (!agentIds.has(agentId)) {
           errors.push(
@@ -350,15 +350,15 @@ export class Society {
     }
 
     // 3. Validate task routing (nextTasks references)
-    const stepIds = new Set(this._steps.map((s) => s.id));
-    for (const step of this._steps) {
+    const stepIds = new Set(this._tasks.map((s) => s.id));
+    for (const step of this._tasks) {
       if (step.nextTasks) {
         for (const nextId of step.nextTasks) {
           if (!stepIds.has(nextId)) {
             errors.push(
               `Task '${step.id}' routes to unknown task '${nextId}'. ` +
                 `Available tasks: ${Array.from(stepIds).join(', ')}. ` +
-                `Check your .withNextTasks() or .thenGoto() configuration.`
+                `Check your .withNextSteps() or .thenGoto() configuration.`
             );
           }
         }
@@ -382,7 +382,7 @@ export class Society {
       );
     }
 
-    const duplicateSteps = this.findDuplicates(this._steps.map((s) => s.id));
+    const duplicateSteps = this.findDuplicates(this._tasks.map((s) => s.id));
     if (duplicateSteps.length > 0) {
       errors.push(
         `Duplicate task IDs found: ${duplicateSteps.join(', ')}. ` +

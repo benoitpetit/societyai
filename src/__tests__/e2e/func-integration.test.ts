@@ -56,7 +56,7 @@ describe('SocietyAI Functional Integration', () => {
       .withParameters({
         type: 'object',
         properties: {
-          city: { type: 'string', properties: {} },
+          city: { type: 'string' },
         },
         required: ['city'],
       })
@@ -87,7 +87,7 @@ describe('SocietyAI Functional Integration', () => {
     const schema: JSONSchema = {
       type: 'object',
       properties: {
-        score: { type: 'number', properties: {} }, // properties required by stricter TS types
+        score: { type: 'number' },
       },
       required: ['score'],
     };

@@ -72,11 +72,73 @@ Builder for creating workflow tasks.
 
 #### Task Dependencies and Routing
 - **`dependsOn(...taskIds: string[])`**: Specifies which tasks must complete before this task starts.
-- **`thenGoto(...stepIds: string[])`**: Specifies the next tasks to execute after this one.
-- **`withNextSteps(stepIds: string[])`**: Alias for `thenGoto`.
-- **`withBranch(condition, trueSteps, falseSteps)`**: Creates conditional routing based on previous results.
-- **`withConditionalNext(condition, nextStepId, fallbackStepId?)`**: Simpler conditional routing to one step.
-- **`thenResolve(resolver)`**: Dynamically determines next step based on results.
+- **`thenGoto(...taskIds: string[])`**: Specifies the next tasks to execute after this one.
+- **`withNextSteps(taskIds: string[])`**: Alias for `thenGoto` for backward compatibility.
+- **`withBranch(condition, trueTasks, falseTasks)`**: Creates conditional routing based on previous results.
+- **`withConditionalNext(condition, nextTaskId, fallbackTaskId?)`**: Simpler conditional routing to one task.
+- **`thenResolve(resolver)`**: Dynamically determines next task based on results.
+
+#### Conditional Routing Examples
+
+**Simple Conditional (withConditionalNext)**
+```typescript
+Society.create()
+  .addTask(t => t
+    .withId('validate')
+    .withAgents(['validator'])
+    .sequential()
+    .withConditionalNext(
+      (results) => {
+        const output = results.get('analyze')?.[0].output || '';
+        return output.includes('APPROVED');
+      },
+      'deploy',      // Go here if condition is true
+      'fix-issues'   // Go here if condition is false
+    )
+  )
+```
+
+**Multi-Path Branching (withBranch)**
+```typescript
+Society.create()
+  .addTask(t => t
+    .withId('check-quality')
+    .withAgents(['quality-checker'])
+    .sequential()
+    .withBranch(
+      (results) => {
+        const score = parseInt(results.get('analyze')?.[0].output || '0');
+        return score >= 80;  // Quality threshold
+      },
+      ['approve', 'publish'],     // Multiple tasks if true
+      ['reject', 'notify-team']   // Multiple tasks if false
+    )
+  )
+```
+
+**Dynamic Routing (thenResolve)**
+```typescript
+Society.create()
+  .addTask(t => t
+    .withId('classify')
+    .withAgents(['classifier'])
+    .sequential()
+    .thenResolve((results) => {
+      const category = results[results.length - 1]?.output;
+      
+      // Route to different experts based on category
+      if (category?.includes('technical')) return 'tech-expert';
+      if (category?.includes('business')) return 'biz-expert';
+      if (category?.includes('legal')) return 'legal-expert';
+      
+      return 'general-expert';  // Default route
+    })
+  )
+  .addTask(t => t.withId('tech-expert')...)
+  .addTask(t => t.withId('biz-expert')...)
+  .addTask(t => t.withId('legal-expert')...)
+  .addTask(t => t.withId('general-expert')...)
+```
 
 #### Result Transformation
 - **`withResultTransformer(transformer)`**: Transforms task results before passing to next tasks.

@@ -96,6 +96,90 @@ GraphBuilder.create()
 - ⚠️ For advanced scenarios (cycles, transforms, aggregations), use `GraphBuilder` directly
 - ⚠️ You cannot mix high-level and low-level APIs in the same workflow (choose one approach)
 
+### Advanced Routing Conversion
+
+The `SocietyExecutor` handles complex routing scenarios when converting workflows to graphs:
+
+#### Static Routing (nextTasks)
+When you use `.thenGoto()` or `.withNextSteps()`, explicit edges are created:
+
+```typescript
+// Workflow with explicit routing
+Society.create()
+  .addTask(t => t.withId('analyze').thenGoto(['review', 'validate']))
+  .addTask(t => t.withId('review')...)
+  .addTask(t => t.withId('validate')...)
+
+// Converted to graph edges:
+// analyze → review
+// analyze → validate
+```
+
+#### Dynamic Routing (nextTaskResolver)
+When you use `.thenResolve()`, the executor creates an intermediate CONDITION node:
+
+```typescript
+// Workflow with dynamic routing
+Society.create()
+  .addTask(t => t
+    .withId('classify')
+    .thenResolve((results) => {
+      if (results[0].output.includes('urgent')) return 'priority';
+      return 'normal';
+    })
+  )
+
+// Converted to graph:
+// classify → classify_resolver (CONDITION) → [priority | normal]
+//
+// The resolver evaluates nextTaskResolver and routes accordingly
+```
+
+#### Conditional Branching
+When you use `.withBranch()` or `.withConditionalNext()`, conditional edges are created:
+
+```typescript
+// Workflow with branching
+Society.create()
+  .addTask(t => t
+    .withId('check')
+    .withBranch(
+      (results) => results.get('score')?.[0].output > '50',
+      ['success'],
+      ['retry']
+    )
+  )
+
+// Converted to graph:
+// check → check_resolver (CONDITION) → [success | retry]
+//
+// The condition is evaluated at runtime using previous task results
+```
+
+#### Implicit Sequential Routing
+In permissive mode (default), tasks without explicit routing are automatically chained:
+
+```typescript
+// Workflow without explicit routing
+Society.create()
+  .withStrictRouting(false)  // Default
+  .addTask(t => t.withId('step1'))
+  .addTask(t => t.withId('step2'))
+  .addTask(t => t.withId('step3'))
+
+// Converted to graph:
+// step1 → step2 → step3 → end
+```
+
+**Strict Routing Mode**: When enabled, all intermediate tasks MUST define explicit routing:
+
+```typescript
+Society.create()
+  .withStrictRouting(true)
+  .addTask(t => t.withId('step1').thenGoto(['step2']))  // ✅ Required
+  .addTask(t => t.withId('step2'))  // ❌ Error: no explicit routing
+```
+
 ### Supported Node Types
 
 The execution engine supports 8 node types for building complex workflows:

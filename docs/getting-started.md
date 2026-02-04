@@ -272,10 +272,10 @@ Society.create()
   .addTask(s => s.withId('step1')...)
   .addTask(s => s.withId('step2')...)
 
-// Option 2: Explicit
+// Option 2: Explicit routing
 .addTask(s => s
   .withId('step1')
-  .withNextTasks(['step2'])
+  .withNextSteps(['step2'])  // or .thenGoto(['step2'])
 )
 ```
 
