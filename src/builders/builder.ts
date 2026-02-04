@@ -10,16 +10,17 @@ export { FluentRoleBuilder } from './role-builder';
 // Agent Builder
 export { FluentAgentBuilder } from './agent-builder';
 
-// Workflow Builders (Step, Pipeline, Society)
+// Workflow Builders (Task, Pipeline)
 export {
-  FluentStepBuilder,
+  FluentTaskBuilder,
   FluentPipelineBuilder,
-  Society,
-  SocietyPatterns,
   AggregationStrategies,
   createRole,
   createAgent,
-} from './workflow-builder';
+} from './society-builder';
+
+// Core Society
+export { Society, SocietyPatterns } from '../core/society';
 
 // Types
-export type { PipelineConfig, PipelinePattern } from './workflow-builder';
+export type { PipelineConfig, PipelinePattern } from './society-builder';

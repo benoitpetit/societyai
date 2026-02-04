@@ -4,7 +4,7 @@
  * Provides fluent builder API for creating agent roles
  */
 
-import { AgentRole } from '../core/types';
+import { Role } from '../core/types';
 import { InvalidConfigurationError } from '../core/errors';
 
 // ============================================================================
@@ -110,7 +110,7 @@ export class FluentRoleBuilder {
   /**
    * Build the role configuration
    */
-  build(): AgentRole {
+  build(): Role {
     // Auto-generate ID if not set
     if (!this._id) {
       this._id = `role-${Date.now()}-${Math.random().toString(36).substring(7)}`;

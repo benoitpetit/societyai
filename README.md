@@ -5,43 +5,50 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
-**SocietyAI** is a powerful TypeScript library for creating collaborative
-multi-agent AI systems with advanced DAG-based orchestration. Build
-sophisticated workflows where AI agents with different roles and capabilities
-work together through dependency graphs, conditional routing, and pluggable
-execution strategies.
+**SocietyAI** is a powerful TypeScript/Node.js library for orchestrating collaborative multi-agent systems. It allows you to build sophisticated workflows where AI agents, equipped with specific roles and capabilities, collaborate through a graph-based execution engine (DAG & Cycles).
 
-The library is **fully configurable**, **model-agnostic**, and
-**domain-independent** - use it for software development, research, content
-creation, business analysis, or any domain where multiple perspectives add
-value.
+The library is **fully model-agnostic**, **domain-independent**, and designed to be modular.
 
-## 🎯 Design Principles
+> 🎉 **v0.0.3 Released!** Major improvements: unified `TaskResult.output`, comprehensive validation, and better error messages.
 
-- **Model-Agnostic**: Works with any AI model (OpenAI, Anthropic, Google, local
-  models, or custom APIs)
-- **Domain-Independent**: No hardcoded prompts or business logic - fully
-  configurable for any use case
-- **Zero Runtime Dependencies**: Pure TypeScript with no external runtime
-  dependencies
-- **Fluent Builder API**: Intuitive chainable interfaces for configuring agents,
-  roles, and workflows
-- **DAG Orchestration**: Directed Acyclic Graph scheduling with topological sort
-  for optimal execution
+## 🎯 Why SocietyAI?
+
+- **Model-Agnostic**: Works with any LLM (OpenAI, Anthropic, Mistral, Local, etc.). You implement the interface, you control the call.
+- **Graph Orchestration**: Native support for DAGs (Directed Acyclic Graphs) as well as feedback loops and recursive structures.
+- **Zero Runtime Dependencies**: The core is pure TypeScript.
+- **Fluent API**: An intuitive builder (`Society.create()`) to quickly define agents and workflows.
+- **Type-Safe**: Fully typed for a robust development experience.
+- **Two API Levels**: Choose between high-level (quick) or low-level (powerful) depending on your needs.
+
+> 📚 **New to SocietyAI?** Check out the [Documentation](docs/README.md) for architectural insights and best practices.
 
 ## ✨ Key Features
 
-### Core Capabilities
+- **🤖 Multi-Agent System**: Define roles, personalities, and contexts for each agent.
+- **🔄 Flexible Workflows**: Sequential, Parallel, Collaborative (debate between agents), and Conditional.
+- **🧠 Memory & Context**: Native management of memory and shared context between steps.
+- **⚡ Execution Strategies**: The engine transforms your configuration into an optimized execution graph.
+- **🛠️ Extensible**: Middleware system, Custom Tools (Function Calling), and Validation.
 
-- **🤖 Multi-Agent System**: Define custom roles, behaviors, and capabilities
-- **🔄 DAG Workflows**: Dependency-based execution with automatic scheduling
-- **🎯 Conditional Routing**: Dynamic workflow branching based on runtime
-  results
-- **⚡ Execution Strategies**: Pluggable sequential and parallel execution
-  patterns
-- **🧠 Memory System**: Multi-level context management
-- **🛠️ Tool Calling**: External function integration with validation
-- **📊 Full Observability**: Structured logging, metrics, and events
+## 🧪 Testing
+
+SocietyAI comes with a comprehensive test suite using **Jest**.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage report
+npm run test -- --coverage
+```
+
+### Coverage Areas
+- **Core Logic**: Execution engine, graph traversal, and state management.
+- **Capabilities**: Tool execution, memory system, and schema validation.
+- **Builders**: Fluent API configuration and validation.
+- **Observability**: Event system and logging.
 
 ## 🚀 Quick Start
 
@@ -51,130 +58,119 @@ value.
 npm install societyai
 ```
 
-### Basic Example
+### 1. Connect Your Model
+
+SocietyAI does not depend on any specific SDK library. You simply need to adapt your model to the `AIModel` interface. Here is a minimal example for OpenAI:
+
+```typescript
+import { AIModel } from 'societyai';
+import OpenAI from 'openai'; // Install openai separately
+
+export class OpenAIModel implements AIModel {
+  private client: OpenAI;
+  private modelName: string;
+
+  constructor(apiKey: string, model: string = 'gpt-4') {
+    this.client = new OpenAI({ apiKey });
+    this.modelName = model;
+  }
+
+  name(): string { return this.modelName; }
+
+  supportsPromptType(type: string): boolean { return true; }
+
+  async process(prompt: unknown): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: this.modelName,
+      messages: [{ role: 'user', content: String(prompt) }],
+    });
+    return response.choices[0].message.content || '';
+  }
+}
+```
+
+### 2. Create Your First Society
+
+This example creates a small team to write and review an article.
 
 ```typescript
 import { Society } from 'societyai';
+import { OpenAIModel } from './my-model-impl'; // Your implementation above
 
-// Create a society with agents and workflow
+const model = new OpenAIModel(process.env.OPENAI_API_KEY);
+
+// Create the Society
 const result = await Society.create()
-  .withId('data-pipeline')
+  .withId('blog-team')
+  
+  // -- Define Agents --
   .addAgent((agent) =>
     agent
-      .withId('analyst')
+      .withId('writer')
       .withRole((role) =>
         role
-          .withId('data-analyst')
-          .withSystemPrompt('You analyze data and provide insights')
+          .withName('Technical Writer')
+          .withSystemPrompt('You are an expert in concise technical writing.')
       )
-      .withModel(yourAIModel)
+      .withModel(model)
   )
-  .addStep((step) =>
-    step
-      .withId('extract')
-      .withAgents(['analyst'])
-      .withInstructions('Extract key information')
+  .addAgent((agent) =>
+    agent
+      .withId('editor')
+      .withRole((role) =>
+        role
+          .withName('Editor in Chief')
+          .withSystemPrompt('You correct style and verify clarity.')
+      )
+      .withModel(model)
+  )
+
+  // -- Define Workflow --
+  
+  // Task 1: The writer writes
+  .addTask((task) =>
+    task
+      .withId('draft')
+      .withAgents(['writer'])
+      .withInstructions('Write a paragraph about the benefits of TypeScript.')
       .sequential()
   )
-  .addStep((step) =>
-    step
-      .withId('transform')
-      .dependsOn('extract') // DAG dependency
-      .withAgents(['analyst'])
-      .withInstructions('Transform data format')
+  
+  // Task 2: The editor reviews (explicitly depends on 'draft')
+  .addTask((task) =>
+    task
+      .withId('review')
+      .dependsOn('draft')
+      .withAgents(['editor'])
+      .withInstructions('Review the previous text, correct mistakes, and improve the tone.')
+      .sequential()
   )
-  .execute('Process this input data');
+  
+  // Execute
+  .execute('Start Project');
+
+console.log('Final Result:', result.output);
+console.log('History:', result.taskResults);
 ```
 
 ## 📚 Documentation
 
-### Core Documentation
+Explore detailed documentation in the `/docs` folder:
 
-- **[Getting Started](./docs/getting-started.md)** - Comprehensive guide
-- **[Architecture](./docs/ARCHITECTURE.md)** - System design and DAG
-  orchestration
-- **[API Reference](./docs/api-reference.md)** - Complete API documentation
-- **[Documentation Index](./docs/README.md)** - Full documentation catalog
+- **[Getting Started](./docs/getting-started.md)**: Complete step-by-step tutorial.
+- **[Architecture](./docs/architecture.md)**: Understand the graph engine and key concepts.
+- **[API Reference](./docs/api-reference.md)**: Technical documentation of classes and interfaces.
+- **[API Decision Guide](./docs/api-decision-guide.md)**: Choose between high-level and low-level APIs.
+- **Advanced Topics**:
+  - [Tools & Function Calling](./docs/capabilities/tools.md)
+  - [Middleware System](./docs/core/middleware.md)
+  - [Memory Systems](./docs/capabilities/memory.md)
+  - [Validation](./docs/capabilities/validation.md)
 
-### Feature Guides
+## 🤝 Contribution
 
-- [Workflows](./docs/workflows.md) - Building and executing workflows
-- [Tool Calling](./docs/tool-calling.md) - External tool integration
-- [Memory System](./docs/memory-system.md) - Context management
-- [Metrics & Observability](./docs/metrics-observability.md) - Monitoring
-
-### Reference
-
-- [Examples](./docs/examples.md) - Code examples
-- [Changelog](./CHANGELOG.md) - Version history
-
-## 🏗️ Architecture
-
-SocietyAI features a modular architecture with DAG-based workflow orchestration:
-
-```
-Builders → Orchestrator → Strategies
-                ↓
-         DAG Scheduler
-                ↓
-         Conditional Router
-                ↓
-           Execution
-```
-
-**Key Components:**
-
-- **Builders**: Fluent API for workflow construction
-- **Orchestrator**: Central coordinator delegating to strategies
-- **Scheduler**: Topological sort for optimal execution order
-- **Router**: Conditional branching based on runtime conditions
-- **Strategies**: Pluggable sequential/parallel execution
-
-See [Architecture Guide](./docs/ARCHITECTURE.md) for details.
-
-## 🧪 Testing
-
-Run tests:
-
-```bash
-npm test                  # Run all tests
-npm run test:watch        # Watch mode
-npm run test:coverage     # Coverage report
-```
-
-Current test coverage: **47.52%** (151 tests passing)
-
-## 🛠️ Development
-
-```bash
-npm run build        # Build project
-npm run watch        # Development watch mode
-npm run lint         # Lint code
-npm run format       # Format code
-npm run validate     # Full validation (lint + test + build)
-```
-
-## 🤝 Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+Contributions are welcome! Feel free to open an issue or a Pull Request on the GitHub repository.
 
 ## 📄 License
 
-MIT License - see [LICENSE](./LICENSE) file for details.
-
-## 🔗 Links
-
-- **Documentation**: [docs/](./docs/)
-- **npm Package**: [societyai](https://www.npmjs.com/package/societyai)
-- **Issues**:
-  [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
-
----
-
-**Made with ❤️ by devbyben**
+MIT

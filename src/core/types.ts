@@ -1,4 +1,25 @@
 /**
+ * @fileoverview Core Type Definitions for SocietyAI
+ *
+ * This file contains all core interfaces and types used throughout the library.
+ *
+ * Note about imports: This file imports types from capabilities modules
+ * (MemorySystem, Tool, JSONSchema). These imports are intentional and safe
+ * because:
+ * 1. They are type-only imports (TypeScript handles these at compile time)
+ * 2. They don't create runtime circular dependencies
+ * 3. The capabilities modules import from types.ts for their own type safety
+ *
+ * This creates a "type-level circular dependency" which is perfectly valid in
+ * TypeScript and allows us to have strong type checking across the entire codebase
+ * without actual runtime circular dependencies.
+ */
+
+import { MemorySystem } from '../capabilities/memory';
+import { Tool } from '../capabilities/tools';
+import { JSONSchema } from '../capabilities/validation';
+
+/**
  * Interface for AI models
  * This interface must be implemented by any model
  * that developers wish to use with SocietyAI
@@ -42,10 +63,10 @@ export interface AIModel {
 // ============================================================================
 
 /**
- * Definition of a configurable agent role
- * Allows users to create agents with custom behaviors
+ * Definition of a role that agents can assume
+ * Roles define behaviors, capabilities, and constraints
  */
-export interface AgentRole {
+export interface Role {
   /**
    * Unique role identifier
    */
@@ -79,15 +100,38 @@ export interface AgentRole {
 
   /**
    * Template for formatting prompts for this agent
-   * Uses placeholders: {input}, {context}, {history}, {sharedData}
+   *
+   * Supported placeholders:
+   * - `{system}`: System instructions for this role
+   * - `{input}`: The current input being processed
+   * - `{context}`: Shared data between nodes (JSON stringified)
+   * - `{history}`: Execution history of previous nodes
+   * - `{sharedData}`: Alias for {context}, shared state across the workflow
+   * - `{memory}`: Memory context from the agent's memory system
+   * - `{tools}`: Available tools for the agent
+   * - `{instructions}`: Step-specific instructions from node metadata
+   * - `{messages}`: Message history for collaborative nodes
+   *
+   * Example:
+   * ```typescript
+   * promptTemplate: `System: {system}
+   * Context: {context}
+   * Memory: {memory}
+   * Tools: {tools}
+   *
+   * {instructions}
+   *
+   * Input: {input}`
+   * ```
    */
   promptTemplate?: string;
 }
 
 /**
- * Complete agent configuration
+ * Agent configuration
+ * Represents an autonomous entity in the society
  */
-export interface AgentConfig {
+export interface Agent {
   /**
    * Unique agent ID
    */
@@ -101,7 +145,7 @@ export interface AgentConfig {
   /**
    * Agent's role
    */
-  role: AgentRole;
+  role: Role;
 
   /**
    * AI model to use
@@ -130,12 +174,22 @@ export interface AgentConfig {
     maxRetries?: number;
     initialBackoff?: number;
   };
+
+  /**
+   * Memory system for this agent
+   */
+  memory?: MemorySystem;
+
+  /**
+   * Tools available to this agent
+   */
+  tools?: Tool[];
 }
 
 /**
- * Message exchanged between agents
+ * Message exchanged between agents in a society
  */
-export interface AgentMessage {
+export interface Message {
   /**
    * Sender agent ID
    */
@@ -175,673 +229,348 @@ export interface AgentMessage {
    * Unique message identifier
    */
   messageId: string;
-}
-
-/**
- * Communication channel between agents
- */
-export interface CommunicationChannel {
-  /**
-   * Send a message
-   */
-  send(message: AgentMessage): Promise<void>;
 
   /**
-   * Subscribe to messages intended for an agent
+   * Optional metadata for routing and tracking
    */
-  subscribe(agentId: string, handler: (message: AgentMessage) => void): void;
-
-  /**
-   * Unsubscribe
-   */
-  unsubscribe(agentId: string): void;
-
-  /**
-   * Retrieve message history
-   */
-  getHistory(filter?: { from?: string; to?: string; type?: string }): AgentMessage[];
-
-  /**
-   * Clear history
-   */
-  clearHistory(): void;
+  metadata?: Record<string, unknown>;
 }
 
 // ============================================================================
-// CONFIGURABLE WORKFLOW SYSTEM
+// SOCIETY TASK SYSTEM
 // ============================================================================
 
 /**
- * Type d'exécution d'une étape de workflow
+ * Task execution type
  */
-export type WorkflowStepExecutionType =
-  | 'sequential' // Agents exécutés un par un
-  | 'parallel' // Agents exécutés en parallèle
-  | 'collaborative' // Agents qui échangent entre eux pendant l'exécution
-  | 'conditional'; // Exécution conditionnelle basée sur les résultats précédents
+export type TaskExecutionType =
+  | 'sequential' // Agents executed one by one
+  | 'parallel' // Agents executed in parallel
+  | 'collaborative' // Agents that communicate during execution
+  | 'conditional'; // Conditional execution based on previous results
 
 /**
- * Étape configurable dans un workflow
+ * Task to be performed by agents in a society
  */
-export interface WorkflowStep {
+export interface Task {
   /**
-   * Identifiant de l'étape
+   * Step identifier
    */
   id: string;
 
   /**
-   * Nom de l'étape
+   * Step name
    */
   name: string;
 
   /**
-   * Description de l'étape
+   * Step description
    */
   description?: string;
 
   /**
-   * IDs des agents participant à cette étape
+   * IDs of agents participating in this step
    */
   agentIds: string[];
 
   /**
-   * Type d'exécution
+   * Execution type
    */
-  executionType: WorkflowStepExecutionType;
+  executionType: TaskExecutionType;
 
   /**
-   * Instructions spécifiques pour cette étape
-   * Injectées dans le prompt de chaque agent
+   * Specific instructions for this step
+   * Injected into each agent's prompt
    */
   instructions?: string;
 
   /**
-   * Template de prompt pour cette étape
-   * Surcharge le promptTemplate du rôle si défini
+   * Prompt template for this step
+   * Overrides the role's promptTemplate if defined
    */
   promptTemplate?: string;
 
   /**
-   * Nombre maximum d'itérations pour les étapes collaboratives
+   * Schema for structured output validation
+   */
+  outputSchema?: JSONSchema;
+
+  /**
+   * Maximum iterations for collaborative steps
    */
   maxIterations?: number;
 
   /**
-   * Condition pour passer à l'étape suivante (pour les étapes collaboratives)
+   * Condition to proceed to next task (for collaborative tasks)
    */
-  completionCondition?: (results: StepResult[], iteration: number) => boolean;
+  completionCondition?: (results: TaskResult[], iteration: number) => boolean;
 
   /**
-   * Fonction de transformation des résultats avant passage à l'étape suivante
+   * Result transformation function before passing to next task
    */
-  resultTransformer?: (results: StepResult[] | StepResult) => unknown;
+  resultTransformer?: (results: TaskResult[] | TaskResult) => unknown;
 
   /**
-   * Condition pour exécuter cette étape (pour type 'conditional')
+   * Condition to execute this task (for 'conditional' type)
    */
-  condition?: (previousResults: Map<string, StepResult[]>) => boolean;
+  condition?: (previousResults: Map<string, TaskResult[]>) => boolean;
 
   /**
-   * Étapes suivantes possibles (si non défini, passe à l'étape suivante dans l'ordre)
+   * Possible next tasks (if not defined, proceeds to next task in order)
    */
-  nextSteps?: string[];
+  nextTasks?: string[];
 
   /**
-   * Fonction pour déterminer dynamiquement l'étape suivante
+   * Function to dynamically determine the next task
    */
-  nextStepResolver?: (results: StepResult[]) => string | null;
+  nextTaskResolver?: (results: TaskResult[]) => string | null;
 }
 
 /**
- * Résultat d'exécution d'une étape pour un agent
+ * Task execution result for an agent
  */
-export interface StepResult {
+export interface TaskResult {
   /**
-   * ID de l'agent
+   * Agent ID
    */
   agentId: string;
 
   /**
-   * ID de l'étape
+   * Task ID
    */
-  stepId: string;
+  taskId: string;
 
   /**
-   * Contenu de la réponse
+   * Agent response content
    */
-  content: string;
+  output: string;
 
   /**
-   * Métadonnées additionnelles
+   * Additional metadata
    */
   metadata?: Record<string, unknown>;
 
   /**
-   * Timestamp de completion
+   * Completion timestamp
    */
   timestamp: number;
 
   /**
-   * Succès ou échec
+   * Success or failure status
    */
   success: boolean;
 
   /**
-   * Erreur éventuelle
+   * Execution duration in milliseconds
+   */
+  duration?: number;
+
+  /**
+   * Error if failed
    */
   error?: Error;
 
   /**
-   * Numéro d'itération (pour les étapes collaboratives)
+   * Iteration number (for collaborative tasks)
    */
   iteration?: number;
 }
 
 /**
- * Configuration d'un workflow complet
+ * Complete society configuration
  */
-export interface WorkflowConfig {
+export interface SocietyConfig {
   /**
-   * Identifiant du workflow
+   * Society identifier
    */
   id: string;
 
   /**
-   * Nom du workflow
+   * Society name
    */
   name: string;
 
   /**
-   * Description du workflow
+   * Society description
    */
   description?: string;
 
   /**
-   * Étapes du workflow dans l'ordre d'exécution par défaut
+   * Tasks in default execution order
    */
-  steps: WorkflowStep[];
+  tasks: Task[];
 
   /**
-   * ID de l'étape de départ
+
+   * Entry task ID
    */
-  entryStepId?: string;
+  entryTaskId?: string;
 
   /**
-   * Agents participant au workflow
+   * Agents participating in the society
    */
-  agents: AgentConfig[];
+  agents: Agent[];
 
   /**
-   * Données de contexte global partagées entre toutes les étapes
+   * Global context data shared between all tasks
    */
   globalContext?: Record<string, unknown>;
 
   /**
-   * Fonction appelée avant chaque étape
+   * Strict routing mode: if true, raises an error if an intermediate
+   * task doesn't have nextTasks explicitly defined.
+   * If false (default), automatically creates sequential links.
    */
-  onBeforeStep?: (step: WorkflowStep, context: WorkflowContext) => Promise<void>;
+  strictRouting?: boolean;
 
   /**
-   * Fonction appelée après chaque étape
+   * Function called before each task
    */
-  onAfterStep?: (
-    step: WorkflowStep,
-    results: StepResult[],
-    context: WorkflowContext
-  ) => Promise<void>;
+  onBeforeTask?: (task: Task, context: ExecutionContext) => Promise<void>;
 
   /**
-   * Fonction pour générer le résultat final
+   * Function called after each task
+   */
+  onAfterTask?: (task: Task, results: TaskResult[], context: ExecutionContext) => Promise<void>;
+
+  /**
+   * Function to generate the final result
    */
   finalResultGenerator?: (
-    results: Map<string, StepResult[]>,
-    context: WorkflowContext
+    results: Map<string, TaskResult[]>,
+    context: ExecutionContext
   ) => Promise<string>;
 }
 
 /**
- * Contexte d'exécution du workflow
+ * Execution context shared during society execution
  */
-export interface WorkflowContext {
+export interface ExecutionContext {
   /**
-   * Prompt/input initial
+   * Initial prompt/input
    */
   input: string;
 
   /**
-   * Données partagées entre étapes (mutable)
+   * Shared data between tasks (mutable)
    */
   sharedData: Map<string, unknown>;
 
   /**
-   * Résultats de toutes les étapes précédentes
+   * Results of all previous tasks
    */
-  stepResults: Map<string, StepResult[]>;
+  taskResults: Map<string, TaskResult[]>;
 
   /**
-   * Historique des communications entre agents
+   * Agent communication history
    */
-  messageHistory: AgentMessage[];
+  messageHistory: Message[];
 
   /**
-   * Métadonnées du workflow
+   * Execution metadata
    */
   metadata: Record<string, unknown>;
 }
 
 /**
- * Interface pour les exécuteurs de workflow
+ * Final society execution result
  */
-export interface WorkflowExecutor {
+export interface SocietyResult {
   /**
-   * Exécute un workflow complet
-   */
-  execute(workflow: WorkflowConfig, input: string, signal?: AbortSignal): Promise<WorkflowResult>;
-
-  /**
-   * Exécute une étape spécifique
-   */
-  executeStep(
-    step: WorkflowStep,
-    agents: Map<string, AgentConfig>,
-    context: WorkflowContext,
-    signal?: AbortSignal
-  ): Promise<StepResult[]>;
-}
-
-/**
- * Résultat final d'un workflow
- */
-export interface WorkflowResult {
-  /**
-   * Succès global
+   * Global success status
    */
   success: boolean;
 
   /**
-   * Résultat final généré
+   * Generated final result
    */
   output: string;
 
   /**
-   * Résultats de chaque étape
+   * Results for each task
    */
-  stepResults: Map<string, StepResult[]>;
+  taskResults: Map<string, TaskResult[]>;
 
   /**
-   * Messages échangés pendant l'exécution
+   * Messages exchanged during execution
    */
-  messages: AgentMessage[];
+  messages: Message[];
 
   /**
-   * Durée totale en ms
+   * Total duration in ms
    */
   duration: number;
 
   /**
-   * Erreurs rencontrées
+   * Errors encountered
    */
   errors?: Error[];
 }
 
-// ============================================================================
-// BUILDERS ET FACTORIES
-// ============================================================================
-
 /**
- * Interface pour construire des rôles d'agents
- */
-export interface AgentRoleBuilder {
-  withId(id: string): AgentRoleBuilder;
-  withName(name: string): AgentRoleBuilder;
-  withDescription(description: string): AgentRoleBuilder;
-  withSystemPrompt(prompt: string): AgentRoleBuilder;
-  withCapabilities(capabilities: string[]): AgentRoleBuilder;
-  withConstraints(constraints: string[]): AgentRoleBuilder;
-  withPromptTemplate(template: string): AgentRoleBuilder;
-  build(): AgentRole;
-}
-
-/**
- * Interface pour construire des agents
- */
-export interface AgentConfigBuilder {
-  withId(id: string): AgentConfigBuilder;
-  withName(name: string): AgentConfigBuilder;
-  withRole(role: AgentRole): AgentConfigBuilder;
-  withModel(model: AIModel): AgentConfigBuilder;
-  canCommunicateWith(agentIds: string[]): AgentConfigBuilder;
-  withPriority(priority: number): AgentConfigBuilder;
-  withInitialContext(context: Record<string, unknown>): AgentConfigBuilder;
-  build(): AgentConfig;
-}
-
-/**
- * Interface pour construire des workflows
- */
-export interface WorkflowBuilder {
-  withId(id: string): WorkflowBuilder;
-  withName(name: string): WorkflowBuilder;
-  withDescription(description: string): WorkflowBuilder;
-  addAgent(agent: AgentConfig): WorkflowBuilder;
-  addStep(step: WorkflowStep): WorkflowBuilder;
-  withGlobalContext(context: Record<string, unknown>): WorkflowBuilder;
-  withFinalResultGenerator(generator: WorkflowConfig['finalResultGenerator']): WorkflowBuilder;
-  build(): WorkflowConfig;
-}
-
-/**
- * Rôles prédéfinis communs (optionnels, pour faciliter l'usage)
- */
-export const CommonRoles = {
-  ANALYST: 'analyst',
-  REVIEWER: 'reviewer',
-  IMPLEMENTER: 'implementer',
-  TESTER: 'tester',
-  COORDINATOR: 'coordinator',
-  SYNTHESIZER: 'synthesizer',
-} as const;
-
-/**
- * Types de workflow prédéfinis (optionnels)
- */
-export const WorkflowPatterns = {
-  /** Pipeline simple: A → B → C */
-  PIPELINE: 'pipeline',
-  /** Review: A fait, B vérifie, retour à A si nécessaire */
-  REVIEW_LOOP: 'review-loop',
-  /** Parallèle puis synthèse: A, B, C en parallèle → D synthétise */
-  PARALLEL_SYNTHESIS: 'parallel-synthesis',
-  /** Hiérarchique: Coordinateur distribue, équipe exécute, coordinateur valide */
-  HIERARCHICAL: 'hierarchical',
-  /** Consensus: Agents discutent jusqu'à accord */
-  CONSENSUS: 'consensus',
-} as const;
-
-/**
- * Interface pour construire des prompts adaptés
- * à différents types de modèles d'IA
- */
-export interface PromptBuilder {
-  /**
-   * Construit le prompt initial pour un agent
-   * @param basePrompt - Le prompt de base
-   * @param agentId - L'identifiant de l'agent
-   */
-  buildInitialPrompt(basePrompt: string, agentId: number): unknown;
-
-  /**
-   * Construit le prompt pour l'analyse initiale
-   * @param basePrompt - Le prompt de base
-   */
-  buildInitialAnalysisPrompt(basePrompt: string): unknown;
-
-  /**
-   * Construit le prompt pour explorer une dimension spécifique
-   * @param analysis - L'analyse précédente
-   * @param dimension - La dimension à explorer
-   * @param originalPrompt - Le prompt original
-   */
-  buildExplorationPrompt(analysis: string, dimension: string, originalPrompt: string): unknown;
-
-  /**
-   * Construit le prompt pour intégrer les analyses
-   * @param initialAnalysis - L'analyse initiale
-   * @param insights - Les insights des agents
-   * @param dimensions - Les dimensions explorées
-   */
-  buildIntegrationPrompt(
-    initialAnalysis: string,
-    insights: string[],
-    dimensions: string[]
-  ): unknown;
-
-  /**
-   * Construit le prompt pour la réponse finale
-   * @param integratedAnalysis - L'analyse intégrée
-   * @param originalPrompt - Le prompt original
-   */
-  buildFinalResponsePrompt(integratedAnalysis: string, originalPrompt: string): unknown;
-
-  /**
-   * Construit le prompt pour la synthèse des résultats
-   * @param results - Les résultats des agents
-   */
-  buildSynthesisPrompt(results: string[]): unknown;
-}
-
-/**
- * Interface pour adapter les prompts et réponses entre
- * le format générique de SocietyAI et le format spécifique de chaque modèle
+ * Interface for adapting prompts and responses between
+ * SocietyAI generic format and specific model formats
  */
 export interface ModelAdapter {
   /**
-   * Convertit un prompt générique au format spécifique du modèle
-   * @param genericPrompt - Le prompt générique
+   * Convert a generic prompt to the model's specific format
+   * @param genericPrompt - The generic prompt
    */
   convertPrompt(genericPrompt: unknown): Promise<unknown>;
 
   /**
-   * Convertit une réponse spécifique du modèle au format string attendu
-   * @param specificResponse - La réponse spécifique du modèle
+   * Convert a model-specific response to the expected string format
+   * @param specificResponse - The model-specific response
    */
   convertResponse(specificResponse: unknown): Promise<string>;
 
   /**
-   * Retourne les types de prompts supportés par ce modèle
+   * Return the prompt types supported by this model
    */
   getSupportedPromptTypes(): string[];
 }
 
 /**
- * Représente une étape dans une stratégie de collaboration
- */
-export interface CollaborationStep {
-  /**
-   * Exécute cette étape de collaboration
-   * @param society - Le groupe de société
-   * @param signal - Signal d'annulation optionnel
-   */
-  execute(society: unknown, signal?: AbortSignal): Promise<void>;
-
-  /**
-   * Retourne le nom de cette étape
-   */
-  name(): string;
-}
-
-/**
- * Interface pour les stratégies de collaboration entre agents
- */
-export interface CollaborationStrategy {
-  /**
-   * Retourne la séquence d'étapes pour cette stratégie
-   */
-  getSteps(): CollaborationStep[];
-
-  /**
-   * Configure le contexte collaboratif initial
-   * @param config - La configuration
-   * @param models - Les modèles d'IA
-   */
-  setupContext(config: SocietyConfig, models: AIModel[]): CollaborativeContext;
-}
-
-/**
- * Interface pour les stratégies d'assignation de modèles aux agents
- */
-export interface ModelAssignmentStrategy {
-  /**
-   * Assigne un modèle à un agent spécifique
-   * @param agentId - L'identifiant de l'agent
-   * @param models - Les modèles disponibles
-   * @param config - La configuration
-   */
-  assignModelToAgent(agentId: number, models: AIModel[], config: SocietyConfig): AIModel;
-}
-
-/**
- * Interface pour observer le comportement d'une société
+ * Interface to observe society behavior
  */
 export interface SocietyObserver {
   /**
-   * Appelé quand un agent commence à traiter un prompt
+   * Called when an agent starts processing a prompt
    */
-  onAgentStart(agentId: number, modelName: string, prompt: unknown): void;
+  onAgentStart(agentId: string, modelName: string, prompt: unknown): void;
 
   /**
-   * Appelé quand un agent termine le traitement avec succès
+   * Called when an agent completes processing successfully
    */
-  onAgentComplete(agentId: number, modelName: string, result: string): void;
+  onAgentComplete(agentId: string, modelName: string, result: string): void;
 
   /**
-   * Appelé quand un agent rencontre une erreur
+   * Called when an agent encounters an error
    */
-  onAgentError(agentId: number, modelName: string, error: Error): void;
+  onAgentError(agentId: string, modelName: string, error: Error): void;
 
   /**
-   * Appelé au début d'une phase de collaboration
+   * Called when a specific task completes
+   */
+  onTaskEnd?(taskId: string, result: TaskResult): void;
+
+  /**
+   * Called at the start of a collaboration phase
    */
   onPhaseStart(phase: string): void;
 
   /**
-   * Appelé à la fin d'une phase de collaboration
+   * Called at the end of a collaboration phase
    */
   onPhaseComplete(phase: string): void;
 
   /**
-   * Appelé au démarrage de la société
+   * Called when society starts
    */
   onSocietyStart(prompt: string, agentCount: number): void;
 
   /**
-   * Appelé quand la société a terminé tout le traitement
+   * Called when society completes all processing
    */
   onSocietyComplete(finalResult: string): void;
-}
-
-/**
- * Configuration de la société d'agents
- */
-export interface SocietyConfig {
-  /**
-   * Le prompt à traiter
-   */
-  prompt: string;
-
-  /**
-   * Le nombre d'agents à créer
-   */
-  agentCount: number;
-
-  /**
-   * Utiliser plusieurs modèles différents
-   */
-  multiModel?: boolean;
-
-  /**
-   * Mode collaboratif activé
-   */
-  collaborative?: boolean;
-
-  /**
-   * Timeout pour les opérations (en ms)
-   */
-  timeout?: number;
-
-  /**
-   * Observer pour suivre le cycle de vie
-   */
-  observer?: SocietyObserver;
-
-  /**
-   * Perspectives personnalisées pour chaque agent (mode standard)
-   * Chaque perspective sera préfixée au prompt pour un agent
-   * Exemple: ["Analyze technically: ", "Consider user experience: "]
-   */
-  agentPerspectives?: string[];
-
-  /**
-   * Dimensions personnalisées à explorer (mode collaboratif)
-   * Chaque agent explorera une dimension différente
-   * Exemple: ["Security aspects", "Performance optimization", "User needs"]
-   */
-  dimensions?: string[];
-
-  /**
-   * Template de prompt pour les agents
-   * Placeholders disponibles: {perspective}, {input}, {context}
-   */
-  promptTemplate?: string;
-
-  /**
-   * Template pour la synthèse des résultats
-   * Placeholder disponible: {results}
-   */
-  synthesisPromptTemplate?: string;
-
-  /**
-   * Fonction personnalisée pour générer le résultat final
-   */
-  resultGenerator?: (agentResults: string[]) => string;
-}
-
-/**
- * Contexte collaboratif partagé entre les agents
- */
-export interface CollaborativeContext {
-  /**
-   * Les dimensions à explorer
-   */
-  dimensions: string[];
-
-  /**
-   * L'analyse initiale partagée
-   */
-  initialAnalysis?: string;
-
-  /**
-   * Les insights partagés entre agents
-   */
-  sharedInsights: string[];
-
-  /**
-   * L'analyse intégrée
-   */
-  integratedAnalysis?: string;
-}
-
-/**
- * Représente un agent individuel dans la société
- */
-export interface Agent {
-  /**
-   * Identifiant unique de l'agent
-   */
-  id: number;
-
-  /**
-   * Le modèle d'IA utilisé par cet agent
-   */
-  model: AIModel;
-
-  /**
-   * Le prompt à traiter
-   */
-  prompt: string;
-
-  /**
-   * Phase actuelle de traitement (pour mode collaboratif)
-   */
-  phase?: number;
-
-  /**
-   * Dimension à explorer (pour mode collaboratif)
-   */
-  dimensionToExplore?: string;
-
-  /**
-   * Analyse partagée entre agents
-   */
-  sharedAnalysis?: string;
 }

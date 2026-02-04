@@ -24,7 +24,7 @@
  * ```
  */
 
-import { AIModel, StepResult, WorkflowContext } from './types';
+import { AIModel, TaskResult, ExecutionContext } from './types';
 import { getLogger } from '../observability/logger';
 
 // ============================================================================
@@ -193,6 +193,23 @@ export class MiddlewareChain {
    */
   build(): ComposedMiddleware {
     return new ComposedMiddleware(this.middlewares, this.model);
+  }
+
+  /**
+   * Execute the chain with a custom next function
+   */
+  async execute(context: MiddlewareContext, next: NextFunction): Promise<MiddlewareResult> {
+    // Build the chain from end to start
+    let currentNext: NextFunction = next;
+
+    // Wrap each middleware around the next
+    for (let i = this.middlewares.length - 1; i >= 0; i--) {
+      const middleware = this.middlewares[i];
+      const nextFn = currentNext;
+      currentNext = async (c): Promise<MiddlewareResult> => middleware.fn(c, nextFn);
+    }
+
+    return currentNext(context);
   }
 
   /**
@@ -773,7 +790,7 @@ export interface StepMiddlewareContext {
   stepName: string;
   agentIds: string[];
   input: string;
-  workflowContext: WorkflowContext;
+  executionContext: ExecutionContext;
   metadata: Map<string, unknown>;
 }
 
@@ -782,8 +799,8 @@ export interface StepMiddlewareContext {
  */
 export type StepMiddlewareFn = (
   ctx: StepMiddlewareContext,
-  next: () => Promise<StepResult[]>
-) => Promise<StepResult[]>;
+  next: () => Promise<TaskResult[]>
+) => Promise<TaskResult[]>;
 
 /**
  * Named step middleware
@@ -803,7 +820,7 @@ export const StepMiddlewares = {
    */
   logging: (): StepMiddleware => ({
     name: 'stepLogging',
-    fn: async (ctx, next): Promise<StepResult[]> => {
+    fn: async (ctx, next): Promise<TaskResult[]> => {
       const logger = getLogger();
       logger.info(`Starting step: ${ctx.stepName} (${ctx.stepId})`);
       const results = await next();
@@ -817,7 +834,7 @@ export const StepMiddlewares = {
    */
   timing: (onComplete?: (stepId: string, durationMs: number) => void): StepMiddleware => ({
     name: 'stepTiming',
-    fn: async (ctx, next): Promise<StepResult[]> => {
+    fn: async (ctx, next): Promise<TaskResult[]> => {
       const start = performance.now();
       const results = await next();
       const duration = performance.now() - start;
@@ -830,9 +847,9 @@ export const StepMiddlewares = {
   /**
    * Filter results based on criteria
    */
-  filterResults: (predicate: (result: StepResult) => boolean): StepMiddleware => ({
+  filterResults: (predicate: (result: TaskResult) => boolean): StepMiddleware => ({
     name: 'filterResults',
-    fn: async (_ctx, next): Promise<StepResult[]> => {
+    fn: async (_ctx, next): Promise<TaskResult[]> => {
       const results = await next();
       return results.filter(predicate);
     },
@@ -842,10 +859,10 @@ export const StepMiddlewares = {
    * Enrich results with additional metadata
    */
   enrichResults: (
-    enricher: (result: StepResult, ctx: StepMiddlewareContext) => StepResult
+    enricher: (result: TaskResult, ctx: StepMiddlewareContext) => TaskResult
   ): StepMiddleware => ({
     name: 'enrichResults',
-    fn: async (ctx, next): Promise<StepResult[]> => {
+    fn: async (ctx, next): Promise<TaskResult[]> => {
       const results = await next();
       return results.map((r) => enricher(r, ctx));
     },

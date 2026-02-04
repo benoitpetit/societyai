@@ -1,6 +1,6 @@
 {
   "name": "societyai",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems with DAG-based orchestration. Build sophisticated workflows where AI agents work together through dependency graphs, conditional routing, and pluggable execution strategies.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -67,6 +67,7 @@
   "author": "Benoit Petit <contact@societyai.dev> (https://github.com/benoitpetit)",
   "license": "MIT",
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.10.6",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
@@ -76,16 +77,14 @@
     "jest": "^29.7.0",
     "lint-staged": "^16.2.7",
     "prettier": "^3.1.1",
+    "tailwindcss-animate": "^1.0.7",
     "ts-jest": "^29.1.1",
     "typescript": "^5.5.4"
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CHANGELOG.md",
-    "docs",
-    "examples"
+    "LICENSE"
   ],
   "repository": {
     "type": "git",

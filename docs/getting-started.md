@@ -1,564 +1,290 @@
 # Getting Started with SocietyAI
 
-Welcome to SocietyAI! This guide will help you get up and running with creating your first multi-agent AI system.
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Prerequisites](#prerequisites)
-- [Your First Society](#your-first-society)
-- [Understanding the Basics](#understanding-the-basics)
-- [Advanced Features](#advanced-features)
-- [Next Steps](#next-steps)
+SocietyAI is a TypeScript library for orchestrating multi-agent systems using a DAG (Directed Acyclic Graph) approach.
 
 ## Installation
-
-Install SocietyAI via npm:
 
 ```bash
 npm install societyai
 ```
 
-Or using yarn:
+## Basic Concepts
 
-```bash
-yarn add societyai
-```
+### 1. Agents
+Agents are the workers in your society. They have:
+- An **ID** and **Name**
+- A **Role** (instructions on how to behave)
+- An **AI Model** (the brain)
 
-Or using pnpm:
+### 2. Tasks
+A Task is a unit of work. It can be:
+- **Sequential**: Run by one agent.
+- **Parallel**: Run by multiple agents at the same time.
+- **Collaborative**: Agents talking to each other.
 
-```bash
-pnpm add societyai
-```
-
-## Prerequisites
-
-### TypeScript Configuration
-
-SocietyAI is written in TypeScript and provides full type definitions. Ensure your `tsconfig.json` includes:
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ES2020"],
-    "esModuleInterop": true,
-    "strict": true
-  }
-}
-```
-
-### AI Model Access
-
-You'll need access to at least one AI model API:
-
-- **OpenAI**: Get an API key from [OpenAI Platform](https://platform.openai.com/)
-- **Anthropic**: Get an API key from [Anthropic Console](https://console.anthropic.com/)
-- **Google AI**: Get an API key from [Google AI Studio](https://makersuite.google.com/)
-- **Local Models**: Use Ollama, LM Studio, or similar
-- **Custom API**: Any HTTP API that accepts prompts and returns text
+### 3. Society (The Workflow)
+The Society connects agents and tasks into a workflow.
 
 ## Your First Society
 
-Let's create a simple two-agent system where one agent analyzes data and another reviews the analysis.
-
-### Step 1: Create Your AI Model
-
-First, create a model that connects to your AI service:
-
 ```typescript
-import { StandardModelBase } from 'societyai';
-import OpenAI from 'openai';
+import { Society, createRole, createAgent, AggregationStrategies } from 'societyai';
+import { YourAIModel } from './your-model';
 
-class OpenAIModel extends StandardModelBase {
-  private client: OpenAI;
+// 1. Define a Role
+const writerRole = createRole('writer')
+  .withSystemPrompt('You are a technical writer.');
 
-  constructor(apiKey: string) {
-    const client = new OpenAI({ apiKey });
-
-    super({ name: 'gpt-4-turbo' }, async (prompt) => {
-      const response = await client.chat.completions.create({
-        model: 'gpt-4-turbo',
-        messages: [{ role: 'user', content: String(prompt) }],
-      });
-      return response.choices[0].message.content || '';
-    });
-
-    this.client = client;
-  }
-}
-
-// Create an instance
-const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
-```
-
-### Step 2: Define Agent Roles
-
-Create roles that define how agents behave:
-
-```typescript
-import { RoleBuilder } from 'societyai';
-
-// Analyst role
-const analystRole = RoleBuilder.create()
-  .withId('analyst')
-  .withName('Data Analyst')
-  .withSystemPrompt(
-    'You are a data analyst. Your job is to examine information ' +
-      'objectively, identify patterns, and provide clear insights. ' +
-      'Focus on facts and data-driven conclusions.'
+// 2. Create the Society logic
+const society = Society.create()
+  .withId('blog-post-workflow')
+  .addAgent(agent => agent
+    .withId('writer')
+    .withRole(writerRole)
+    .withModel(new YourAIModel())
   )
-  .withCapabilities(['data-analysis', 'pattern-recognition', 'statistics'])
-  .build();
-
-// Reviewer role
-const reviewerRole = RoleBuilder.create()
-  .withId('reviewer')
-  .withName('Critical Reviewer')
-  .withSystemPrompt(
-    'You are a critical reviewer. Your job is to challenge assumptions, ' +
-      'identify potential issues, and ensure quality. ' +
-      'Be thorough and constructive in your feedback.'
+  .addTask(task => task
+    .withId('write-article')
+    .withAgents(['writer'])
+    .withInstructions('Write a blog post about AI.')
+    .sequential()
   )
-  .withCapabilities(['critical-thinking', 'quality-assurance'])
-  .build();
+  .execute('Start');
 ```
 
-### Step 3: Create Agents
+## Advanced Graph Patterns
 
-Build agents by combining roles with models:
+SocietyAI supports complex execution patterns using its graph-based engine.
 
-```typescript
-import { AgentBuilder } from 'societyai';
+### Cyclic Graphs with Self-Correction
 
-const agents = [
-  AgentBuilder.create().withId('analyst-1').withRole(analystRole).withModel(model).build(),
-
-  AgentBuilder.create().withId('reviewer-1').withRole(reviewerRole).withModel(model).build(),
-];
-```
-
-### Step 4: Define Workflow Steps
-
-Create steps that define what agents do:
-
-```typescript
-import { StepBuilder } from 'societyai';
-
-const steps = [
-  // Step 1: Analysis
-  StepBuilder.create()
-    .withId('analysis')
-    .withName('Data Analysis')
-    .withAgents(['analyst-1'])
-    .withExecutionType('sequential')
-    .withInstructions(
-      'Analyze the provided data thoroughly. ' + 'Identify key patterns, trends, and insights.'
-    )
-    .build(),
-
-  // Step 2: Review
-  StepBuilder.create()
-    .withId('review')
-    .withName('Quality Review')
-    .withAgents(['reviewer-1'])
-    .withExecutionType('sequential')
-    .withInstructions(
-      'Review the analysis provided. ' +
-        'Check for accuracy, completeness, and potential issues. ' +
-        'Provide constructive feedback.'
-    )
-    .build(),
-];
-```
-
-### Step 5: Build the Workflow
-
-Combine everything into a workflow:
-
-```typescript
-import { WorkflowConfigBuilder } from 'societyai';
-
-const workflow = WorkflowConfigBuilder.create()
-  .withId('analysis-workflow')
-  .withName('Data Analysis & Review Workflow')
-  .withDescription('Two-stage workflow with analysis and review')
-  .addAgents(agents)
-  .addSteps(steps)
-  .build();
-```
-
-### Step 6: Execute
-
-Run the workflow:
-
-```typescript
-import { DefaultWorkflowExecutor } from 'societyai';
-
-async function main() {
-  const executor = new DefaultWorkflowExecutor();
-
-  const result = await executor.execute(
-    workflow,
-    'Analyze the sales data from Q4 2024. ' +
-      'Sales increased by 15% year-over-year, ' +
-      'with the highest growth in the APAC region (+25%).'
-  );
-
-  console.log('Workflow completed!');
-  console.log('Duration:', result.duration, 'ms');
-  console.log('\nFinal Output:');
-  console.log(result.output);
-}
-
-main().catch(console.error);
-```
-
-### Complete Example
-
-Here's the complete code:
-
-```typescript
-import {
-  StandardModelBase,
-  RoleBuilder,
-  AgentBuilder,
-  StepBuilder,
-  WorkflowConfigBuilder,
-  DefaultWorkflowExecutor,
-} from 'societyai';
-import OpenAI from 'openai';
-
-// 1. Create AI Model
-class OpenAIModel extends StandardModelBase {
-  private client: OpenAI;
-
-  constructor(apiKey: string) {
-    const client = new OpenAI({ apiKey });
-    super({ name: 'gpt-4-turbo' }, async (prompt) => {
-      const response = await client.chat.completions.create({
-        model: 'gpt-4-turbo',
-        messages: [{ role: 'user', content: String(prompt) }],
-      });
-      return response.choices[0].message.content || '';
-    });
-    this.client = client;
-  }
-}
-
-// 2. Define Roles
-const analystRole = RoleBuilder.create()
-  .withId('analyst')
-  .withName('Data Analyst')
-  .withSystemPrompt('You are a data analyst. Examine information objectively.')
-  .build();
-
-const reviewerRole = RoleBuilder.create()
-  .withId('reviewer')
-  .withName('Critical Reviewer')
-  .withSystemPrompt('You are a critical reviewer. Challenge assumptions.')
-  .build();
-
-// 3. Create Agents
-const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
-
-const agents = [
-  AgentBuilder.create().withId('analyst-1').withRole(analystRole).withModel(model).build(),
-  AgentBuilder.create().withId('reviewer-1').withRole(reviewerRole).withModel(model).build(),
-];
-
-// 4. Define Steps
-const steps = [
-  StepBuilder.create()
-    .withId('analysis')
-    .withAgents(['analyst-1'])
-    .withExecutionType('sequential')
-    .withInstructions('Analyze the data thoroughly.')
-    .build(),
-  StepBuilder.create()
-    .withId('review')
-    .withAgents(['reviewer-1'])
-    .withExecutionType('sequential')
-    .withInstructions('Review the analysis.')
-    .build(),
-];
-
-// 5. Build Workflow
-const workflow = WorkflowConfigBuilder.create()
-  .withId('analysis-workflow')
-  .withName('Analysis & Review')
-  .addAgents(agents)
-  .addSteps(steps)
-  .build();
-
-// 6. Execute
-async function main() {
-  const executor = new DefaultWorkflowExecutor();
-  const result = await executor.execute(workflow, 'Your input here');
-  console.log(result.output);
-}
-
-main().catch(console.error);
-```
-
-## Understanding the Basics
-
-### The Five Core Components
-
-1. **AIModel**: Interface to your AI service (OpenAI, Anthropic, etc.)
-2. **AgentRole**: Defines behavior, capabilities, and system prompt
-3. **AgentConfig**: Combines a role with a model to create an agent
-4. **WorkflowStep**: Defines what agents do and how (sequential, parallel, etc.)
-5. **WorkflowConfig**: Orchestrates agents and steps into a complete workflow
-
-### Execution Flow
-
-```
-Input → Workflow Executor
-         ↓
-    Step 1 (Sequential)
-         ↓
-    Agent 1 → AI Model → Result 1
-         ↓
-    Step 2 (Sequential)
-         ↓
-    Agent 2 → AI Model → Result 2
-         ↓
-    Final Output
-```
-
-### Key Concepts
-
-**Sequential Execution**: Agents run one after another. Each agent can access results from previous agents.
-
-```typescript
-.withExecutionType('sequential')
-```
-
-**Parallel Execution**: Multiple agents run simultaneously for faster processing.
-
-```typescript
-.withExecutionType('parallel')
-```
-
-**Collaborative Execution**: Agents exchange messages and iterate together.
-
-```typescript
-.withExecutionType('collaborative')
-.withMaxIterations(3)
-```
-
-**Conditional Execution**: Steps execute only when conditions are met.
-
-```typescript
-.withExecutionType('conditional')
-.withCondition((previousResults) => someCondition(previousResults))
-```
-
-## Next Steps
-
-Now that you've created your first society, explore more advanced features:
-
-1. **[Architecture Guide](./architecture.md)** - Understand the design and concepts
-2. **[Workflow Patterns](./workflows.md)** - Learn common workflow configurations
-3. **[API Reference](./api-reference.md)** - Explore all available methods
-4. **[Advanced Features](./advanced.md)** - Error handling, retry, observability
-5. **[Examples](./examples.md)** - See real-world usage patterns
-
-### Quick Examples
-
-**Parallel Analysis**:
-
-```typescript
-StepBuilder.create()
-  .withAgents(['agent-1', 'agent-2', 'agent-3'])
-  .withExecutionType('parallel') // All agents work simultaneously
-  .build();
-```
-
-**Collaborative Discussion**:
-
-```typescript
-StepBuilder.create()
-  .withAgents(['agent-1', 'agent-2', 'agent-3'])
-  .withExecutionType('collaborative')
-  .withMaxIterations(3)
-  .withCompletionCondition((results, iteration) => {
-    return iteration >= 2 || consensusReached(results);
-  })
-  .build();
-```
-
-**Custom Result Generation**:
-
-```typescript
-WorkflowConfigBuilder.create()
-  .withFinalResultGenerator(async (stepResults, context) => {
-    // Your custom logic to combine results
-    return customFormattedOutput;
-  })
-  .build();
-```
-
-## Advanced Features
-
-SocietyAI provides powerful features for complex multi-agent systems:
-
-### Graph-Based Execution
-
-Execute agents in complex DAG or cyclic workflows:
+Create self-improving agents that loop until they produce valid output:
 
 ```typescript
 import { GraphBuilder, NodeType } from 'societyai';
 
+// Create a self-correcting content generator
 const graph = GraphBuilder.create()
   .addNode('start', NodeType.START)
-  .addNode('analyze', NodeType.AGENT, { agentId: 'analyst' })
-  .addNode('condition', NodeType.CONDITION, {
-    condition: (ctx) => ctx.data.requiresReview,
+  .addNode('generate', NodeType.AGENT, { 
+    agentId: 'generator' 
   })
-  .addNode('review', NodeType.AGENT, { agentId: 'reviewer' })
+  .addNode('validate', NodeType.AGENT, { 
+    agentId: 'validator' 
+  })
+  .addNode('check', NodeType.CONDITION, {
+    condition: (result) => result.includes('APPROVED')
+  })
   .addNode('end', NodeType.END)
-  .addEdge('start', 'analyze')
-  .addEdge('analyze', 'condition')
-  .addEdge('condition', 'review', true) // if true
-  .addEdge('condition', 'end', false) // if false
-  .addEdge('review', 'end')
+  
+  // Define the validation loop
+  .addEdge('start', 'generate')
+  .addEdge('generate', 'validate')
+  .addEdge('validate', 'check')
+  .addEdge('check', 'end', { label: 'approved' })
+  .addEdge('check', 'generate', { label: 'retry' })  // Loop back with feedback
   .build();
 
-const result = await graph.execute('Analyze this data', agents);
+const result = await graph.execute('Generate secure code', agents);
 ```
 
-**Learn more**: [Graph Execution Guide](./graph-execution.md)
+### Recursive Societies with Hierarchical Communication
 
-### Tool Calling
-
-Give agents access to external tools:
+Build complex organizational structures where agents can communicate in a hierarchical manner:
 
 ```typescript
-import { ToolBuilder, ToolRegistry } from 'societyai';
-
-const weatherTool = ToolBuilder.create()
-  .withName('get_weather')
-  .withDescription('Get current weather for a location')
-  .withParameter('location', 'string', 'City name', true)
-  .withExecutor(async (params) => {
-    const { location } = params;
-    return `Weather in ${location}: Sunny, 72°F`;
+const graph = GraphBuilder.create()
+  .addNode('start', NodeType.START)
+  .addNode('team', NodeType.COLLABORATIVE, {
+    agentIds: ['junior', 'senior', 'manager'],
+    maxIterations: 5,
+    // Custom message routing for hierarchy
+    messageRouter: (message, sender, allAgents, context) => {
+      // Juniors report to seniors
+      if (sender.id === 'junior') return ['senior'];
+      // Seniors escalate to manager
+      if (sender.id === 'senior') return ['manager'];
+      // Manager broadcasts decisions
+      if (sender.id === 'manager') return ['junior', 'senior'];
+      return [];
+    },
+    completionCondition: (results) => {
+      return results.some(r => r.output.includes('DECISION'));
+    }
   })
+  .addNode('end', NodeType.END)
+  .addEdge('start', 'team')
+  .addEdge('team', 'end')
   .build();
 
-const registry = new ToolRegistry();
-registry.register(weatherTool);
+const result = await graph.execute('Review architecture proposal', agents);
 ```
 
-**Learn more**: [Tool Calling Guide](./tool-calling.md)
+### Targeted Agent Communication with @mentions
 
-### Memory System
-
-Multi-level memory for context management:
+Agents can address specific teammates using the `@agentId` syntax:
 
 ```typescript
-import { MemoryBuilder } from 'societyai';
+// Agent implementation that uses targeted messaging
+const consultantAgent = {
+  id: 'consultant',
+  model: {
+    process: async (prompt) => {
+      // Check expertise needed and route accordingly
+      if (prompt.includes('security')) {
+        return '@security-expert: Can you review this implementation?';
+      }
+      if (prompt.includes('performance')) {
+        return '@perf-expert: Is this approach scalable?';
+      }
+      return 'Analyzing...';
+    }
+  }
+};
 
-const memory = MemoryBuilder.create()
-  .withShortTermMemory({ maxSize: 10, decayRate: 0.1 })
-  .withLongTermMemory({ maxSize: 100, similarityThreshold: 0.7 })
-  .withEntityMemory({ maxEntities: 50 })
-  .build();
+// The execution engine automatically routes these messages
+const result = await collaborativeGraph.execute(input, [
+  consultantAgent,
+  securityExpert,
+  perfExpert
+]);
 
-// Add memories
-await memory.addShortTerm('User prefers detailed explanations', 0.9);
-await memory.addLongTerm('Project uses React and TypeScript');
-await memory.addEntity('ProjectX', 'uses microservices architecture');
-```
-
-**Learn more**: [Memory System Guide](./memory-system.md)
-
-### Structured Output
-
-Validate AI outputs with JSON schemas:
-
-```typescript
-import { StructuredOutputValidator } from 'societyai';
-
-const validator = new StructuredOutputValidator({
-  type: 'object',
-  properties: {
-    name: { type: 'string' },
-    age: { type: 'number', minimum: 0 },
-  },
-  required: ['name', 'age'],
+// Check message routing in the result
+result.messages.forEach(msg => {
+  console.log(`[${msg.from} → ${msg.to || 'all'}]: ${msg.content}`);
 });
-
-const result = await validator.validateAndRetry(
-  async (previousError) => {
-    const prompt = previousError
-      ? `Previous output was invalid: ${previousError}\nPlease fix it.`
-      : 'Generate user JSON';
-    return await model.process(prompt);
-  },
-  3 // Max retries
-);
 ```
 
-**Learn more**: [Structured Output Guide](./structured-output.md)
+### Parallel Processing with Aggregation
 
-### Metrics & Observability
-
-Track performance, costs, and custom metrics:
+Execute multiple agents in parallel and aggregate their results:
 
 ```typescript
-import { MetricsBuilder, CommonCostConfigs } from 'societyai';
-
-const tracker = MetricsBuilder.create()
-  .withTokenTracking()
-  .withCostTracking(CommonCostConfigs['gpt-4'])
-  .withCustomMetrics(['api_calls'])
+const graph = GraphBuilder.create()
+  .addNode('start', NodeType.START)
+  .addNode('parallel', NodeType.PARALLEL, {
+    agentIds: ['analyst1', 'analyst2', 'analyst3']
+  })
+  .addNode('aggregate', NodeType.AGGREGATE, {
+    aggregator: (results) => {
+      // Combine insights from all analysts
+      const insights = results.map(r => r.output).join('\n---\n');
+      return `# Combined Analysis\n\n${insights}`;
+    }
+  })
+  .addNode('end', NodeType.END)
+  
+  .addEdge('start', 'parallel')
+  .addEdge('parallel', 'aggregate')
+  .addEdge('aggregate', 'end')
   .build();
 
-tracker.start('workflow-1');
-// ... execute workflow ...
-const snapshot = tracker.end('workflow-1');
-
-console.log(`Cost: $${snapshot.costs?.totalCost?.toFixed(4)}`);
-console.log(`Tokens: ${snapshot.tokens?.totalTokens}`);
+const result = await graph.execute('Analyze market trends', agents);
 ```
 
-**Learn more**: [Metrics & Observability Guide](./metrics-observability.md)
+### Loop Controls with Maximum Iterations
 
-## Common Issues
+Protect against infinite loops with built-in safeguards:
 
-### Issue: "Cannot find module 'societyai'"
-
-**Solution**: Make sure you've installed the package:
-
-```bash
-npm install societyai
+```typescript
+const graph = GraphBuilder.create()
+  .addNode('start', NodeType.START)
+  .addNode('loop', NodeType.LOOP, {
+    // Exit condition
+    loopCondition: (iteration, result, context) => {
+      return iteration < 10 && !result.includes('COMPLETE');
+    },
+    maxIterations: 10  // Hard limit
+  })
+  .addNode('process', NodeType.AGENT, { agentId: 'processor' })
+  .addNode('end', NodeType.END)
+  
+  .addEdge('start', 'loop')
+  .addEdge('loop', 'process')
+  .addEdge('process', 'loop')  // Continue loop
+  .addEdge('loop', 'end', { label: 'exit' })  // Exit when done
+  .build();
 ```
-
-### Issue: API Key Errors
-
-**Solution**: Set your API key as an environment variable:
-
-```bash
-export OPENAI_API_KEY="your-key-here"
-# or
-export ANTHROPIC_API_KEY="your-key-here"
-```
-
-### Issue: TypeScript Errors
-
-**Solution**: Ensure your TypeScript configuration is compatible (see [Prerequisites](#typescript-configuration))
-
-## Getting Help
-
-- **Documentation**: [Full docs](../README.md)
-- **Examples**: See [Examples Index](./examples.md)
-- **Issues**: [GitHub Issues](https://github.com/benoitpetit/societyai-package/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/benoitpetit/societyai-package/discussions)
 
 ---
 
-**Next**: [Architecture Overview](./architecture.md) →
+## �准 Best Practices
+
+### 1. **Start Simple, Then Expand**
+
+```typescript
+// ✅ Good: Start with sequential
+Society.create()
+  .addAgent(agent1)
+  .addTask(s => s.withId('step1').withAgents(['agent1']).sequential())
+  .execute(input);
+
+// Then add complexity as needed
+```
+
+### 2. **Use Meaningful IDs**
+
+```typescript
+// ❌ Bad: Generic IDs
+.addAgent(a => a.withId('agent1')...)
+
+// ✅ Good: Descriptive IDs
+.addAgent(a => a.withId('content-writer')...)
+```
+
+### 3. **Leverage Global Context**
+
+```typescript
+Society.create()
+  .withGlobalContext({
+    language: 'fr',
+    tone: 'professional'
+  })
+  .addAgent(writerAgent)
+  .execute(input);
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### "Agent not found" Error
+
+Use constants to avoid typos:
+```typescript
+const AGENTS = {
+  WRITER: 'writer',
+  EDITOR: 'editor'
+} as const;
+
+Society.create()
+  .addAgent(a => a.withId(AGENTS.WRITER)...)
+  .addTask(s => s.withAgents([AGENTS.WRITER]))
+```
+
+### Steps Not Connecting
+
+Enable implicit routing or define explicit nextTasks:
+```typescript
+// Option 1: Implicit
+Society.create()
+  .withStrictRouting(false)
+  .addTask(s => s.withId('step1')...)
+  .addTask(s => s.withId('step2')...)
+
+// Option 2: Explicit
+.addTask(s => s
+  .withId('step1')
+  .withNextTasks(['step2'])
+)
+```
+
+---
+
+## Next Steps
+
+- Explore [Architecture Documentation](./architecture.md) for deep dive into the execution engine
+- Check [Core Concepts](./core/society.md) for Society and Workflow details
+- Learn about [Custom Tools](./capabilities/tools.md) and [Middleware](./core/middleware.md)
+
+

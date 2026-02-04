@@ -26,7 +26,7 @@
  *   console.log(`Agent ${event.agentId} started`);
  * });
  *
- * emitter.on('workflow:complete', async (event) => {
+ * emitter.on('society:complete', async (event) => {
  *   await saveResults(event.result);
  * });
  *
@@ -37,7 +37,7 @@
  * ```
  */
 
-import { StepResult, WorkflowResult, SocietyObserver } from '../core/types';
+import { TaskResult, SocietyResult, SocietyObserver } from '../core/types';
 
 // ============================================================================
 // EVENT TYPES
@@ -59,7 +59,7 @@ export interface BaseEvent {
  * Workflow lifecycle events
  */
 export interface WorkflowStartEvent extends BaseEvent {
-  type: 'workflow:start';
+  type: 'society:start';
   workflowId: string;
   workflowName: string;
   input: string;
@@ -67,15 +67,15 @@ export interface WorkflowStartEvent extends BaseEvent {
 }
 
 export interface WorkflowCompleteEvent extends BaseEvent {
-  type: 'workflow:complete';
+  type: 'society:complete';
   workflowId: string;
   workflowName: string;
-  result: WorkflowResult;
+  result: SocietyResult;
   duration: number;
 }
 
 export interface WorkflowErrorEvent extends BaseEvent {
-  type: 'workflow:error';
+  type: 'society:error';
   workflowId: string;
   workflowName: string;
   error: Error;
@@ -85,31 +85,27 @@ export interface WorkflowErrorEvent extends BaseEvent {
  * Step lifecycle events
  */
 export interface StepStartEvent extends BaseEvent {
-  type: 'step:start';
-  stepId: string;
+  type: 'task:start';
   stepName: string;
   agentIds: string[];
   executionType: string;
 }
 
 export interface StepCompleteEvent extends BaseEvent {
-  type: 'step:complete';
-  stepId: string;
+  type: 'task:complete';
   stepName: string;
-  results: StepResult[];
+  results: TaskResult[];
   duration: number;
 }
 
 export interface StepErrorEvent extends BaseEvent {
-  type: 'step:error';
-  stepId: string;
+  type: 'task:error';
   stepName: string;
   error: Error;
 }
 
 export interface StepSkippedEvent extends BaseEvent {
-  type: 'step:skipped';
-  stepId: string;
+  type: 'task:skipped';
   stepName: string;
   reason: string;
 }
@@ -229,13 +225,13 @@ export type SocietyEvent =
  * Event type to event map for type safety
  */
 export interface SocietyEventMap {
-  'workflow:start': WorkflowStartEvent;
-  'workflow:complete': WorkflowCompleteEvent;
-  'workflow:error': WorkflowErrorEvent;
-  'step:start': StepStartEvent;
-  'step:complete': StepCompleteEvent;
-  'step:error': StepErrorEvent;
-  'step:skipped': StepSkippedEvent;
+  'society:start': WorkflowStartEvent;
+  'society:complete': WorkflowCompleteEvent;
+  'society:error': WorkflowErrorEvent;
+  'task:start': StepStartEvent;
+  'task:complete': StepCompleteEvent;
+  'task:error': StepErrorEvent;
+  'task:skipped': StepSkippedEvent;
   'agent:start': AgentStartEvent;
   'agent:complete': AgentCompleteEvent;
   'agent:error': AgentErrorEvent;
@@ -544,34 +540,33 @@ export class FilteredEventEmitter {
 class EventEmitterObserver implements SocietyObserver {
   constructor(private emitter: SocietyEventEmitter) {}
 
-  onAgentStart(agentId: number, modelName: string, prompt: unknown): void {
+  onAgentStart(agentId: string, modelName: string, prompt: unknown): void {
     this.emitter.emit('agent:start', {
-      agentId: String(agentId),
+      agentId,
       modelName,
       prompt,
     });
   }
 
-  onAgentComplete(agentId: number, modelName: string, result: string): void {
+  onAgentComplete(agentId: string, modelName: string, result: string): void {
     this.emitter.emit('agent:complete', {
-      agentId: String(agentId),
+      agentId,
       modelName,
       result,
       duration: 0, // Duration would need to be tracked separately
     });
   }
 
-  onAgentError(agentId: number, modelName: string, error: Error): void {
+  onAgentError(agentId: string, modelName: string, error: Error): void {
     this.emitter.emit('agent:error', {
-      agentId: String(agentId),
+      agentId,
       modelName,
       error,
     });
   }
 
   onPhaseStart(phase: string): void {
-    this.emitter.emit('step:start', {
-      stepId: phase,
+    this.emitter.emit('task:start', {
       stepName: phase,
       agentIds: [],
       executionType: 'unknown',
@@ -579,8 +574,7 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onPhaseComplete(phase: string): void {
-    this.emitter.emit('step:complete', {
-      stepId: phase,
+    this.emitter.emit('task:complete', {
       stepName: phase,
       results: [],
       duration: 0,
@@ -588,7 +582,7 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onSocietyStart(prompt: string, agentCount: number): void {
-    this.emitter.emit('workflow:start', {
+    this.emitter.emit('society:start', {
       workflowId: 'society',
       workflowName: 'Society',
       input: prompt,
@@ -597,13 +591,13 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onSocietyComplete(finalResult: string): void {
-    this.emitter.emit('workflow:complete', {
+    this.emitter.emit('society:complete', {
       workflowId: 'society',
       workflowName: 'Society',
       result: {
         success: true,
         output: finalResult,
-        stepResults: new Map(),
+        taskResults: new Map(), // New property name
         messages: [],
         duration: 0,
       },
@@ -739,26 +733,26 @@ export class EventLogger {
     const prefix = `[${timestamp}] [${event.type}]`;
 
     switch (event.type) {
-      case 'workflow:start':
+      case 'society:start':
         this.logger.info(
           `${prefix} Workflow "${event.workflowName}" started with ${event.agentCount} agents`
         );
         break;
-      case 'workflow:complete':
+      case 'society:complete':
         this.logger.info(`${prefix} Workflow completed in ${event.duration}ms`);
         break;
-      case 'workflow:error':
+      case 'society:error':
         this.logger.error(`${prefix} Workflow error:`, event.error.message);
         break;
-      case 'step:start':
+      case 'task:start':
         this.logger.info(`${prefix} Step "${event.stepName}" started (${event.executionType})`);
         break;
-      case 'step:complete':
+      case 'task:complete':
         this.logger.info(
           `${prefix} Step "${event.stepName}" completed with ${event.results.length} results`
         );
         break;
-      case 'step:error':
+      case 'task:error':
         this.logger.error(`${prefix} Step "${event.stepName}" error:`, event.error.message);
         break;
       case 'agent:start':
@@ -814,8 +808,8 @@ export class EventAggregator {
    * Get summary statistics
    */
   getSummary(): EventSummary {
-    const workflowEvents = this.events.filter((e) => e.type.startsWith('workflow:'));
-    const stepEvents = this.events.filter((e) => e.type.startsWith('step:'));
+    const societyEvents = this.events.filter((e) => e.type.startsWith('society:'));
+    const taskEvents = this.events.filter((e) => e.type.startsWith('task:'));
     const agentEvents = this.events.filter((e) => e.type.startsWith('agent:'));
 
     const agentDurations = this.events
@@ -828,8 +822,8 @@ export class EventAggregator {
 
     return {
       totalEvents: this.events.length,
-      workflowCount: workflowEvents.length,
-      stepCount: stepEvents.length,
+      societyCount: societyEvents.length,
+      taskCount: taskEvents.length,
       agentCount: agentEvents.length,
       errorCount: errors.length,
       avgAgentDuration:
@@ -862,8 +856,8 @@ export class EventAggregator {
  */
 export interface EventSummary {
   totalEvents: number;
-  workflowCount: number;
-  stepCount: number;
+  societyCount: number;
+  taskCount: number;
   agentCount: number;
   errorCount: number;
   avgAgentDuration: number;

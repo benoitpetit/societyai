@@ -1,13 +1,13 @@
 import { Logger, LogLevel } from '../core/config';
 
 /**
- * Implémentation par défaut du Logger
+ * Default Logger implementation
  */
 export class DefaultLogger implements Logger {
   private level: LogLevel = LogLevel.INFO;
 
   /**
-   * Log un message de debug
+   * Log a debug message
    */
   debug(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.DEBUG) {
@@ -16,7 +16,7 @@ export class DefaultLogger implements Logger {
   }
 
   /**
-   * Log un message d'information
+   * Log an info message
    */
   info(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.INFO) {
@@ -25,7 +25,7 @@ export class DefaultLogger implements Logger {
   }
 
   /**
-   * Log un message d'erreur
+   * Log an error message
    */
   error(message: string, ...args: unknown[]): void {
     if (this.level >= LogLevel.ERROR) {
@@ -34,14 +34,14 @@ export class DefaultLogger implements Logger {
   }
 
   /**
-   * Définit le niveau de log
+   * Set the log level
    */
   setLevel(level: LogLevel): void {
     this.level = level;
   }
 
   /**
-   * Formate un message avec ses arguments
+   * Format a message with its arguments
    */
   private format(message: string, args: unknown[]): string {
     if (args.length === 0) {

@@ -66,7 +66,7 @@ export interface Logger {
 /**
  * Message dans un échange de chat
  */
-export interface Message {
+export interface ChatMessage {
   role: string;
   content: string;
 }
@@ -77,7 +77,7 @@ export interface Message {
 export interface StructuredPrompt {
   system?: string;
   user?: string;
-  messages?: Message[];
+  messages?: ChatMessage[];
   options?: Record<string, unknown>;
 }
 
@@ -114,7 +114,7 @@ export interface StandardModelOptions {
 /**
  * Tâche à exécuter par le pool de workers
  */
-export interface Task<T = string> {
+export interface WorkerTask<T = string> {
   /**
    * Fonction à exécuter
    */

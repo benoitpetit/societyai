@@ -4,7 +4,9 @@
  * Provides fluent builder API for creating agent configurations
  */
 
-import { AIModel, AgentConfig, AgentRole } from '../core/types';
+import { AIModel, Agent, Role } from '../core/types';
+import { MemorySystem } from '../capabilities/memory';
+import { Tool } from '../capabilities/tools';
 import { InvalidConfigurationError } from '../core/errors';
 import { FluentRoleBuilder } from './role-builder';
 
@@ -18,7 +20,7 @@ import { FluentRoleBuilder } from './role-builder';
 export class FluentAgentBuilder {
   private _id: string = '';
   private _name?: string;
-  private _role?: AgentRole;
+  private _role?: Role;
   private _model?: AIModel;
   private _canCommunicateWith: string[] = [];
   private _priority: number = 0;
@@ -26,6 +28,8 @@ export class FluentAgentBuilder {
   private _retryConfig?: { maxRetries?: number; initialBackoff?: number };
   private _tags: string[] = [];
   private _metadata: Record<string, unknown> = {};
+  private _memory?: MemorySystem;
+  private _tools: Tool[] = [];
 
   /**
    * Create a new instance of FluentAgentBuilder
@@ -52,12 +56,16 @@ export class FluentAgentBuilder {
   }
 
   /**
-   * Set the role using a builder function or direct role object
+   * Set the role using a builder function, builder instance, or direct role object
    */
-  withRole(roleOrBuilder: AgentRole | ((builder: FluentRoleBuilder) => FluentRoleBuilder)): this {
+  withRole(
+    roleOrBuilder: Role | FluentRoleBuilder | ((builder: FluentRoleBuilder) => FluentRoleBuilder)
+  ): this {
     if (typeof roleOrBuilder === 'function') {
       const builder = new FluentRoleBuilder();
       this._role = roleOrBuilder(builder).build();
+    } else if (roleOrBuilder instanceof FluentRoleBuilder) {
+      this._role = roleOrBuilder.build();
     } else {
       this._role = roleOrBuilder;
     }
@@ -67,7 +75,7 @@ export class FluentAgentBuilder {
   /**
    * Set the role directly
    */
-  useRole(role: AgentRole): this {
+  useRole(role: Role): this {
     this._role = role;
     return this;
   }
@@ -145,9 +153,33 @@ export class FluentAgentBuilder {
   }
 
   /**
+   * Attach a memory system to the agent
+   */
+  withMemory(memory: MemorySystem): this {
+    this._memory = memory;
+    return this;
+  }
+
+  /**
+   * Add tools to the agent
+   */
+  withTools(tools: Tool[]): this {
+    this._tools = tools;
+    return this;
+  }
+
+  /**
+   * Add a single tool
+   */
+  addTool(tool: Tool): this {
+    this._tools.push(tool);
+    return this;
+  }
+
+  /**
    * Build the agent configuration
    */
-  build(): AgentConfig & { tags?: string[]; metadata?: Record<string, unknown> } {
+  build(): Agent & { tags?: string[]; metadata?: Record<string, unknown> } {
     if (!this._id) throw new InvalidConfigurationError('Agent id is required');
     if (!this._role) throw new InvalidConfigurationError('Agent role is required');
     if (!this._model) throw new InvalidConfigurationError('Agent model is required');
@@ -165,6 +197,8 @@ export class FluentAgentBuilder {
       retryConfig: this._retryConfig,
       tags: this._tags.length > 0 ? this._tags : undefined,
       metadata: Object.keys(this._metadata).length > 0 ? this._metadata : undefined,
+      memory: this._memory,
+      tools: this._tools.length > 0 ? this._tools : undefined,
     };
   }
 }

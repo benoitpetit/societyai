@@ -60,7 +60,7 @@ export interface JSONSchema {
 }
 
 /**
- * Validation error
+ * Validation error with enhanced context
  */
 export interface ValidationError {
   /** Error path (e.g., 'data.user.name') */
@@ -71,6 +71,18 @@ export interface ValidationError {
   expected?: string;
   /** Actual value */
   actual?: unknown;
+  /** Error code for programmatic handling */
+  code?:
+    | 'TYPE_MISMATCH'
+    | 'MISSING_REQUIRED'
+    | 'INVALID_VALUE'
+    | 'CONSTRAINT_VIOLATION'
+    | 'PARSE_ERROR'
+    | 'ADDITIONAL_PROPERTY';
+  /** Suggestion for fixing the error */
+  suggestion?: string;
+  /** Schema context where error occurred */
+  schemaContext?: JSONSchema;
 }
 
 /**
@@ -120,12 +132,35 @@ export class StructuredOutputValidator<T = unknown> {
 
       return { valid: true, data: data as T };
     } catch (error) {
+      const parseError = error as Error;
+      let suggestion = 'Ensure output is valid JSON';
+
+      // Enhanced parse error suggestions
+      if (parseError.message.includes('Unexpected token')) {
+        suggestion = 'Check for syntax errors: missing commas, quotes, or brackets';
+      } else if (parseError.message.includes('Unexpected end')) {
+        suggestion = 'JSON is incomplete - check for missing closing brackets or braces';
+      } else if (parseError.message.includes('position')) {
+        const posMatch = parseError.message.match(/position (\d+)/);
+        if (posMatch) {
+          const pos = parseInt(posMatch[1]);
+          const context = output.substring(
+            Math.max(0, pos - 20),
+            Math.min(output.length, pos + 20)
+          );
+          suggestion = `JSON parse error near position ${pos}: "${context}"`;
+        }
+      }
+
       return {
         valid: false,
         errors: [
           {
             path: 'root',
-            message: `Failed to parse JSON: ${(error as Error).message}`,
+            message: `Failed to parse JSON: ${parseError.message}`,
+            code: 'PARSE_ERROR',
+            suggestion,
+            actual: output.substring(0, 100) + (output.length > 100 ? '...' : ''),
           },
         ],
       };
@@ -210,9 +245,12 @@ export class StructuredOutputValidator<T = unknown> {
     if (actualType !== schema.type) {
       errors.push({
         path,
-        message: `Expected type ${schema.type}`,
+        message: `Type mismatch: expected ${schema.type}, got ${actualType}`,
         expected: schema.type,
         actual: actualType,
+        code: 'TYPE_MISMATCH',
+        suggestion: this.generateTypeSuggestion(schema.type, actualType, data),
+        schemaContext: schema,
       });
       return errors; // Can't continue validation if type is wrong
     }
@@ -221,9 +259,12 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.const !== undefined && data !== schema.const) {
       errors.push({
         path,
-        message: `Expected constant value`,
+        message: `Value must be exactly: ${JSON.stringify(schema.const)}`,
         expected: JSON.stringify(schema.const),
         actual: data,
+        code: 'INVALID_VALUE',
+        suggestion: `Use the exact constant value: ${JSON.stringify(schema.const)}`,
+        schemaContext: schema,
       });
     }
 
@@ -231,9 +272,12 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.enum && !schema.enum.includes(data)) {
       errors.push({
         path,
-        message: `Value must be one of: ${schema.enum.join(', ')}`,
+        message: `Value must be one of: ${schema.enum.map((v) => JSON.stringify(v)).join(', ')}`,
         expected: schema.enum.join(', '),
         actual: data,
+        code: 'INVALID_VALUE',
+        suggestion: `Choose one of these values: ${schema.enum.map((v) => JSON.stringify(v)).join(', ')}`,
+        schemaContext: schema,
       });
     }
 
@@ -257,6 +301,25 @@ export class StructuredOutputValidator<T = unknown> {
   }
 
   /**
+   * Generate type conversion suggestion
+   */
+  private generateTypeSuggestion(expectedType: string, actualType: string, value: unknown): string {
+    if (expectedType === 'string' && actualType === 'number') {
+      return `Convert number to string: "${value}"`;
+    }
+    if (expectedType === 'number' && actualType === 'string') {
+      return `Convert string to number: ${value} → parse as number`;
+    }
+    if (expectedType === 'array' && actualType === 'object') {
+      return `Wrap in array: [${JSON.stringify(value)}]`;
+    }
+    if (expectedType === 'object' && actualType === 'string') {
+      return `Parse string as JSON object or provide object structure`;
+    }
+    return `Provide a ${expectedType} value instead of ${actualType}`;
+  }
+
+  /**
    * Validate object
    */
   private validateObject(
@@ -270,10 +333,16 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.required) {
       for (const required of schema.required) {
         if (!(required in obj)) {
+          const propSchema = schema.properties?.[required];
           errors.push({
             path: `${path}.${required}`,
-            message: `Missing required property`,
+            message: `Missing required property '${required}'`,
             expected: required,
+            code: 'MISSING_REQUIRED',
+            suggestion: propSchema
+              ? `Add property "${required}" of type ${propSchema.type}${propSchema.description ? `: ${propSchema.description}` : ''}`
+              : `Add property "${required}" to the object`,
+            schemaContext: propSchema,
           });
         }
       }
@@ -286,10 +355,14 @@ export class StructuredOutputValidator<T = unknown> {
         if (propSchema) {
           errors.push(...this.validateData(value, propSchema, `${path}.${key}`));
         } else if (schema.additionalProperties === false) {
+          const allowedProps = Object.keys(schema.properties).join(', ');
           errors.push({
             path: `${path}.${key}`,
-            message: `Additional property not allowed`,
+            message: `Property '${key}' is not allowed`,
             actual: key,
+            code: 'ADDITIONAL_PROPERTY',
+            suggestion: `Remove '${key}' or use one of the allowed properties: ${allowedProps}`,
+            schemaContext: schema,
           });
         }
       }
@@ -308,17 +381,23 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.minItems !== undefined && arr.length < schema.minItems) {
       errors.push({
         path,
-        message: `Array must have at least ${schema.minItems} items`,
+        message: `Array has too few items: ${arr.length} < ${schema.minItems}`,
         expected: `>= ${schema.minItems}`,
         actual: arr.length,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Add ${schema.minItems - arr.length} more item(s) to the array`,
+        schemaContext: schema,
       });
     }
     if (schema.maxItems !== undefined && arr.length > schema.maxItems) {
       errors.push({
         path,
-        message: `Array must have at most ${schema.maxItems} items`,
+        message: `Array has too many items: ${arr.length} > ${schema.maxItems}`,
         expected: `<= ${schema.maxItems}`,
         actual: arr.length,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Remove ${arr.length - schema.maxItems} item(s) from the array`,
+        schemaContext: schema,
       });
     }
 
@@ -341,17 +420,23 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.minLength !== undefined && str.length < schema.minLength) {
       errors.push({
         path,
-        message: `String must be at least ${schema.minLength} characters`,
+        message: `String too short: ${str.length} < ${schema.minLength} characters`,
         expected: `>= ${schema.minLength}`,
         actual: str.length,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Add ${schema.minLength - str.length} more character(s)`,
+        schemaContext: schema,
       });
     }
     if (schema.maxLength !== undefined && str.length > schema.maxLength) {
       errors.push({
         path,
-        message: `String must be at most ${schema.maxLength} characters`,
+        message: `String too long: ${str.length} > ${schema.maxLength} characters`,
         expected: `<= ${schema.maxLength}`,
         actual: str.length,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Remove ${str.length - schema.maxLength} character(s)`,
+        schemaContext: schema,
       });
     }
     if (schema.pattern) {
@@ -359,9 +444,12 @@ export class StructuredOutputValidator<T = unknown> {
       if (!regex.test(str)) {
         errors.push({
           path,
-          message: `String must match pattern: ${schema.pattern}`,
+          message: `String does not match required pattern`,
           expected: schema.pattern,
-          actual: str,
+          actual: str.substring(0, 50) + (str.length > 50 ? '...' : ''),
+          code: 'CONSTRAINT_VIOLATION',
+          suggestion: `Format the string to match pattern: ${schema.pattern}`,
+          schemaContext: schema,
         });
       }
     }
@@ -378,17 +466,23 @@ export class StructuredOutputValidator<T = unknown> {
     if (schema.minimum !== undefined && num < schema.minimum) {
       errors.push({
         path,
-        message: `Number must be >= ${schema.minimum}`,
+        message: `Number below minimum: ${num} < ${schema.minimum}`,
         expected: `>= ${schema.minimum}`,
         actual: num,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Use a value >= ${schema.minimum}`,
+        schemaContext: schema,
       });
     }
     if (schema.maximum !== undefined && num > schema.maximum) {
       errors.push({
         path,
-        message: `Number must be <= ${schema.maximum}`,
+        message: `Number above maximum: ${num} > ${schema.maximum}`,
         expected: `<= ${schema.maximum}`,
         actual: num,
+        code: 'CONSTRAINT_VIOLATION',
+        suggestion: `Use a value <= ${schema.maximum}`,
+        schemaContext: schema,
       });
     }
 
@@ -405,26 +499,70 @@ export class StructuredOutputValidator<T = unknown> {
   }
 
   /**
-   * Generate error feedback for agent
+   * Generate error feedback for agent with enhanced suggestions
    */
   private generateErrorFeedback(errors: ValidationError[]): string {
     const lines = [
-      'Your output does not match the required schema. Please fix the following errors:',
+      '❌ JSON Validation Failed',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      `Found ${errors.length} error${errors.length > 1 ? 's' : ''}:`,
       '',
     ];
 
-    for (const error of errors) {
-      lines.push(`- ${error.path}: ${error.message}`);
+    errors.forEach((error, index) => {
+      lines.push(`${index + 1}. Location: ${error.path}`);
+      lines.push(`   Problem: ${error.message}`);
+
       if (error.expected) {
-        lines.push(`  Expected: ${error.expected}`);
+        lines.push(`   Expected: ${error.expected}`);
       }
       if (error.actual !== undefined) {
-        lines.push(`  Actual: ${JSON.stringify(error.actual)}`);
+        lines.push(`   Actual: ${JSON.stringify(error.actual)}`);
       }
-    }
+      if (error.suggestion) {
+        lines.push(`   💡 Suggestion: ${error.suggestion}`);
+      }
+      if (error.code) {
+        lines.push(`   Code: ${error.code}`);
+      }
+      lines.push('');
+    });
 
-    lines.push('');
-    lines.push('Please provide a corrected JSON response that matches the schema.');
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    lines.push('📝 Please provide a corrected JSON response following these guidelines:');
+
+    // Group errors by type for summary
+    const errorsByType = errors.reduce(
+      (acc, err) => {
+        const code = err.code || 'OTHER';
+        if (!acc[code]) acc[code] = [];
+        acc[code].push(err);
+        return acc;
+      },
+      {} as Record<string, ValidationError[]>
+    );
+
+    if (errorsByType.MISSING_REQUIRED) {
+      lines.push(
+        `   • Add missing required fields: ${errorsByType.MISSING_REQUIRED.map((e) => e.expected).join(', ')}`
+      );
+    }
+    if (errorsByType.TYPE_MISMATCH) {
+      lines.push(
+        `   • Fix type mismatches at: ${errorsByType.TYPE_MISMATCH.map((e) => e.path).join(', ')}`
+      );
+    }
+    if (errorsByType.ADDITIONAL_PROPERTY) {
+      lines.push(
+        `   • Remove unexpected properties: ${errorsByType.ADDITIONAL_PROPERTY.map((e) => e.actual).join(', ')}`
+      );
+    }
+    if (errorsByType.CONSTRAINT_VIOLATION) {
+      lines.push(
+        `   • Fix constraint violations in: ${errorsByType.CONSTRAINT_VIOLATION.map((e) => e.path).join(', ')}`
+      );
+    }
 
     return lines.join('\n');
   }

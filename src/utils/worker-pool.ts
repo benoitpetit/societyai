@@ -1,4 +1,4 @@
-import { Task } from '../core/config';
+import { WorkerTask } from '../core/config';
 
 /**
  * Pool de workers pour exécuter des tâches en parallèle
@@ -7,7 +7,7 @@ import { Task } from '../core/config';
 export class WorkerPool {
   private maxWorkers: number;
   private running = 0;
-  private queue: Array<Task<unknown>> = [];
+  private queue: Array<WorkerTask<unknown>> = [];
   private stopped = false;
   private signal?: AbortSignal;
 
@@ -51,7 +51,7 @@ export class WorkerPool {
         }
       };
 
-      const task: Task<unknown> = {
+      const task: WorkerTask<unknown> = {
         fn: wrappedFn,
       };
 

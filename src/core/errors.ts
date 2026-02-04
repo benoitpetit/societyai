@@ -26,9 +26,32 @@ export class ModelNotSupportedError extends SocietyError {
  * Error when prompt processing fails
  */
 export class ProcessingFailedError extends SocietyError {
-  constructor(message = 'Prompt processing failed') {
+  public readonly context?: {
+    agentId?: string;
+    stepId?: string;
+    modelName?: string;
+    retryCount?: number;
+  };
+
+  constructor(message = 'Prompt processing failed', context?: ProcessingFailedError['context']) {
     super(message, 'PROCESSING_FAILED');
     this.name = 'ProcessingFailedError';
+    this.context = context;
+  }
+
+  toString(): string {
+    let msg = `${this.name}: ${this.message}`;
+    if (this.context) {
+      const details: string[] = [];
+      if (this.context.agentId) details.push(`Agent: ${this.context.agentId}`);
+      if (this.context.stepId) details.push(`Step: ${this.context.stepId}`);
+      if (this.context.modelName) details.push(`Model: ${this.context.modelName}`);
+      if (this.context.retryCount !== undefined) details.push(`Retry: ${this.context.retryCount}`);
+      if (details.length > 0) {
+        msg += `\n  Context: ${details.join(' | ')}`;
+      }
+    }
+    return msg;
   }
 }
 
@@ -76,9 +99,32 @@ export class OperationCancelledError extends SocietyError {
  * Error when execution timeout is exceeded
  */
 export class TimeoutError extends SocietyError {
-  constructor(message = 'Execution timeout exceeded') {
+  public readonly context?: {
+    timeoutMs?: number;
+    elapsedMs?: number;
+    stepId?: string;
+  };
+
+  constructor(message = 'Execution timeout exceeded', context?: TimeoutError['context']) {
     super(message, 'TIMEOUT');
     this.name = 'TimeoutError';
+    this.context = context;
+  }
+
+  toString(): string {
+    let msg = `${this.name}: ${this.message}`;
+    if (this.context) {
+      if (this.context.timeoutMs) {
+        msg += `\n  Timeout: ${this.context.timeoutMs}ms`;
+      }
+      if (this.context.elapsedMs) {
+        msg += `\n  Elapsed: ${this.context.elapsedMs}ms`;
+      }
+      if (this.context.stepId) {
+        msg += `\n  Step: ${this.context.stepId}`;
+      }
+    }
+    return msg;
   }
 }
 
@@ -86,9 +132,48 @@ export class TimeoutError extends SocietyError {
  * Error when configuration is invalid
  */
 export class InvalidConfigurationError extends SocietyError {
-  constructor(message = 'Invalid configuration') {
+  public readonly context?: {
+    societyId?: string;
+    stepId?: string;
+    agentId?: string;
+    suggestion?: string;
+    availableIds?: string[];
+  };
+
+  constructor(message: string, context?: InvalidConfigurationError['context']) {
     super(message, 'INVALID_CONFIG');
     this.name = 'InvalidConfigurationError';
+    this.context = context;
+  }
+
+  toString(): string {
+    let msg = `${this.name}: ${this.message}`;
+    if (this.context) {
+      const details: string[] = [];
+      if (this.context.societyId) details.push(`Society: ${this.context.societyId}`);
+      if (this.context.stepId) details.push(`Step: ${this.context.stepId}`);
+      if (this.context.agentId) details.push(`Agent: ${this.context.agentId}`);
+      if (this.context.availableIds && this.context.availableIds.length > 0) {
+        details.push(`Available IDs: ${this.context.availableIds.join(', ')}`);
+      }
+      if (details.length > 0) {
+        msg += `\n  Context: ${details.join(' | ')}`;
+      }
+      if (this.context.suggestion) {
+        msg += `\n  💡 Suggestion: ${this.context.suggestion}`;
+      }
+    }
+    return msg;
+  }
+}
+
+/**
+ * Error when workflow routing is invalid or ambiguous
+ */
+export class InvalidWorkflowRoutingError extends SocietyError {
+  constructor(message = 'Invalid workflow routing') {
+    super(message, 'INVALID_ROUTING');
+    this.name = 'InvalidWorkflowRoutingError';
   }
 }
 

@@ -14,17 +14,22 @@
  *
  * @example
  * ```typescript
- * import { Society, createRole, Strategies, Pipelines } from 'societyai';
+ * import { Society, AggregationStrategies } from 'societyai';
  *
  * // Create a simple society
  * const result = await Society.create()
  *   .withName('Analysis Team')
  *   .addAgent(a => a
- *     .withId('analyst')
- *     .withRole(r => r
- *       .withSystemPrompt('You are a data analyst'))
+ *     .withId('analyst1')
+ *     .withRole(r => r.withSystemPrompt('You are a data analyst'))
  *     .withModel(myModel))
- *   .scatterGather(Strategies.consensus(0.7).aggregate)
+ *   .addAgent(a => a
+ *     .withId('analyst2')
+ *     .withRole(r => r.withSystemPrompt('You are a reviewer'))
+ *     .withModel(myModel))
+ *   .usePipeline(p => p
+ *     .scatterGather(['analyst1', 'analyst2'])
+ *     .aggregate(AggregationStrategies.concat()))
  *   .execute('Analyze this data');
  * ```
  *
@@ -72,15 +77,8 @@ export * from './core/models';
 // CORE SOCIETY (Main Logic)
 // ============================================================================
 
-// Export ciblé: on expose le système de workflow, sans ré-exporter les helpers legacy.
-export {
-  MessageBus,
-  RoleBuilder as LegacyRoleBuilder,
-  AgentBuilder as LegacyAgentBuilder,
-  StepBuilder as LegacyStepBuilder,
-  WorkflowConfigBuilder,
-  DefaultWorkflowExecutor,
-} from './agents/society';
+// Export ciblé: on expose le système de workflow.
+export { SocietyExecutor } from './agents/society-executor';
 
 // ============================================================================
 // FLUENT BUILDER API
@@ -94,19 +92,16 @@ export {
   // Fluent builders
   FluentRoleBuilder,
   FluentAgentBuilder,
-  FluentStepBuilder,
+  FluentTaskBuilder,
   FluentPipelineBuilder,
   // Aliases for better DX
   FluentRoleBuilder as RoleBuilder,
   FluentAgentBuilder as AgentBuilder,
-  FluentStepBuilder as StepBuilder,
+  FluentTaskBuilder as TaskBuilder,
   // Quick helpers
   createRole,
   createAgent,
 } from './builders/builder';
-
-// Note: les primitives workflow/builder issues de society.ts sont ré-exportées explicitement.
-// Cela évite d’exposer l’API legacy via un `export *`.
 
 // Builder types
 export type { PipelineConfig, PipelinePattern } from './builders/builder';
@@ -140,45 +135,6 @@ export type {
   StepMiddlewareFn,
   StepMiddlewareContext,
 } from './core/middleware';
-
-// ============================================================================
-// AGGREGATION STRATEGIES
-// ============================================================================
-
-export {
-  // Strategy builder
-  StrategyBuilder,
-  // Built-in strategies
-  Strategies,
-  // Utilities
-  createStrategy,
-  chainStrategies,
-  parallelStrategies,
-} from './execution/strategies';
-
-// Strategy types
-export type {
-  AggregationStrategy,
-  AggregationResult,
-  StrategyFactory,
-} from './execution/strategies';
-
-// ============================================================================
-// PIPELINE PATTERNS
-// ============================================================================
-
-export {
-  // Pipeline builder
-  PipelineBuilder as PipelinePatternBuilder,
-  // Pre-built pipelines
-  Pipelines,
-  // Pipeline composition
-  composePipelines,
-  parallelPipelines,
-} from './execution/pipeline';
-
-// Pipeline types
-export type { Pipeline, PipelineContext, PipelineResult, PipelineStep } from './execution/pipeline';
 
 // ============================================================================
 // CONTEXT SYSTEM
@@ -265,13 +221,16 @@ export type {
 } from './observability/events';
 
 // ============================================================================
-// NEW: GRAPH-BASED EXECUTION ENGINE (Phase 1)
+// EXECUTION ENGINE
 // ============================================================================
 
 export {
   // Core graph
-  SocietyGraph,
+  ExecutionEngine as SocietyGraph,
+  ExecutionEngine,
   GraphBuilder,
+  // Recursive engine model
+  EngineAsModel,
   // Types
   NodeType,
   GraphNode,
@@ -279,10 +238,10 @@ export {
   ConditionalEdge,
   GraphContext,
   GraphResult,
-} from './execution/graph';
+} from './execution/engine/execution-engine';
 
 // ============================================================================
-// NEW: TOOL CALLING SYSTEM (Phase 2)
+// TOOL CALLING SYSTEM
 // ============================================================================
 
 export {
@@ -301,7 +260,7 @@ export {
 } from './capabilities/tools';
 
 // ============================================================================
-// NEW: MEMORY SYSTEM (Phase 2)
+// MEMORY SYSTEM
 // ============================================================================
 
 export {
@@ -320,7 +279,7 @@ export {
 } from './capabilities/memory';
 
 // ============================================================================
-// NEW: STRUCTURED OUTPUT VALIDATION (Phase 3)
+// STRUCTURED OUTPUT VALIDATION
 // ============================================================================
 
 export {
@@ -337,26 +296,5 @@ export {
 } from './capabilities/validation';
 
 // ============================================================================
-// NEW: METRICS AND OBSERVABILITY (Phase 3)
+// METRICS AND OBSERVABILITY
 // ============================================================================
-
-export {
-  // Tracker
-  MetricsTracker,
-  MetricsBuilder,
-  // Utilities
-  TokenCounter,
-  PerformanceProfiler,
-  // Common configs
-  CommonCostConfigs,
-  // Types
-  TokenMetrics,
-  ExecutionMetrics,
-  CostMetrics,
-  MetricsSnapshot,
-  AggregatedMetrics,
-  CostConfig,
-  OTelTrace,
-} from './observability/metrics';
-export * from './execution/graph';
-export * from './execution/patterns';
