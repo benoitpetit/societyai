@@ -85,7 +85,8 @@ here are public exports from `societyai`.
 
 - **[Vector Store](../6-advanced-features/advanced-features.md)**
   - `InMemoryVectorStore` — In-memory vector store for prototyping
-  - `VectorStoreAdapter` — Bridge between `InMemoryVectorStore` and `VectorProvider`
+  - `VectorStoreAdapter` — Bridge between `InMemoryVectorStore` and
+    `VectorProvider`
   - `EmbeddingFunction` — Type for embedding functions
   - `VectorEntry`, `VectorStoreConfig`, `SearchOptions`, `SearchResult`,
     `DistanceMetric` — Types

@@ -64,7 +64,8 @@ execution logic.
   - _Config_: `condition: (result: string, context: GraphContext) => boolean`.
   - _Behavior_: Evaluates input and routes to either `truePath` or `falsePath`.
 - **`LOOP`**: Handles iterative execution.
-  - _Config_: `maxIterations`, `loopCondition?: (iteration, result, context) => boolean`.
+  - _Config_: `maxIterations`,
+    `loopCondition?: (iteration, result, context) => boolean`.
   - _Behavior_: Checks condition; if false, exits the loop.
 
 ### 🤝 Complex Pattern Nodes

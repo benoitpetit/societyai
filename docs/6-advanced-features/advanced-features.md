@@ -316,10 +316,7 @@ npm install --save-dev fast-check
 
 ```typescript
 import * as fc from 'fast-check';
-import {
-  workflowStateArbitrary,
-  vectorEmbeddingArbitrary,
-} from 'societyai'; // or define your own test arbitraries
+import { workflowStateArbitrary, vectorEmbeddingArbitrary } from 'societyai'; // or define your own test arbitraries
 
 // Test: Persistence round-trip
 test('save/load preserves data', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "societyai",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems with DAG-based orchestration. Build sophisticated workflows where AI agents work together through dependency graphs, conditional routing, and pluggable execution strategies.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

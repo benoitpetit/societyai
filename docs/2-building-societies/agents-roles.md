@@ -18,34 +18,42 @@ const agent = createAgent('analyst', analystRole, myModel)
 
 // Or using withRole callback for inline role creation
 Society.create()
-  .addAgent(a => a
-    .withId('analyst')
-    .withRole(r => r
-      .withSystemPrompt('You are a data analyst')
-      .withCapabilities(['analysis']))
-    .withModel(myModel)
+  .addAgent((a) =>
+    a
+      .withId('analyst')
+      .withRole((r) =>
+        r
+          .withSystemPrompt('You are a data analyst')
+          .withCapabilities(['analysis'])
+      )
+      .withModel(myModel)
   )
   .execute('...');
 ```
 
 ### Methods
 
-- **`create()`** *(static)*: Creates a new empty agent builder.
+- **`create()`** _(static)_: Creates a new empty agent builder.
 - **`withId(id: string)`**: Sets the agent ID.
 - **`withName(name: string)`**: Sets the name.
-- **`withRole(roleOrBuilder)`**: Associates a role. Accepts a `Role` object, a `FluentRoleBuilder`, or a callback function `(builder: FluentRoleBuilder) => FluentRoleBuilder` for inline role creation.
+- **`withRole(roleOrBuilder)`**: Associates a role. Accepts a `Role` object, a
+  `FluentRoleBuilder`, or a callback function
+  `(builder: FluentRoleBuilder) => FluentRoleBuilder` for inline role creation.
 - **`useRole(role: Role)`**: Associates a pre-built role (alias for `withRole`).
 - **`withModel(model: AIModel)`**: Associates an AI model.
 - **`withPriority(priority: number)`**: Sets the priority.
-- **`canCommunicateWith(agentIds: string[])`**: Sets which agents this agent can communicate with.
+- **`canCommunicateWith(agentIds: string[])`**: Sets which agents this agent can
+  communicate with.
 - **`withMemory(memory: MemorySystem)`**: Adds a memory system.
 - **`withTools(tools: Tool[])`**: Sets the list of tools.
 - **`addTool(tool: Tool)`**: Adds a single tool.
-- **`withRetry(config: { maxRetries?: number; initialBackoff?: number })`**: Configures retries.
+- **`withRetry(config: { maxRetries?: number; initialBackoff?: number })`**:
+  Configures retries.
 - **`withTags(tags: string[])`**: Sets tags for filtering and grouping.
 - **`addTag(tag: string)`**: Adds a single tag.
 - **`withMetadata(metadata: Record<string, unknown>)`**: Adds custom metadata.
-- **`withInitialContext(context: Record<string, unknown>)`**: Sets the initial context.
+- **`withInitialContext(context: Record<string, unknown>)`**: Sets the initial
+  context.
 - **`addContext(key: string, value: unknown)`**: Adds a single context entry.
 - **`build()`**: Builds the agent.
 
@@ -59,15 +67,17 @@ const role = createRole()
   .withName('Data Analyst')
   .withSystemPrompt('You are an expert data analyst')
   .withCapabilities(['data_analysis', 'visualization'])
-  .withPromptTemplate(`System: {system}
+  .withPromptTemplate(
+    `System: {system}
     Context: {context}
-    Input: {input}`)
+    Input: {input}`
+  )
   .build();
 ```
 
 ### Methods
 
-- **`create()`** *(static)*: Creates a new empty role builder.
+- **`create()`** _(static)_: Creates a new empty role builder.
 - **`withId(id: string)`**: Sets the role ID.
 - **`withName(name: string)`**: Sets the name.
 - **`withDescription(description: string)`**: Sets the role description.
@@ -86,17 +96,14 @@ const role = createRole()
 Helper function to create a role.
 
 ```typescript
-const role = createRole(
-  'analyst',
-  'You are an expert data analyst',
-  { 
-    name: 'Data Analyst',
-    capabilities: ['analysis', 'visualization'] 
-  }
-);
+const role = createRole('analyst', 'You are an expert data analyst', {
+  name: 'Data Analyst',
+  capabilities: ['analysis', 'visualization'],
+});
 ```
 
 **Parameters:**
+
 - `id: string` - Role identifier
 - `systemPrompt?: string` - System prompt (optional)
 - `options?` - Additional options:
@@ -113,6 +120,6 @@ Helper function to create an agent.
 ```typescript
 const agent = createAgent('analyst', analystRole, myModel, {
   name: 'Senior Analyst',
-  priority: 10
+  priority: 10,
 });
 ```

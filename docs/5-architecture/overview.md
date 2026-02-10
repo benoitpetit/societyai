@@ -534,7 +534,10 @@ const innerGraph = GraphBuilder.create()
   .addEdge('agent1', 'end')
   .build();
 
-const innerModel = new EngineAsModel({ engine: innerGraph, agents: [innerAgent] });
+const innerModel = new EngineAsModel({
+  engine: innerGraph,
+  agents: [innerAgent],
+});
 
 const outerSociety = Society.create()
   .addAgent((a) =>
