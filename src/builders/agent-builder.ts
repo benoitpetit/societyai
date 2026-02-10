@@ -161,10 +161,10 @@ export class FluentAgentBuilder {
   }
 
   /**
-   * Add tools to the agent
+   * Add tools to the agent (cumulative — merges with existing tools)
    */
   withTools(tools: Tool[]): this {
-    this._tools = tools;
+    this._tools.push(...tools);
     return this;
   }
 

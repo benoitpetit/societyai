@@ -32,12 +32,16 @@
  * ```
  */
 
-import { Agent, AIModel, Message, SocietyObserver, TaskResult } from '../../core/types';
+import { Agent, Message, SocietyObserver, TaskResult } from '../../core/types';
+import { AgentExecutor } from '../../agents/agent-executor';
 import { getLogger } from '../../observability/logger';
 import { WorkerPool } from '../../utils/worker-pool';
 import { ProcessingFailedError } from '../../core/errors';
-import { StructuredOutputValidator, JSONSchema } from '../../capabilities/validation';
-import { MiddlewareChain, MiddlewareContext } from '../../core/middleware';
+import { JSONSchema } from '../../capabilities/validation';
+import { MiddlewareChain } from '../../core/middleware';
+import { StorageAdapter, WorkflowState, mapToArray, arrayToMap } from '../../core/persistence';
+import { RetryOptions } from '../../core/config';
+import { withRetry } from '../../utils/retry';
 
 // ============================================================================
 // GRAPH TYPES
@@ -65,6 +69,8 @@ export enum NodeType {
   LOOP = 'loop',
   /** Collaborative execution (multi-agent loop) */
   COLLABORATIVE = 'collaborative',
+  /** Human interaction node (pauses execution) */
+  HUMAN = 'human',
 }
 
 /**
@@ -102,6 +108,9 @@ export interface GraphNode {
   metadata?: Record<string, unknown>;
   /** Schema for output validation */
   outputSchema?: JSONSchema;
+
+  /** Retry options for this node */
+  retryOptions?: RetryOptions;
 }
 
 /**
@@ -138,6 +147,8 @@ export interface ConditionalEdge {
  * Graph execution context
  */
 export interface GraphContext {
+  /** Unique ID for this execution */
+  executionId: string;
   /** Original input */
   input: string;
   /** Current result */
@@ -156,15 +167,19 @@ export interface GraphContext {
   signal?: AbortSignal;
   /** Message history for collaborative nodes */
   messageHistory: Message[];
+  /** Dead Letter Queue for failed nodes */
+  deadLetterQueue: string[];
 }
 
 /**
  * Graph execution result
  */
 export interface GraphResult {
+  /** Execution Status */
+  status: 'completed' | 'failed' | 'paused';
   /** Final output */
   output: string;
-  /** Success status */
+  /** Success status (true if completed successfully) */
   success: boolean;
   /** All node results */
   nodeResults: Map<string, TaskResult>;
@@ -178,74 +193,17 @@ export interface GraphResult {
   messages?: Message[];
   /** Metadata */
   metadata: Record<string, unknown>;
-}
-
-// ============================================================================
-// EXECUTION ENGINE (Recursive)
-// ============================================================================
-
-/**
- * Adapter allowing a ExecutionEngine to be used as an AI Model (Agent).
- * This enables hierarchical societies (societies within societies).
- */
-export class EngineAsModel implements AIModel {
-  private logger = getLogger();
-
-  constructor(
-    private graph: ExecutionEngine,
-    private agents: Agent[],
-    private options: { name?: string; description?: string } = {}
-  ) {}
-
-  /**
-   * Return the name of the model
-   */
-  name(): string {
-    return this.options.name || 'SocietyModel';
-  }
-
-  /**
-   * Process a prompt by executing the encapsulated graph
-   */
-  async process(prompt: unknown, signal?: AbortSignal): Promise<string> {
-    const input = String(prompt);
-    this.logger.info(`Recursive Engine '${this.name()}' started execution`);
-
-    try {
-      // Execute without initialContext by default (can be extended later)
-      const result = await this.graph.execute(
-        input,
-        this.agents,
-        signal,
-        undefined,
-        undefined,
-        undefined
-      );
-
-      if (!result.success) {
-        const error = result.errors?.[0] || new Error('Unknown error in recursive engine');
-        throw error;
-      }
-
-      this.logger.info(`Recursive Engine '${this.name()}' completed execution`);
-      return result.output;
-    } catch (error) {
-      this.logger.error(`Recursive Engine '${this.name()}' failed: ${(error as Error).message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if the model supports a specific prompt type
-   */
-  supportsPromptType(promptType: string): boolean {
-    return promptType === 'text';
-  }
+  /** ID of the node waiting for input (if paused) */
+  waitingForNodeId?: string;
+  /** Execution ID */
+  executionId?: string;
 }
 
 // ============================================================================
 // EXECUTION ENGINE
 // ============================================================================
+
+import { GraphVisualizer } from '../graph-visualizer';
 
 /**
  * Graph-based execution engine
@@ -254,6 +212,20 @@ export class ExecutionEngine {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: Map<string, GraphEdge[]> = new Map();
   private logger = getLogger();
+
+  /**
+   * Get all nodes in the graph (read-only)
+   */
+  getNodes(): ReadonlyMap<string, GraphNode> {
+    return this.nodes;
+  }
+
+  /**
+   * Get all edges in the graph (read-only)
+   */
+  getEdges(): ReadonlyMap<string, GraphEdge[]> {
+    return this.edges;
+  }
 
   constructor(nodes: GraphNode[], edges: GraphEdge[]) {
     // Validate and store nodes
@@ -278,6 +250,17 @@ export class ExecutionEngine {
 
     this.validateGraph();
   }
+
+  /**
+   * Export the graph structure as a Mermaid diagram
+   */
+  toMermaid(direction: 'TD' | 'LR' = 'TD'): string {
+    return GraphVisualizer.toMermaid(this, direction);
+  }
+
+  /**
+   * Validate graph structure
+   */
 
   /**
    * Validate graph structure
@@ -342,9 +325,12 @@ export class ExecutionEngine {
     signal?: AbortSignal,
     observer?: SocietyObserver,
     middlewareChain?: MiddlewareChain,
-    initialContext?: Record<string, unknown>
+    initialContext?: Record<string, unknown>,
+    storageAdapter?: StorageAdapter,
+    executionId?: string
   ): Promise<GraphResult> {
     const startTime = Date.now();
+    const execId = executionId || `exec-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     // Initialize sharedData with initialContext (globalContext from workflow)
     const sharedData = new Map<string, unknown>();
@@ -355,6 +341,7 @@ export class ExecutionEngine {
     }
 
     const context: GraphContext = {
+      executionId: execId,
       input,
       currentResult: input,
       nodeResults: new Map(),
@@ -364,53 +351,231 @@ export class ExecutionEngine {
       startTime,
       signal,
       messageHistory: [],
+      deadLetterQueue: [],
     };
 
-    try {
-      // Find START nodes
-      const startNodes = Array.from(this.nodes.values()).filter((n) => n.type === NodeType.START);
+    // Find START nodes
+    const startNodes = Array.from(this.nodes.values()).filter((n) => n.type === NodeType.START);
 
-      // Execute from each START node (usually just one)
-      for (const startNode of startNodes) {
-        await this.executeNode(startNode, context, agents, observer, middlewareChain);
+    // Queue for iterative execution
+    const queue: GraphNode[] = [...startNodes];
+
+    // Save initial state
+    if (storageAdapter) {
+      await this.saveState(context, queue, 'active', storageAdapter);
+    }
+
+    return this.runExecutionLoop(
+      context,
+      queue,
+      agents,
+      startTime,
+      observer,
+      middlewareChain,
+      storageAdapter
+    );
+  }
+
+  /**
+   * Resume execution from a saved state
+   */
+  async resume(
+    state: WorkflowState,
+    agents: Agent[],
+    humanInput?: string,
+    signal?: AbortSignal,
+    observer?: SocietyObserver,
+    middlewareChain?: MiddlewareChain,
+    storageAdapter?: StorageAdapter
+  ): Promise<GraphResult> {
+    const startTime = Date.now(); // Reset timer or calculate generic delta
+
+    // Hydrate Context
+    const context: GraphContext = {
+      executionId: state.executionId,
+      input: '', // Original input might be lost if not in state, but usually not needed for resume
+      currentResult: '', // Will be updated
+      nodeResults: arrayToMap(state.results),
+      sharedData: arrayToMap(state.sharedData),
+      iterationCounts: arrayToMap(state.iterationCounts),
+      executionPath: state.executionPath,
+      startTime: state.timestamp,
+      signal,
+      messageHistory: state.messageHistory,
+      deadLetterQueue: state.deadLetterQueue || [],
+    };
+
+    // Reconstruct Queue
+    const queue: GraphNode[] = [];
+    for (const nodeId of state.queue) {
+      const node = this.nodes.get(nodeId);
+      if (node) queue.push(node);
+    }
+
+    // If resuming from HUMAN pause, inject input
+    if (state.status === 'paused' && state.waitingForNodeId && humanInput) {
+      const waitingNode = queue[0]; // Should be the first
+      if (waitingNode && waitingNode.id === state.waitingForNodeId) {
+        // Treat human input as the result of this node
+        context.currentResult = humanInput;
+        context.nodeResults.set(waitingNode.id, {
+          agentId: 'human',
+          taskId: waitingNode.id,
+          output: humanInput,
+          success: true,
+          timestamp: Date.now(),
+          duration: 0,
+        });
+
+        // Remove human node from queue as it's "done"
+        queue.shift();
+
+        // Queue next nodes
+        this.queueNextNodes(waitingNode, context, queue);
+      }
+    } else {
+      // Just restore current result from last executed node
+      if (context.executionPath.length > 0) {
+        const lastNodeId = context.executionPath[context.executionPath.length - 1];
+        const lastResult = context.nodeResults.get(lastNodeId);
+        if (lastResult) context.currentResult = lastResult.output;
+      }
+    }
+
+    // Continue Execution Loop (shared logic with execute)
+    return this.runExecutionLoop(
+      context,
+      queue,
+      agents,
+      startTime,
+      observer,
+      middlewareChain,
+      storageAdapter
+    );
+  }
+
+  /**
+   * Helper to save state
+   */
+  private async saveState(
+    context: GraphContext,
+    queue: GraphNode[],
+    status: WorkflowState['status'],
+    adapter: StorageAdapter,
+    waitingForNodeId?: string
+  ): Promise<void> {
+    const state: WorkflowState = {
+      executionId: context.executionId,
+      status,
+      queue: queue.map((n) => n.id),
+      results: mapToArray(context.nodeResults),
+      sharedData: mapToArray(context.sharedData),
+      iterationCounts: mapToArray(context.iterationCounts),
+      executionPath: context.executionPath,
+      messageHistory: context.messageHistory,
+      deadLetterQueue: context.deadLetterQueue,
+      timestamp: Date.now(),
+      waitingForNodeId,
+    };
+    await adapter.save(context.executionId, state);
+  }
+
+  /**
+   * Shared execution loop used by both execute() and resume()
+   *
+   * Processes the node queue, handles HUMAN pause nodes,
+   * saves intermediate state, and returns the final result.
+   */
+  private async runExecutionLoop(
+    context: GraphContext,
+    queue: GraphNode[],
+    agents: Agent[],
+    startTime: number,
+    observer?: SocietyObserver,
+    middlewareChain?: MiddlewareChain,
+    storageAdapter?: StorageAdapter
+  ): Promise<GraphResult> {
+    try {
+      while (queue.length > 0) {
+        const node = queue[0];
+
+        // Handle HUMAN node — pause execution
+        if (node.type === NodeType.HUMAN) {
+          if (storageAdapter) {
+            await this.saveState(context, queue, 'paused', storageAdapter, node.id);
+          }
+          return {
+            status: 'paused',
+            success: true,
+            output: context.currentResult,
+            nodeResults: context.nodeResults,
+            executionPath: context.executionPath,
+            duration: Date.now() - startTime,
+            messages: context.messageHistory,
+            metadata: { totalNodes: this.nodes.size },
+            waitingForNodeId: node.id,
+            executionId: context.executionId,
+          };
+        }
+
+        await this.processNode(node, context, agents, observer, middlewareChain, queue);
+        queue.shift();
+
+        // Save state after processing (granular snapshot)
+        if (storageAdapter) {
+          await this.saveState(context, queue, 'active', storageAdapter);
+        }
       }
 
-      const duration = Date.now() - startTime;
+      // Mark completion
+      if (storageAdapter) {
+        await this.saveState(context, [], 'completed', storageAdapter);
+      }
 
       return {
+        status: 'completed',
         output: context.currentResult,
         success: true,
         nodeResults: context.nodeResults,
         executionPath: context.executionPath,
-        duration,
+        duration: Date.now() - startTime,
         messages: context.messageHistory,
         metadata: { totalNodes: this.nodes.size },
+        executionId: context.executionId,
       };
     } catch (error) {
-      const duration = Date.now() - startTime;
-
+      if (storageAdapter) {
+        try {
+          await this.saveState(context, [], 'failed', storageAdapter);
+        } catch (_e) {
+          // Ignore save error during failure
+        }
+      }
       return {
+        status: 'failed',
         output: context.currentResult,
         success: false,
         nodeResults: context.nodeResults,
         executionPath: context.executionPath,
-        duration,
+        duration: Date.now() - startTime,
         errors: [error as Error],
         messages: context.messageHistory,
         metadata: { totalNodes: this.nodes.size },
+        executionId: context.executionId,
       };
     }
   }
 
   /**
-   * Execute a single node
+   * Process a single node and queue next ones
    */
-  private async executeNode(
+  private async processNode(
     node: GraphNode,
     context: GraphContext,
     agents: Agent[],
     observer?: SocietyObserver,
-    middlewareChain?: MiddlewareChain
+    middlewareChain?: MiddlewareChain,
+    queue?: GraphNode[]
   ): Promise<void> {
     // Check cancellation
     if (context.signal?.aborted) {
@@ -419,62 +584,96 @@ export class ExecutionEngine {
 
     // Add to execution path
     context.executionPath.push(node.id);
-    this.logger.debug(`Executing node: ${node.id} (${node.type})`);
+    this.logger.debug(`Processing node: ${node.id} (${node.type})`);
+
+    // Trace Hook: Node Start
+    if (observer?.onNodeStart) {
+      observer.onNodeStart(node.id, node.type, context.currentResult);
+    }
+    const startTime = Date.now();
 
     let result: string = context.currentResult;
 
-    switch (node.type) {
-      case NodeType.START:
-        // START nodes just pass through
-        result = context.input;
-        break;
+    try {
+      switch (node.type) {
+        case NodeType.START:
+          result = context.input;
+          break;
 
-      case NodeType.END:
-        // END nodes terminate execution
-        return;
+        case NodeType.END:
+          context.currentResult = result;
+          if (observer?.onNodeEnd) {
+            observer.onNodeEnd(node.id, result, Date.now() - startTime);
+          }
+          return;
 
-      case NodeType.AGENT:
-        result = await this.executeAgentNode(node, context, agents, observer, middlewareChain);
-        break;
+        case NodeType.AGENT:
+          result = await this.executeAgentNode(node, context, agents, observer, middlewareChain);
+          break;
 
-      case NodeType.PARALLEL:
-        result = await this.executeParallelNode(node, context, agents);
-        break;
+        case NodeType.PARALLEL:
+          result = await this.executeParallelNode(node, context, agents);
+          break;
 
-      case NodeType.AGGREGATE:
-        result = await this.executeAggregateNode(node, context);
-        break;
+        case NodeType.AGGREGATE:
+          result = await this.executeAggregateNode(node, context);
+          break;
 
-      case NodeType.CONDITION:
-        result = await this.executeConditionNode(node, context, agents, observer, middlewareChain);
-        return; // Condition node handles its own routing
+        case NodeType.CONDITION:
+          await this.executeConditionNode(node, context, agents, observer, middlewareChain, queue);
+          if (observer?.onNodeEnd) {
+            observer.onNodeEnd(node.id, context.currentResult, Date.now() - startTime);
+          }
+          return; // Condition node handles its own queueing
 
-      case NodeType.TRANSFORM:
-        result = this.executeTransformNode(node, context);
-        break;
+        case NodeType.TRANSFORM:
+          result = this.executeTransformNode(node, context);
+          break;
 
-      case NodeType.LOOP:
-        result = await this.executeLoopNode(node, context, agents, observer, middlewareChain);
-        break;
+        case NodeType.LOOP:
+          result = await this.executeLoopNode(
+            node,
+            context,
+            agents,
+            observer,
+            middlewareChain,
+            queue
+          );
+          if (observer?.onNodeEnd) {
+            observer.onNodeEnd(node.id, result, Date.now() - startTime);
+          }
+          return; // Loop node handles its own queueing
 
-      case NodeType.COLLABORATIVE:
-        result = await this.executeCollaborativeNode(node, context, agents);
-        break;
+        case NodeType.COLLABORATIVE:
+          result = await this.executeCollaborativeNode(node, context, agents);
+          break;
+      }
+
+      // Store result
+      context.currentResult = result;
+      context.nodeResults.set(node.id, {
+        agentId: node.agentId || node.id,
+        taskId: node.id,
+        output: result,
+        success: true,
+        timestamp: Date.now(),
+        duration: 0,
+      });
+
+      if (observer?.onNodeEnd) {
+        observer.onNodeEnd(node.id, result, Date.now() - startTime);
+      }
+
+      // Queue next nodes
+      if (queue) {
+        this.queueNextNodes(node, context, queue);
+      }
+    } catch (error) {
+      if (observer?.onNodeError) {
+        observer.onNodeError(node.id, error as Error);
+      }
+      throw error;
     }
-
-    // Store result
-    context.currentResult = result;
-    context.nodeResults.set(node.id, {
-      agentId: node.agentId || node.id,
-      taskId: node.id,
-      output: result,
-      success: true,
-      timestamp: Date.now(),
-      duration: 0,
-    });
-
-    // Find and execute next nodes
-    await this.executeNextNodes(node, context, agents, observer, middlewareChain);
   }
 
   /**
@@ -482,7 +681,7 @@ export class ExecutionEngine {
    */
   private async executeAgentNode(
     node: GraphNode,
-    context: GraphContext,
+    context: GraphContext, // Need to make sure GraphContext matches ExecutionContext requirements or adapt
     agents: Agent[],
     observer?: SocietyObserver,
     middlewareChain?: MiddlewareChain
@@ -495,150 +694,56 @@ export class ExecutionEngine {
     // Observer: Agent Start
     if (observer) observer.onAgentStart(agent.id, agent.model.name(), context.currentResult);
 
-    // Middleware Context
-    const mwContext: MiddlewareContext = {
-      input: context.currentResult,
-      processedInput: context.currentResult,
-      metadata: new Map(),
-      agentId: agent.id,
-      signal: context.signal,
-      startTime: Date.now(),
-    };
+    const executor = new AgentExecutor(agent);
 
-    // Core Logic Wrapped for Middleware
-    const coreExecution = async (
-      mwCtx: MiddlewareContext
-    ): Promise<{ output: string; continue: boolean }> => {
-      const input =
-        typeof mwCtx.processedInput === 'string'
-          ? mwCtx.processedInput
-          : String(mwCtx.processedInput || '');
-
-      // 1. Memory Retrieval
-      if (agent.memory) {
-        const summary = await agent.memory.retrieve(input);
-        if (!node.metadata) node.metadata = {};
-        const summaryArray = Array.isArray(summary) ? summary : [summary];
-        node.metadata.memoryContext = summaryArray
-          .map((m: string | { content?: string }) => (typeof m === 'string' ? m : m.content || ''))
-          .join('\n---\n');
-      }
-
-      // 2. Tool Definitions Injection
-      if (agent.tools && agent.tools.length > 0) {
-        if (!node.metadata) node.metadata = {};
-        node.metadata.toolsContext =
-          JSON.stringify(
-            agent.tools.map((t) => ({
-              name: t.name,
-              description: t.description,
-              parameters: t.parameters,
-            })),
-            null,
-            2
-          ) +
-          '\n\nTo use a tool, output a JSON block wrapped in <tool_code> tags, like this:\n<tool_code>\n{"name": "tool_name", "arguments": {"param1": "value"}}\n</tool_code>\nWait for the tool result before continuing.';
-      }
-
-      let prompt = this.buildPrompt(agent, input, context, node);
-      let result = await agent.model.process(prompt, context.signal);
-
-      // 3. Tool Execution Loop
-      const MAX_TOOL_ITERATIONS = 5;
-      let iterations = 0;
-
-      while (
-        iterations < MAX_TOOL_ITERATIONS &&
-        agent.tools &&
-        agent.tools.length > 0 &&
-        typeof result === 'string'
-      ) {
-        const toolMatch = result.match(/<tool_code>([\s\S]*?)<\/tool_code>/);
-        if (!toolMatch) break;
-
-        iterations++;
-        const toolBlock = toolMatch[1];
-        let toolOutputInfo = '';
-
-        try {
-          const toolCall = JSON.parse(toolBlock);
-          const toolName = toolCall.name;
-          const tool = agent.tools.find((t) => t.name === toolName);
-
-          if (!tool) {
-            toolOutputInfo = `System: Error: Tool "${toolName}" not found. Available tools: ${agent.tools.map((t) => t.name).join(', ')}`;
-          } else {
-            this.logger.info(`Agent ${agent.id} executing tool ${toolName}`);
-            try {
-              const output = await tool.execute(toolCall.arguments || {}, {
-                agentId: agent.id,
-                sharedData: context.sharedData,
-                signal: context.signal,
-              });
-              toolOutputInfo = `System: Tool "${toolName}" returned: ${JSON.stringify(output)}`;
-            } catch (err) {
-              toolOutputInfo = `System: Error executing tool "${toolName}": ${(err as Error).message}`;
-            }
-          }
-        } catch (err) {
-          toolOutputInfo = `System: Error parsing tool call JSON. Please use format: {"name": "tool_name", "arguments": {...}}`;
-        }
-
-        prompt += `\n${result}\n${toolOutputInfo}`;
-        result = await agent.model.process(prompt, context.signal);
-      }
-
-      // 4. Validation
-      if (node.outputSchema) {
-        const validator = new StructuredOutputValidator(node.outputSchema);
-        try {
-          const validationResult = validator.validate(result);
-          if (!validationResult.valid) {
-            const errorMsg = validationResult.errors
-              ? validationResult.errors.map((e) => e.message).join(', ')
-              : 'Unknown validation error';
-            throw new ProcessingFailedError(`Validation failed for node ${node.id}: ${errorMsg}`);
-          }
-        } catch (e) {
-          this.logger.error(`Validation error in node ${node.id}: ${(e as Error).message}`);
-          throw e;
-        }
-      }
-
-      // 5. Memory Storage
-      if (agent.memory) {
-        await agent.memory.add(`User Input: ${mwCtx.input}`);
-        await agent.memory.add(`Assistant Response: ${result}`);
-      }
-
-      return { output: result as string, continue: true };
-    };
-
-    let output: string;
-    try {
-      if (middlewareChain) {
-        const res = await middlewareChain.execute(mwContext, coreExecution);
-        output = res.output;
-      } else {
-        const res = await coreExecution(mwContext);
-        output = res.output;
-      }
-    } catch (err) {
-      if (observer) observer.onAgentError(agent.id, agent.model.name(), err as Error);
-      throw err;
+    // Adapt GraphContext to ExecutionContext (they are very similar)
+    // Convert nodeResults (Map<nodeId, TaskResult>) → taskResults (Map<agentId, TaskResult[]>)
+    const taskResults = new Map<string, TaskResult[]>();
+    for (const [, result] of context.nodeResults) {
+      const existing = taskResults.get(result.agentId) || [];
+      existing.push(result);
+      taskResults.set(result.agentId, existing);
     }
 
-    if (observer) observer.onAgentComplete(agent.id, agent.model.name(), output);
-    if (observer?.onTaskEnd)
-      observer.onTaskEnd(node.id, {
-        taskId: node.id,
-        agentId: agent.id,
-        output: output,
-        success: true,
-        timestamp: Date.now(),
-      });
+    const execContext = {
+      input: context.input,
+      sharedData: context.sharedData,
+      taskResults,
+      messageHistory: context.messageHistory,
+      metadata: {},
+    };
 
-    return output;
+    const taskResult = await withRetry(
+      async () => {
+        const result = await executor.execute(context.currentResult, execContext, {
+          taskId: node.id,
+          instructions: node.metadata?.instructions as string,
+          promptTemplate: node.metadata?.promptTemplate as string,
+          outputSchema: node.outputSchema,
+          loopConfig: node.maxIterations ? { maxIterations: node.maxIterations } : undefined,
+          signal: context.signal,
+          middlewareChain,
+        });
+
+        if (!result.success) {
+          throw result.error || new Error('Agent execution failed');
+        }
+
+        return result;
+      },
+      node.retryOptions,
+      context.signal
+    );
+
+    if (!taskResult.success) {
+      if (observer) observer.onAgentError(agent.id, agent.model.name(), taskResult.error!);
+      throw taskResult.error!;
+    }
+
+    if (observer) observer.onAgentComplete(agent.id, agent.model.name(), taskResult.output);
+    if (observer?.onTaskEnd) observer.onTaskEnd(node.id, taskResult);
+
+    return taskResult.output;
   }
 
   /**
@@ -663,23 +768,29 @@ export class ExecutionEngine {
     // Submit all tasks to the pool
     await Promise.all(
       nodeAgents.map((agent) =>
-        pool.submit(async () => {
-          const prompt = this.buildPrompt(agent, context.currentResult, context, node);
-          const result = await agent.model.process(prompt, context.signal);
+        pool.submit(() =>
+          withRetry(
+            async () => {
+              const prompt = this.buildPrompt(agent, context.currentResult, context, node);
+              const result = await agent.model.process(prompt, context.signal);
 
-          const stepResult: TaskResult = {
-            agentId: agent.id,
-            taskId: node.id,
-            output: result,
-            success: true,
-            timestamp: Date.now(),
-            duration: 0,
-          };
+              const stepResult: TaskResult = {
+                agentId: agent.id,
+                taskId: node.id,
+                output: result,
+                success: true,
+                timestamp: Date.now(),
+                duration: 0,
+              };
 
-          results.push(stepResult);
+              results.push(stepResult);
 
-          return stepResult;
-        })
+              return stepResult;
+            },
+            node.retryOptions,
+            context.signal
+          )
+        )
       )
     );
 
@@ -702,9 +813,10 @@ export class ExecutionEngine {
   private async executeConditionNode(
     node: GraphNode,
     context: GraphContext,
-    agents: Agent[],
-    observer?: SocietyObserver,
-    middlewareChain?: MiddlewareChain
+    _agents: Agent[],
+    _observer?: SocietyObserver,
+    _middlewareChain?: MiddlewareChain,
+    queue?: GraphNode[]
   ): Promise<string> {
     const conditionResult = node.condition!(context.currentResult, context);
 
@@ -721,14 +833,15 @@ export class ExecutionEngine {
 
       if (nextNodeId) {
         const nextNode = this.nodes.get(nextNodeId);
-        if (nextNode) {
-          await this.executeNode(nextNode, context, agents, observer, middlewareChain);
+        if (nextNode && queue) {
+          queue.push(nextNode);
         }
       }
     } else {
       // Complex conditional routing with edge conditions
-      // Use executeNextNodes which checks edge conditions
-      await this.executeNextNodes(node, context, agents, observer, middlewareChain);
+      if (queue) {
+        this.queueNextNodes(node, context, queue);
+      }
     }
 
     return context.currentResult;
@@ -935,39 +1048,41 @@ export class ExecutionEngine {
   private async executeLoopNode(
     node: GraphNode,
     context: GraphContext,
-    agents: Agent[],
-    observer?: SocietyObserver,
-    middlewareChain?: MiddlewareChain
+    _agents: Agent[],
+    _observer?: SocietyObserver,
+    _middlewareChain?: MiddlewareChain,
+    queue?: GraphNode[]
   ): Promise<string> {
     const maxIterations = node.maxIterations || 10;
     let iteration = context.iterationCounts.get(node.id) || 0;
 
-    while (iteration < maxIterations) {
+    // Check user-defined loop termination condition first
+    if (node.loopCondition && !node.loopCondition(iteration, context.currentResult, context)) {
+      this.logger.info(
+        `Loop node ${node.id} terminated by loopCondition at iteration ${iteration}`
+      );
+      return context.currentResult;
+    }
+
+    if (iteration < maxIterations) {
       iteration++;
       context.iterationCounts.set(node.id, iteration);
 
-      // Execute loop body (next nodes)
-      await this.executeNextNodes(node, context, agents, observer, middlewareChain);
-
-      // Check termination condition
-      if (node.loopCondition?.(iteration, context.currentResult, context)) {
-        break;
+      // Queue loop body (next nodes)
+      if (queue) {
+        this.queueNextNodes(node, context, queue);
       }
+    } else {
+      this.logger.info(`Loop node ${node.id} reached maxIterations (${maxIterations})`);
     }
 
     return context.currentResult;
   }
 
   /**
-   * Execute next nodes in the graph
+   * Queue next nodes based on edge conditions
    */
-  private async executeNextNodes(
-    node: GraphNode,
-    context: GraphContext,
-    agents: Agent[],
-    observer?: SocietyObserver,
-    middlewareChain?: MiddlewareChain
-  ): Promise<void> {
+  private queueNextNodes(node: GraphNode, context: GraphContext, queue: GraphNode[]): void {
     const edges = this.edges.get(node.id) || [];
 
     for (const edge of edges) {
@@ -978,7 +1093,7 @@ export class ExecutionEngine {
 
       const nextNode = this.nodes.get(edge.to);
       if (nextNode) {
-        await this.executeNode(nextNode, context, agents, observer, middlewareChain);
+        queue.push(nextNode);
       }
     }
   }
@@ -1095,57 +1210,6 @@ Input: {input}`;
 
     return lines.join('\n');
   }
-
-  /**
-   * Generate Mermaid diagram definition for the graph
-   */
-  toMermaid(): string {
-    const lines: string[] = ['graph TD'];
-
-    // Style definitions
-    lines.push('  classDef start fill:#f9f,stroke:#333,stroke-width:2px;');
-    lines.push('  classDef end fill:#9f9,stroke:#333,stroke-width:2px;');
-    lines.push('  classDef agent fill:#bbf,stroke:#333,stroke-width:1px;');
-    lines.push('  classDef condition fill:#f90,stroke:#333,stroke-width:1px;');
-
-    // Nodes
-    for (const node of this.nodes.values()) {
-      let shape = '[ ' + node.id + ' ]';
-      let style = '';
-
-      switch (node.type) {
-        case NodeType.START:
-          shape = '((' + node.id + '))';
-          style = ':::start';
-          break;
-        case NodeType.END:
-          shape = '((' + node.id + '))';
-          style = ':::end';
-          break;
-        case NodeType.CONDITION:
-          shape = '{' + node.id + '}';
-          style = ':::condition';
-          break;
-        case NodeType.AGENT:
-          shape = '[' + (node.agentId || node.id) + ']';
-          style = ':::agent';
-          break;
-      }
-
-      lines.push(`  ${node.id}${shape}${style}`);
-    }
-
-    // Edges
-    for (const [from, edges] of this.edges.entries()) {
-      for (const edge of edges) {
-        const label = edge.label ? `|${edge.label}|` : '-->';
-        const arrow = edge.label ? '-->' : '-->';
-        lines.push(`  ${from} ${arrow} ${label} ${edge.to}`);
-      }
-    }
-
-    return lines.join('\n');
-  }
 }
 
 // ============================================================================
@@ -1198,6 +1262,66 @@ export class GraphBuilder {
    * Build the graph
    */
   build(): ExecutionEngine {
+    this.validateGraph();
     return new ExecutionEngine(this.nodes, this.edges);
+  }
+
+  /**
+   * Validate graph structure (Cycles, Orphans)
+   */
+  private validateGraph(): void {
+    // 1. Build Adjacency List
+    const adj = new Map<string, string[]>();
+    this.edges.forEach((e) => {
+      if (!adj.has(e.from)) adj.set(e.from, []);
+      adj.get(e.from)!.push(e.to);
+    });
+
+    const nodesMap = new Map(this.nodes.map((n) => [n.id, n]));
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+
+    // DFS for Cycle Detection
+    const detectCycle = (nodeId: string, path: string[]): string[] | null => {
+      visited.add(nodeId);
+      recursionStack.add(nodeId);
+      path.push(nodeId);
+
+      const neighbors = adj.get(nodeId) || [];
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          const res = detectCycle(neighbor, path);
+          if (res) return res;
+        } else if (recursionStack.has(neighbor)) {
+          // Cycle detected, extract the loop
+          const startIndex = path.indexOf(neighbor);
+          return path.slice(startIndex);
+        }
+      }
+
+      recursionStack.delete(nodeId);
+      path.pop();
+      return null;
+    };
+
+    for (const node of this.nodes) {
+      if (!visited.has(node.id)) {
+        const cycle = detectCycle(node.id, []);
+        if (cycle) {
+          // Check if cycle is safe (has LOOP node or maxIterations)
+          const isSafe = cycle.some((id) => {
+            const n = nodesMap.get(id);
+            return n && (n.type === NodeType.LOOP || n.maxIterations !== undefined);
+          });
+
+          if (!isSafe) {
+            throw new Error(
+              `Potential Infinite Loop Detected: ${cycle.join(' -> ')} -> ${cycle[0]}. ` +
+                `To fix, ensure at least one node in the cycle has 'maxIterations' set or is a LOOP node.`
+            );
+          }
+        }
+      }
+    }
   }
 }

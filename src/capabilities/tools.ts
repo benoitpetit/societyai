@@ -547,8 +547,16 @@ export const BuiltInTools = {
       })
       .withExecutor(async (params) => {
         try {
-          // Simple eval (in production, use a safe math evaluator)
-          const result = eval(params.expression as string);
+          // Safer evaluation of simple math expressions without eval()
+          // Supporting basic operators: +, -, *, /, (, )
+          const expr = params.expression as string;
+          if (/[^0-9+\-*/().\s]/.test(expr)) {
+            throw new Error('Invalid characters in expression');
+          }
+          // Note: In a production environment, use a library like mathjs
+          // Using Function constructor is slightly safer than eval but still risky if not sanitized
+          // Since we sanitized above, it's better.
+          const result = new Function(`return ${expr}`)();
           return { result };
         } catch (error) {
           throw new ProcessingFailedError(`Invalid expression: ${error}`);

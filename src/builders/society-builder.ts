@@ -38,6 +38,7 @@ export class FluentTaskBuilder {
   private _outputSchema?: JSONSchema;
   private _nextTasks?: string[];
   private _nextTaskResolver?: (results: TaskResult[]) => string | null;
+  private _possibleNextTasks?: string[];
   private _timeout?: number;
   private _dependencies: string[] = [];
 
@@ -119,6 +120,16 @@ export class FluentTaskBuilder {
   collaborative(maxIterations?: number): this {
     this._executionType = 'collaborative';
     if (maxIterations !== undefined) this._maxIterations = maxIterations;
+    return this;
+  }
+
+  /**
+   * Mark this task as requiring human interaction.
+   * The workflow will pause at this step and wait for manual resumption.
+   */
+  isHuman(): this {
+    this._executionType = 'human';
+    // Human tasks don't necessarily need agents, but we keep the array valid
     return this;
   }
 
@@ -268,7 +279,7 @@ export class FluentTaskBuilder {
 
     // Store both paths - we'll need to handle this in the executor
     // Use nextTaskResolver to dynamically choose the next task
-    this._nextTaskResolver = (results: TaskResult[]) => {
+    this._nextTaskResolver = (results: TaskResult[]): string | null => {
       // Convert results array to Map format expected by condition
       const resultsMap = new Map<string, TaskResult[]>();
       for (const result of results) {
@@ -283,6 +294,9 @@ export class FluentTaskBuilder {
       const targetTasks = conditionMet ? trueTasks : falseTasks;
       return targetTasks[0] || null;
     };
+
+    // Hint for the execution engine/graph builder
+    this._possibleNextTasks = [...trueTasks, ...falseTasks];
 
     return this;
   }
@@ -337,7 +351,9 @@ export class FluentTaskBuilder {
   build(): Task & { timeout?: number; dependencies?: string[] } {
     if (!this._id) throw new InvalidConfigurationError('Task id is required');
     if (!this._name) throw new InvalidConfigurationError('Task name is required');
-    if (this._agentIds.length === 0)
+
+    // Agents are required unless it's a human task
+    if (this._agentIds.length === 0 && this._executionType !== 'human')
       throw new InvalidConfigurationError('Step must have at least one agent');
 
     return {
@@ -355,6 +371,7 @@ export class FluentTaskBuilder {
       outputSchema: this._outputSchema,
       nextTasks: this._nextTasks,
       nextTaskResolver: this._nextTaskResolver,
+      possibleNextTasks: this._possibleNextTasks,
       timeout: this._timeout,
       dependencies: this._dependencies.length > 0 ? this._dependencies : undefined,
     };

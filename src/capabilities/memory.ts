@@ -116,6 +116,8 @@ export interface ShortTermMemoryConfig {
   summarizeAfter?: number;
   /** Importance decay rate per hour */
   decayRate?: number;
+  /** Maximum size in bytes */
+  byteSizeLimit?: number;
 }
 
 /**
@@ -132,6 +134,8 @@ export class ShortTermMemory {
       maxMessages: config.maxMessages ?? 50,
       summarizeAfter: config.summarizeAfter ?? 100,
       decayRate: config.decayRate ?? 0.1,
+      // Default limit 10MB
+      byteSizeLimit: config.byteSizeLimit ?? 10 * 1024 * 1024,
     };
   }
 
@@ -139,8 +143,15 @@ export class ShortTermMemory {
    * Add a memory entry
    */
   add(content: string, metadata?: Record<string, unknown>): void {
+    // Check size limit before adding to avoid OOM with massive payload
+    const contentSize = content.length * 2; // rough estimate
+    if (contentSize > this.config.byteSizeLimit) {
+      this.logger.info(`Memory entry too large (${contentSize} bytes), truncated.`);
+      content = content.substring(0, this.config.byteSizeLimit / 2) + '...[truncated]';
+    }
+
     const entry: MemoryEntry = {
-      id: `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       content,
       timestamp: Date.now(),
       importance: (metadata?.importance as number) ?? 0.5,
@@ -151,10 +162,38 @@ export class ShortTermMemory {
     this.memories.push(entry);
     this.logger.debug(`Added short-term memory: ${entry.id}`);
 
+    // Check total memory usage
+    this.enforceByteSizeLimit();
+
     // Check if summarization is needed
     if (this.memories.length > this.config.summarizeAfter) {
       this.summarize();
     }
+  }
+
+  /**
+   * Enforce byte size limit
+   */
+  private enforceByteSizeLimit(): void {
+    let currentSize = this.estimateSize();
+    while (currentSize > this.config.byteSizeLimit && this.memories.length > 0) {
+      // Remove oldest
+      const removed = this.memories.shift();
+      if (removed) {
+        currentSize -= removed.content.length * 2;
+      }
+    }
+    if (currentSize > this.config.byteSizeLimit) {
+      // Clean summaries if still too big
+      this.summarizedContent = [];
+    }
+  }
+
+  private estimateSize(): number {
+    return (
+      this.memories.reduce((acc, m) => acc + m.content.length * 2, 0) +
+      this.summarizedContent.reduce((acc, s) => acc + s.length * 2, 0)
+    );
   }
 
   /**
@@ -300,7 +339,7 @@ export class LongTermMemory {
    */
   async add(content: string, metadata?: Record<string, unknown>): Promise<string> {
     const entry: MemoryEntry = {
-      id: `ltm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `ltm_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       content,
       timestamp: Date.now(),
       importance: (metadata?.importance as number) ?? 0.5,

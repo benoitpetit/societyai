@@ -241,13 +241,26 @@ export interface Message {
 // ============================================================================
 
 /**
+ * Loop configuration for auto-correction and iterative refinement
+ */
+export interface LoopConfig {
+  /** Maximum number of iterations */
+  maxIterations: number;
+  /** Optional function to determine if the loop should exit early */
+  exitCondition?: (result: string, context: ExecutionContext) => boolean;
+  /** Strategy for aggregating results across iterations */
+  historyAggregation?: 'append' | 'replace' | 'summary';
+}
+
+/**
  * Task execution type
  */
 export type TaskExecutionType =
   | 'sequential' // Agents executed one by one
   | 'parallel' // Agents executed in parallel
   | 'collaborative' // Agents that communicate during execution
-  | 'conditional'; // Conditional execution based on previous results
+  | 'conditional' // Conditional execution based on previous results
+  | 'human'; // Human interaction required (pause execution)
 
 /**
  * Task to be performed by agents in a society
@@ -324,6 +337,12 @@ export interface Task {
    * Function to dynamically determine the next task
    */
   nextTaskResolver?: (results: TaskResult[]) => string | null;
+
+  /**
+   * Hint for the executor: List of all possible tasks this task might transition to via resolver.
+   * Used for graph validation and pruning.
+   */
+  possibleNextTasks?: string[];
 }
 
 /**
@@ -553,6 +572,21 @@ export interface SocietyObserver {
    * Called when a specific task completes
    */
   onTaskEnd?(taskId: string, result: TaskResult): void;
+
+  /**
+   * Called when a graph node starts execution
+   */
+  onNodeStart?(nodeId: string, type: string, input: string): void;
+
+  /**
+   * Called when a graph node completes execution
+   */
+  onNodeEnd?(nodeId: string, output: string, duration: number): void;
+
+  /**
+   * Called when a graph node encounters an error
+   */
+  onNodeError?(nodeId: string, error: Error): void;
 
   /**
    * Called at the start of a collaboration phase

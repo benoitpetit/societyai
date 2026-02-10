@@ -19,6 +19,7 @@ export class ModelNotSupportedError extends SocietyError {
   constructor(message = 'AI model not supported') {
     super(message, 'MODEL_NOT_SUPPORTED');
     this.name = 'ModelNotSupportedError';
+    Object.setPrototypeOf(this, ModelNotSupportedError.prototype);
   }
 }
 
@@ -37,6 +38,7 @@ export class ProcessingFailedError extends SocietyError {
     super(message, 'PROCESSING_FAILED');
     this.name = 'ProcessingFailedError';
     this.context = context;
+    Object.setPrototypeOf(this, ProcessingFailedError.prototype);
   }
 
   toString(): string {
@@ -62,6 +64,7 @@ export class InvalidAgentCountError extends SocietyError {
   constructor(message = 'The number of agents must be positive') {
     super(message, 'INVALID_AGENT_COUNT');
     this.name = 'InvalidAgentCountError';
+    Object.setPrototypeOf(this, InvalidAgentCountError.prototype);
   }
 }
 
@@ -72,6 +75,7 @@ export class NoModelsSpecifiedError extends SocietyError {
   constructor(message = 'At least one AI model must be specified') {
     super(message, 'NO_MODELS');
     this.name = 'NoModelsSpecifiedError';
+    Object.setPrototypeOf(this, NoModelsSpecifiedError.prototype);
   }
 }
 
@@ -82,6 +86,7 @@ export class SynthesisModelRequiredError extends SocietyError {
   constructor(message = 'A synthesis model is required for this mode') {
     super(message, 'NO_SYNTHESIS_MODEL');
     this.name = 'SynthesisModelRequiredError';
+    Object.setPrototypeOf(this, SynthesisModelRequiredError.prototype);
   }
 }
 
@@ -92,6 +97,7 @@ export class OperationCancelledError extends SocietyError {
   constructor(message = 'The operation was cancelled') {
     super(message, 'OPERATION_CANCELLED');
     this.name = 'OperationCancelledError';
+    Object.setPrototypeOf(this, OperationCancelledError.prototype);
   }
 }
 
@@ -109,6 +115,7 @@ export class TimeoutError extends SocietyError {
     super(message, 'TIMEOUT');
     this.name = 'TimeoutError';
     this.context = context;
+    Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 
   toString(): string {
@@ -144,6 +151,7 @@ export class InvalidConfigurationError extends SocietyError {
     super(message, 'INVALID_CONFIG');
     this.name = 'InvalidConfigurationError';
     this.context = context;
+    Object.setPrototypeOf(this, InvalidConfigurationError.prototype);
   }
 
   toString(): string {
@@ -174,6 +182,7 @@ export class InvalidWorkflowRoutingError extends SocietyError {
   constructor(message = 'Invalid workflow routing') {
     super(message, 'INVALID_ROUTING');
     this.name = 'InvalidWorkflowRoutingError';
+    Object.setPrototypeOf(this, InvalidWorkflowRoutingError.prototype);
   }
 }
 

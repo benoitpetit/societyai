@@ -1,7 +1,8 @@
 import { WorkerTask } from '../core/config';
+import { Worker } from 'worker_threads';
 
 /**
- * Pool de workers pour exécuter des tâches en parallèle
+ * Pool de workers pour exécuter des tâches en parallèle (IO-Bound)
  * avec limitation du nombre d'exécutions simultanées
  */
 export class WorkerPool {
@@ -110,5 +111,75 @@ export class WorkerPool {
       running: this.running,
       queued: this.queue.length,
     };
+  }
+}
+
+/**
+ * Pool de threads pour tâches CPU-Intensive (Validation, Parsing)
+ * Utilise les Worker Threads Node.js
+ */
+export class CpuWorkerPool {
+  private workerScript: string;
+  private maxWorkers: number;
+  private workers: Worker[] = [];
+  private queue: Array<{
+    data: unknown;
+    resolve: (val: unknown) => void;
+    reject: (err: unknown) => void;
+  }> = [];
+  private activeWorkers = 0;
+
+  constructor(workerScriptPath: string, maxWorkers = 2) {
+    this.workerScript = workerScriptPath;
+    this.maxWorkers = maxWorkers;
+  }
+
+  async submit<T, R>(data: T): Promise<R> {
+    return new Promise<R>((resolve, reject) => {
+      this.queue.push({
+        data,
+        resolve: resolve as (val: unknown) => void,
+        reject: reject as (err: unknown) => void,
+      });
+      this.processNext();
+    });
+  }
+
+  private processNext(): void {
+    if (this.queue.length === 0) return;
+    if (this.activeWorkers >= this.maxWorkers) return;
+
+    const task = this.queue.shift();
+    if (!task) return;
+
+    this.activeWorkers++;
+
+    const worker = new Worker(this.workerScript, {
+      workerData: task.data,
+    });
+
+    this.workers.push(worker);
+
+    worker.on('message', (result) => {
+      task.resolve(result);
+      worker.terminate();
+      this.activeWorkers--;
+      this.processNext();
+    });
+
+    worker.on('error', (err) => {
+      task.reject(err);
+      worker.terminate();
+      this.activeWorkers--;
+      this.processNext();
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        task.reject(new Error(`Worker stopped with exit code ${code}`));
+        this.activeWorkers--;
+        this.processNext();
+      }
+    });
   }
 }

@@ -115,6 +115,13 @@ export class StructuredOutputValidator<T = unknown> {
   }
 
   /**
+   * Get the schema used by this validator
+   */
+  getSchema(): JSONSchema {
+    return this.schema;
+  }
+
+  /**
    * Validate raw output against schema
    */
   validate(output: string): ValidationResult<T> {

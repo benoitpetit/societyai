@@ -229,8 +229,6 @@ export {
   ExecutionEngine as SocietyGraph,
   ExecutionEngine,
   GraphBuilder,
-  // Recursive engine model
-  EngineAsModel,
   // Types
   NodeType,
   GraphNode,
@@ -276,6 +274,8 @@ export {
   MemoryRetrievalResult,
   VectorProvider,
   Entity,
+  ShortTermMemoryConfig,
+  LongTermMemoryConfig,
 } from './capabilities/memory';
 
 // ============================================================================
@@ -296,5 +296,78 @@ export {
 } from './capabilities/validation';
 
 // ============================================================================
+// ADVANCED VALIDATION (Self-Correction)
+// ============================================================================
+
+export {
+  // Self-Correcting Validator
+  SelfCorrectingValidator,
+  createSelfCorrectingValidator,
+  // Types
+  CorrectionStrategy,
+  SelfCorrectingConfig,
+  CorrectionAttempt,
+} from './capabilities/self-correcting-validator';
+
+// ============================================================================
+// VECTOR STORE (In-Memory)
+// ============================================================================
+
+export {
+  // Vector Store
+  InMemoryVectorStore,
+  // Vector Store ↔ VectorProvider adapter
+  VectorStoreAdapter,
+  // Types
+  VectorEntry,
+  VectorStoreConfig,
+  SearchOptions,
+  SearchResult,
+  DistanceMetric,
+  EmbeddingFunction,
+} from './capabilities/vector-store';
+
+// ============================================================================
+// HIERARCHICAL SOCIETIES
+// ============================================================================
+
+export {
+  // Engine as Model
+  EngineAsModel,
+  wrapEngineAsModel,
+  // Types
+  EngineAsModelConfig,
+} from './execution/engine-as-model';
+
+// ============================================================================
+// PERSISTENCE SYSTEM
+// ============================================================================
+
+export { FileStorageAdapter } from './core/persistence';
+export type { StorageAdapter, WorkflowState } from './core/persistence';
+
+// ============================================================================
+// STORAGE ADAPTERS (Optional - require peer dependencies)
+// ============================================================================
+
+export {
+  // Redis Adapter
+  RedisStorageAdapter,
+  RedisClient,
+  RedisStorageConfig,
+  // Postgres Adapter
+  PostgresStorageAdapter,
+  PostgresPool,
+  PostgresStorageConfig,
+} from './adapters';
+
+// ============================================================================
 // METRICS AND OBSERVABILITY
 // ============================================================================
+export { WorkerPool, CpuWorkerPool } from './utils/worker-pool';
+
+// ============================================================================
+// GRAPH VISUALIZATION
+// ============================================================================
+
+export { GraphVisualizer } from './execution/graph-visualizer';

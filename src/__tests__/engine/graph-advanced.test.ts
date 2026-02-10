@@ -161,12 +161,12 @@ describe('Advanced Graph Scenarios', () => {
         ...agent,
         id: 'generator',
         model: {
-          name: () => 'generator',
-          process: async () => {
+          name: (): string => 'generator',
+          process: async (): Promise<string> => {
             attemptCount++;
             return attemptCount < 3 ? 'BAD output' : 'VALID output';
           },
-          supportsPromptType: () => true,
+          supportsPromptType: (): boolean => true,
         },
       };
 
@@ -183,6 +183,7 @@ describe('Advanced Graph Scenarios', () => {
         .addNode('check', NodeType.CONDITION, {
           condition: (result) =>
             result.toLowerCase().includes('valid') && !result.toLowerCase().includes('invalid'),
+          maxIterations: 10,
         })
         .addNode('end', NodeType.END)
 
@@ -208,12 +209,12 @@ describe('Advanced Graph Scenarios', () => {
         ...agent,
         id: 'looper',
         model: {
-          name: () => 'looper',
-          process: async () => {
+          name: (): string => 'looper',
+          process: async (): Promise<string> => {
             iterations++;
             return `Iteration ${iterations}`;
           },
-          supportsPromptType: () => true,
+          supportsPromptType: (): boolean => true,
         },
       };
 
@@ -226,6 +227,7 @@ describe('Advanced Graph Scenarios', () => {
             ctx.sharedData.set('loopCount', count + 1);
             return count >= 5; // Stop after 5 iterations
           },
+          maxIterations: 10,
         })
         .addNode('end', NodeType.END)
 
@@ -346,8 +348,8 @@ describe('Advanced Graph Scenarios', () => {
         ...agent,
         id: 'writer',
         model: {
-          name: () => 'writer',
-          process: async (prompt: unknown) => {
+          name: (): string => 'writer',
+          process: async (prompt: unknown): Promise<string> => {
             generationAttempt++;
             const promptStr = String(prompt);
 
@@ -363,7 +365,7 @@ describe('Advanced Graph Scenarios', () => {
 
             return 'Generic response';
           },
-          supportsPromptType: () => true,
+          supportsPromptType: (): boolean => true,
         },
       };
 
@@ -371,15 +373,15 @@ describe('Advanced Graph Scenarios', () => {
         ...agent,
         id: 'critic',
         model: {
-          name: () => 'critic',
-          process: async (prompt: unknown) => {
+          name: (): string => 'critic',
+          process: async (prompt: unknown): Promise<string> => {
             const content = String(prompt);
             if (content.includes('well-structured') && content.includes('requirements')) {
               return 'APPROVED: Response is good';
             }
             return 'FEEDBACK: Response lacks proper structure and does not meet requirements';
           },
-          supportsPromptType: () => true,
+          supportsPromptType: (): boolean => true,
         },
       };
 
@@ -389,6 +391,7 @@ describe('Advanced Graph Scenarios', () => {
         .addNode('review', NodeType.AGENT, { agentId: 'critic' })
         .addNode('checkApproval', NodeType.CONDITION, {
           condition: (result) => result.includes('APPROVED'),
+          maxIterations: 10, // Limit loop iterations
         })
         .addNode('storeFeedback', NodeType.TRANSFORM, {
           transformer: (result, ctx) => {
