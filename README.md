@@ -41,10 +41,16 @@ be modular.
   agent.
 - **🔄 Flexible Workflows**: Sequential, Parallel, Collaborative (debate between
   agents), and Conditional.
+- **⚡ Worker Threads Support**: Execute CPU-intensive agents in isolated worker
+  threads to prevent blocking the main event loop.
 - **🧠 Memory & Context**: Native management of short/long-term memory and
   type-safe Context Injection.
 - **💾 Persistence & Recovery**: Save execution state, handle crashes, and
   resume workflows seamlessly.
+- **📊 OpenTelemetry Integration**: Built-in distributed tracing support for
+  production observability.
+- **🔌 MCP Protocol Support**: Integrate external tools and services via Model
+  Context Protocol.
 - **📡 Observability**: Full event-driven system to track every thought, action,
   and state change.
 - **🙋 Human-in-the-Loop**: Pause workflows for human validation or input and
@@ -184,6 +190,74 @@ const result = await Society.create()
 console.log('Final Result:', result.output);
 console.log('History:', result.taskResults);
 ```
+
+### 3. Advanced: Worker Threads & Observability
+
+For CPU-intensive agents, use worker threads to prevent blocking:
+
+```typescript
+import { Society, createOpenTelemetryObserver } from 'societyai';
+import { OpenAIModel } from './my-model-impl';
+
+const model = new OpenAIModel(process.env.OPENAI_API_KEY);
+
+// Optional: Enable distributed tracing
+const observer = createOpenTelemetryObserver({
+  serviceName: 'my-app',
+  exporterType: 'console',
+});
+
+const result = await Society.create()
+  .withId('advanced-team')
+  .withObserver(observer) // ← Add OpenTelemetry tracing
+
+  // Standard agent (I/O-bound tasks)
+  .addAgent((agent) =>
+    agent
+      .withId('coordinator')
+      .withRole((role) =>
+        role.withSystemPrompt('You coordinate tasks and handle I/O operations.')
+      )
+      .withModel(model)
+    // executionMode defaults to 'default' (main thread)
+  )
+
+  // CPU-intensive agent (runs in worker thread)
+  .addAgent((agent) =>
+    agent
+      .withId('data-processor')
+      .withRole((role) =>
+        role.withSystemPrompt(
+          'You perform heavy data analysis and complex calculations.'
+        )
+      )
+      .withModel(model)
+      .withExecutionMode('isolated') // ← Runs in Worker Thread
+  )
+
+  .addTask((task) =>
+    task
+      .withId('coordinate')
+      .withAgents(['coordinator'])
+      .thenGoto(['process'])
+  )
+  .addTask((task) => task.withId('process').withAgents(['data-processor']))
+
+  .execute('Start workflow');
+
+console.log('Result:', result.output);
+
+// Cleanup observer
+await observer.shutdown();
+```
+
+**Key Points:**
+
+- **executionMode: 'isolated'**: Agent runs in a Worker Thread, preventing main
+  thread blocking.
+- **OpenTelemetry Observer**: Distributed tracing for production monitoring.
+- **MCP Tools**: Add external tools via
+  `withTools(await MCPServers.filesystem('/path'))`.
 
 ## 📚 Documentation
 

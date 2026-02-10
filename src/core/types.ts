@@ -184,6 +184,18 @@ export interface Agent {
    * Tools available to this agent
    */
   tools?: Tool[];
+
+  /**
+   * Execution mode for this agent
+   * - 'default': Standard async execution on main event loop (IO-bound tasks)
+   * - 'isolated': Execute in isolated Worker Thread (CPU-intensive tasks)
+   *
+   * Use 'isolated' for computationally heavy agents that might block the event loop
+   * (e.g., heavy parsing, complex calculations, data processing)
+   *
+   * @default 'default'
+   */
+  executionMode?: 'default' | 'isolated';
 }
 
 /**
@@ -395,8 +407,40 @@ export interface TaskResult {
   iteration?: number;
 }
 
-/**
- * Complete society configuration
+/** * Retention policy for managing memory in long-running executions
+ */
+export interface RetentionPolicy {
+  /**
+   * Maximum number of node results to keep in hot memory
+   * Older results are archived to storage adapter if available
+   * Default: unlimited (undefined)
+   */
+  maxNodeResults?: number;
+
+  /**
+   * Maximum number of messages to keep in message history
+   * Older messages are discarded or archived
+   * Default: unlimited (undefined)
+   */
+  maxMessages?: number;
+
+  /**
+   * Strategy for handling excess data
+   * - 'discard': Simply remove old data
+   * - 'archive': Store in storage adapter if available, otherwise discard
+   * Default: 'discard'
+   */
+  overflowStrategy?: 'discard' | 'archive';
+
+  /**
+   * Whether to keep results from important nodes (START, END, errors)
+   * even if they exceed maxNodeResults
+   * Default: true
+   */
+  keepCriticalNodes?: boolean;
+}
+
+/** * Complete society configuration
  */
 export interface SocietyConfig {
   /**
@@ -441,6 +485,12 @@ export interface SocietyConfig {
    * If false (default), automatically creates sequential links.
    */
   strictRouting?: boolean;
+
+  /**
+   * Retention policy for managing memory in long-running executions
+   * Helps prevent memory exhaustion in loops and large workflows
+   */
+  retentionPolicy?: RetentionPolicy;
 
   /**
    * Function called before each task

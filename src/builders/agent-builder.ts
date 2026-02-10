@@ -30,6 +30,7 @@ export class FluentAgentBuilder {
   private _metadata: Record<string, unknown> = {};
   private _memory?: MemorySystem;
   private _tools: Tool[] = [];
+  private _executionMode?: 'default' | 'isolated';
 
   /**
    * Create a new instance of FluentAgentBuilder
@@ -177,6 +178,16 @@ export class FluentAgentBuilder {
   }
 
   /**
+   * Set execution mode for this agent
+   * - 'default': Standard async execution on main event loop (IO-bound tasks)
+   * - 'isolated': Execute in isolated Worker Thread (CPU-intensive tasks)
+   */
+  withExecutionMode(mode: 'default' | 'isolated'): this {
+    this._executionMode = mode;
+    return this;
+  }
+
+  /**
    * Build the agent configuration
    */
   build(): Agent & { tags?: string[]; metadata?: Record<string, unknown> } {
@@ -199,6 +210,7 @@ export class FluentAgentBuilder {
       metadata: Object.keys(this._metadata).length > 0 ? this._metadata : undefined,
       memory: this._memory,
       tools: this._tools.length > 0 ? this._tools : undefined,
+      executionMode: this._executionMode,
     };
   }
 }

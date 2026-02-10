@@ -66,6 +66,23 @@ export * from './utils/retry';
 // ============================================================================
 
 export * from './utils/worker-pool';
+export { IsolatedWorkerPool } from './utils/isolated-worker-pool';
+
+// ============================================================================
+// OPENTELEMETRY INTEGRATION (Optional)
+// ============================================================================
+
+export {
+  OpenTelemetryObserver,
+  createOpenTelemetryObserver,
+  type OpenTelemetryConfig,
+} from './observability/opentelemetry';
+
+// ============================================================================
+// MODEL CONTEXT PROTOCOL (MCP) INTEGRATION (Optional)
+// ============================================================================
+
+export { MCPToolProvider, MCPServers, type MCPServerConfig } from './capabilities/mcp';
 
 // ============================================================================
 // MODEL ADAPTERS

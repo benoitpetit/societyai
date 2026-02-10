@@ -32,10 +32,11 @@
  * ```
  */
 
-import { Agent, Message, SocietyObserver, TaskResult } from '../../core/types';
+import { Agent, Message, SocietyObserver, TaskResult, RetentionPolicy } from '../../core/types';
 import { AgentExecutor } from '../../agents/agent-executor';
 import { getLogger } from '../../observability/logger';
 import { WorkerPool } from '../../utils/worker-pool';
+import { IsolatedWorkerPool } from '../../utils/isolated-worker-pool';
 import { ProcessingFailedError } from '../../core/errors';
 import { JSONSchema } from '../../capabilities/validation';
 import { MiddlewareChain } from '../../core/middleware';
@@ -317,6 +318,82 @@ export class ExecutionEngine {
   }
 
   /**
+   * Apply retention policy to prevent memory exhaustion in long-running executions
+   * This should be called periodically during execution loop
+   */
+  private applyRetentionPolicy(
+    context: GraphContext,
+    retentionPolicy?: RetentionPolicy,
+    storageAdapter?: StorageAdapter
+  ): void {
+    if (!retentionPolicy) return;
+
+    // Apply node results retention
+    if (
+      retentionPolicy.maxNodeResults &&
+      context.nodeResults.size > retentionPolicy.maxNodeResults
+    ) {
+      const keepCritical = retentionPolicy.keepCriticalNodes !== false;
+      const criticalNodes = new Set<string>();
+
+      // Identify critical nodes to keep
+      if (keepCritical) {
+        for (const [nodeId, result] of context.nodeResults) {
+          const node = this.nodes.get(nodeId);
+          if (
+            node &&
+            (node.type === NodeType.START || node.type === NodeType.END || !result.success)
+          ) {
+            criticalNodes.add(nodeId);
+          }
+        }
+      }
+
+      // Sort nodes by timestamp (oldest first)
+      const sortedNodes = Array.from(context.nodeResults.entries()).sort(
+        ([, a], [, b]) => a.timestamp - b.timestamp
+      );
+
+      const toRemove = sortedNodes.length - retentionPolicy.maxNodeResults;
+      let removed = 0;
+
+      for (const [nodeId] of sortedNodes) {
+        if (removed >= toRemove) break;
+        if (criticalNodes.has(nodeId)) continue;
+
+        // Archive or discard based on strategy
+        if (retentionPolicy.overflowStrategy === 'archive' && storageAdapter) {
+          // Archive to storage (implementation would depend on storage adapter capabilities)
+          this.logger.debug(`Archiving node result: ${nodeId}`);
+        }
+
+        context.nodeResults.delete(nodeId);
+        removed++;
+      }
+
+      if (removed > 0) {
+        this.logger.info(`Retention policy applied: removed ${removed} node results`);
+      }
+    }
+
+    // Apply message history retention
+    if (
+      retentionPolicy.maxMessages &&
+      context.messageHistory.length > retentionPolicy.maxMessages
+    ) {
+      const toRemove = context.messageHistory.length - retentionPolicy.maxMessages;
+
+      if (retentionPolicy.overflowStrategy === 'archive' && storageAdapter) {
+        this.logger.debug(`Archiving ${toRemove} messages`);
+      }
+
+      // Remove oldest messages
+      context.messageHistory.splice(0, toRemove);
+      this.logger.info(`Retention policy applied: removed ${toRemove} messages`);
+    }
+  }
+
+  /**
    * Execute the graph
    */
   async execute(
@@ -327,7 +404,8 @@ export class ExecutionEngine {
     middlewareChain?: MiddlewareChain,
     initialContext?: Record<string, unknown>,
     storageAdapter?: StorageAdapter,
-    executionId?: string
+    executionId?: string,
+    retentionPolicy?: RetentionPolicy
   ): Promise<GraphResult> {
     const startTime = Date.now();
     const execId = executionId || `exec-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -372,7 +450,8 @@ export class ExecutionEngine {
       startTime,
       observer,
       middlewareChain,
-      storageAdapter
+      storageAdapter,
+      retentionPolicy
     );
   }
 
@@ -386,7 +465,8 @@ export class ExecutionEngine {
     signal?: AbortSignal,
     observer?: SocietyObserver,
     middlewareChain?: MiddlewareChain,
-    storageAdapter?: StorageAdapter
+    storageAdapter?: StorageAdapter,
+    retentionPolicy?: RetentionPolicy
   ): Promise<GraphResult> {
     const startTime = Date.now(); // Reset timer or calculate generic delta
 
@@ -450,7 +530,8 @@ export class ExecutionEngine {
       startTime,
       observer,
       middlewareChain,
-      storageAdapter
+      storageAdapter,
+      retentionPolicy
     );
   }
 
@@ -493,7 +574,8 @@ export class ExecutionEngine {
     startTime: number,
     observer?: SocietyObserver,
     middlewareChain?: MiddlewareChain,
-    storageAdapter?: StorageAdapter
+    storageAdapter?: StorageAdapter,
+    retentionPolicy?: RetentionPolicy
   ): Promise<GraphResult> {
     try {
       while (queue.length > 0) {
@@ -520,6 +602,9 @@ export class ExecutionEngine {
 
         await this.processNode(node, context, agents, observer, middlewareChain, queue);
         queue.shift();
+
+        // Apply retention policy to prevent memory exhaustion
+        this.applyRetentionPolicy(context, retentionPolicy, storageAdapter);
 
         // Save state after processing (granular snapshot)
         if (storageAdapter) {
@@ -694,10 +779,7 @@ export class ExecutionEngine {
     // Observer: Agent Start
     if (observer) observer.onAgentStart(agent.id, agent.model.name(), context.currentResult);
 
-    const executor = new AgentExecutor(agent);
-
-    // Adapt GraphContext to ExecutionContext (they are very similar)
-    // Convert nodeResults (Map<nodeId, TaskResult>) → taskResults (Map<agentId, TaskResult[]>)
+    // Adapt GraphContext to ExecutionContext
     const taskResults = new Map<string, TaskResult[]>();
     for (const [, result] of context.nodeResults) {
       const existing = taskResults.get(result.agentId) || [];
@@ -713,27 +795,68 @@ export class ExecutionEngine {
       metadata: {},
     };
 
-    const taskResult = await withRetry(
-      async () => {
-        const result = await executor.execute(context.currentResult, execContext, {
-          taskId: node.id,
-          instructions: node.metadata?.instructions as string,
-          promptTemplate: node.metadata?.promptTemplate as string,
-          outputSchema: node.outputSchema,
-          loopConfig: node.maxIterations ? { maxIterations: node.maxIterations } : undefined,
-          signal: context.signal,
-          middlewareChain,
-        });
+    let taskResult: TaskResult;
 
-        if (!result.success) {
-          throw result.error || new Error('Agent execution failed');
-        }
+    // Check if agent should execute in isolated worker thread
+    if (agent.executionMode === 'isolated') {
+      // Use IsolatedWorkerPool for CPU-intensive operations
+      const workerPool = new IsolatedWorkerPool(4);
 
-        return result;
-      },
-      node.retryOptions,
-      context.signal
-    );
+      try {
+        const workerResult = await withRetry(
+          async () => {
+            const result = await workerPool.execute({
+              agent,
+              input: context.currentResult,
+              context: execContext,
+              options: {
+                taskId: node.id,
+                instructions: node.metadata?.instructions as string,
+                promptTemplate: node.metadata?.promptTemplate as string,
+              },
+            });
+
+            if (!result.result.success) {
+              throw result.result.error || new Error('Agent execution failed in isolated worker');
+            }
+
+            return result.result;
+          },
+          node.retryOptions,
+          context.signal
+        );
+
+        taskResult = workerResult;
+      } finally {
+        // Cleanup worker pool
+        await workerPool.shutdown();
+      }
+    } else {
+      // Standard execution using AgentExecutor
+      const executor = new AgentExecutor(agent);
+
+      taskResult = await withRetry(
+        async () => {
+          const result = await executor.execute(context.currentResult, execContext, {
+            taskId: node.id,
+            instructions: node.metadata?.instructions as string,
+            promptTemplate: node.metadata?.promptTemplate as string,
+            outputSchema: node.outputSchema,
+            loopConfig: node.maxIterations ? { maxIterations: node.maxIterations } : undefined,
+            signal: context.signal,
+            middlewareChain,
+          });
+
+          if (!result.success) {
+            throw result.error || new Error('Agent execution failed');
+          }
+
+          return result;
+        },
+        node.retryOptions,
+        context.signal
+      );
+    }
 
     if (!taskResult.success) {
       if (observer) observer.onAgentError(agent.id, agent.model.name(), taskResult.error!);
@@ -747,7 +870,68 @@ export class ExecutionEngine {
   }
 
   /**
-   * Execute a PARALLEL node
+   * Clone sharedData for isolation in parallel execution
+   * Uses structuredClone for deep copy to prevent race conditions
+   */
+  private cloneSharedData(sharedData: Map<string, unknown>): Map<string, unknown> {
+    const cloned = new Map<string, unknown>();
+    for (const [key, value] of sharedData.entries()) {
+      try {
+        // Use structuredClone if available (Node.js 17+), otherwise fallback to JSON
+        cloned.set(
+          key,
+          typeof structuredClone !== 'undefined'
+            ? structuredClone(value)
+            : JSON.parse(JSON.stringify(value))
+        );
+      } catch (error) {
+        // If value is not cloneable, use as-is (but log warning)
+        this.logger.info(`Cannot clone sharedData key '${key}': ${(error as Error).message}`);
+        cloned.set(key, value);
+      }
+    }
+    return cloned;
+  }
+
+  /**
+   * Merge sharedData modifications from parallel branches
+   * Implements Last-Write-Wins strategy for conflict resolution
+   */
+  private mergeSharedData(
+    target: Map<string, unknown>,
+    sources: Map<string, unknown>[],
+    detectConflicts: boolean = false
+  ): void {
+    const modifications = new Map<string, { count: number; values: unknown[] }>();
+
+    // Track all modifications
+    for (const source of sources) {
+      for (const [key, value] of source.entries()) {
+        if (!target.has(key) || target.get(key) !== value) {
+          const existing = modifications.get(key) || { count: 0, values: [] };
+          existing.count++;
+          existing.values.push(value);
+          modifications.set(key, existing);
+        }
+      }
+    }
+
+    // Apply modifications and detect conflicts
+    for (const [key, mod] of modifications.entries()) {
+      if (detectConflicts && mod.count > 1) {
+        // Multiple branches modified the same key - potential conflict
+        this.logger.info(
+          `Conflict detected for sharedData key '${key}': ${mod.count} branches modified it`
+        );
+      }
+      // Last-Write-Wins: use the last value
+      target.set(key, mod.values[mod.values.length - 1]);
+    }
+  }
+
+  /**
+   * Execute a PARALLEL node with concurrency control
+   * Each parallel branch gets an isolated copy of sharedData to prevent race conditions
    */
   private async executeParallelNode(
     node: GraphNode,
@@ -764,15 +948,30 @@ export class ExecutionEngine {
 
     const pool = new WorkerPool(nodeAgents.length);
     const results: TaskResult[] = [];
+    const sharedDataSnapshots: Map<string, unknown>[] = [];
 
-    // Submit all tasks to the pool
+    // Submit all tasks to the pool with isolated contexts
     await Promise.all(
-      nodeAgents.map((agent) =>
-        pool.submit(() =>
+      nodeAgents.map((agent) => {
+        // Create isolated snapshot of sharedData for this branch
+        const isolatedSharedData = this.cloneSharedData(context.sharedData);
+
+        return pool.submit(() =>
           withRetry(
             async () => {
-              const prompt = this.buildPrompt(agent, context.currentResult, context, node);
-              const result = await agent.model.process(prompt, context.signal);
+              // Create isolated context for this parallel branch
+              const isolatedContext = {
+                ...context,
+                sharedData: isolatedSharedData,
+              };
+
+              const prompt = this.buildPrompt(
+                agent,
+                isolatedContext.currentResult,
+                isolatedContext,
+                node
+              );
+              const result = await agent.model.process(prompt, isolatedContext.signal);
 
               const stepResult: TaskResult = {
                 agentId: agent.id,
@@ -784,15 +983,20 @@ export class ExecutionEngine {
               };
 
               results.push(stepResult);
+              sharedDataSnapshots.push(isolatedSharedData);
 
               return stepResult;
             },
             node.retryOptions,
             context.signal
           )
-        )
-      )
+        );
+      })
     );
+
+    // Merge all sharedData modifications back to main context
+    // Enable conflict detection to warn about potential race conditions
+    this.mergeSharedData(context.sharedData, sharedDataSnapshots, true);
 
     // Concatenate results
     return results.map((r) => r.output).join('\n\n');

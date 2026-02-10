@@ -54,6 +54,11 @@ Master the complex features for production-grade systems.
   execution flow.
 - **[Observability](./4-advanced/observability.md)**: Events, logging, and
   debugging.
+- **[Worker Threads](./4-advanced/worker-threads.md)**: Execute CPU-intensive
+  agents in isolated threads.
+- **[OpenTelemetry Integration](./4-advanced/opentelemetry.md)**: Distributed
+  tracing for production.
+- **[MCP Support](./4-advanced/mcp.md)**: Model Context Protocol integration.
 
 ### [5. Architecture](./5-architecture/)
 
@@ -86,5 +91,8 @@ Deep dive into how SocietyAI works under the hood.
 
 - **Model Agnostic**: Use OpenAI, Anthropic, Mistral, or local models.
 - **Graph-Based**: Supports DAGs, Cycles, and Conditionals.
+- **Worker Threads**: Execute CPU-intensive agents without blocking.
+- **OpenTelemetry**: Built-in distributed tracing support.
+- **MCP Protocol**: Integrate external tools and services.
 - **Zero Dependencies**: Lightweight and secure.
 - **Type-Safe**: Built with TypeScript for TypeScript.

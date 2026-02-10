@@ -1,7 +1,7 @@
 {
   "name": "societyai",
-  "version": "0.0.5",
-  "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems with DAG-based orchestration. Build sophisticated workflows where AI agents work together through dependency graphs, conditional routing, and pluggable execution strategies.",
+  "version": "0.0.6",
+  "description": "A powerful TypeScript library for creating collaborative multi-agent AI systems with DAG-based orchestration. Build sophisticated workflows where AI agents work together through dependency graphs, conditional routing, and pluggable execution strategies. Features thread-safe parallel execution, memory management, and circuit breaker patterns for production-grade reliability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
@@ -89,13 +89,21 @@
   },
   "peerDependencies": {
     "ioredis": "^5.0.0",
-    "pg": "^8.0.0"
+    "pg": "^8.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^0.5.0"
   },
   "peerDependenciesMeta": {
     "ioredis": {
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "@modelcontextprotocol/sdk": {
       "optional": true
     }
   },
