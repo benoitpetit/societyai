@@ -212,34 +212,35 @@ const result = await Society.create()
   .withObserver(observer) // ← Add OpenTelemetry tracing
 
   // Standard agent (I/O-bound tasks)
-  .addAgent((agent) =>
-    agent
-      .withId('coordinator')
-      .withRole((role) =>
-        role.withSystemPrompt('You coordinate tasks and handle I/O operations.')
-      )
-      .withModel(model)
+  .addAgent(
+    (agent) =>
+      agent
+        .withId('coordinator')
+        .withRole((role) =>
+          role.withSystemPrompt(
+            'You coordinate tasks and handle I/O operations.'
+          )
+        )
+        .withModel(model)
     // executionMode defaults to 'default' (main thread)
   )
 
   // CPU-intensive agent (runs in worker thread)
-  .addAgent((agent) =>
-    agent
-      .withId('data-processor')
-      .withRole((role) =>
-        role.withSystemPrompt(
-          'You perform heavy data analysis and complex calculations.'
+  .addAgent(
+    (agent) =>
+      agent
+        .withId('data-processor')
+        .withRole((role) =>
+          role.withSystemPrompt(
+            'You perform heavy data analysis and complex calculations.'
+          )
         )
-      )
-      .withModel(model)
-      .withExecutionMode('isolated') // ← Runs in Worker Thread
+        .withModel(model)
+        .withExecutionMode('isolated') // ← Runs in Worker Thread
   )
 
   .addTask((task) =>
-    task
-      .withId('coordinate')
-      .withAgents(['coordinator'])
-      .thenGoto(['process'])
+    task.withId('coordinate').withAgents(['coordinator']).thenGoto(['process'])
   )
   .addTask((task) => task.withId('process').withAgents(['data-processor']))
 
