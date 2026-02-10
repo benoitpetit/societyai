@@ -1,9 +1,15 @@
 # SocietyAI
 
-[![npm version](https://img.shields.io/npm/v/societyai.svg)](https://www.npmjs.com/package/societyai)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
+<div align="center">
+  <img src="https://societyai.vercel.app/logo.png" alt="SocietyAI Logo" width="200" />
+
+  <p>
+    <a href="https://www.npmjs.com/package/societyai"><img src="https://img.shields.io/npm/v/societyai.svg" alt="npm version"></a>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="license"></a>
+    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue.svg" alt="TypeScript"></a>
+    <a href="package.json"><img src="https://img.shields.io/badge/dependencies-0-brightgreen.svg" alt="Zero Dependencies"></a>
+  </p>
+</div>
 
 **SocietyAI** is a powerful TypeScript/Node.js library for orchestrating
 collaborative multi-agent systems. It allows you to build sophisticated
