@@ -66,9 +66,11 @@ export class IsolatedWorkerPool {
     this.maxWorkers = maxWorkers;
     // Worker script will be compiled, so look in dist
     // In dev/test mode with ts-jest, __dirname points to src/, but compiled JS is in dist/
+    // We also check for .ts source file for development/testing environments
     const possiblePaths = [
       path.join(__dirname, 'isolated-worker.js'), // When running from dist/
       path.join(__dirname, '../../dist/utils/isolated-worker.js'), // When running from src/ with ts-jest
+      path.join(__dirname, 'isolated-worker.ts'), // When running source directly (tests)
     ];
 
     // Initialize with default path
@@ -125,7 +127,12 @@ export class IsolatedWorkerPool {
    * Create a new worker
    */
   private createWorker(): Worker {
-    const worker = new Worker(this.workerScript);
+    // If using TypeScript source directly, we need to register ts-node
+    // This allows the worker to compile the TS file on the fly
+    const isTs = this.workerScript.endsWith('.ts');
+    const workerOptions = isTs ? { execArgv: ['-r', 'ts-node/register'] } : undefined;
+
+    const worker = new Worker(this.workerScript, workerOptions);
 
     worker.on('error', (error) => {
       console.error('Worker error:', error);
