@@ -1,4 +1,5 @@
 import { FluentTaskBuilder } from '../../builders/society-builder';
+import { TaskResult } from '../../core/types';
 
 describe('Workflow Builder Fluent API', () => {
   test('FluentTaskBuilder should build a basic step', () => {
@@ -40,14 +41,22 @@ describe('Workflow Builder Fluent API', () => {
     expect(step.nextTaskResolver).toBeDefined();
 
     // Test the logic of the resolved function
-    const fakeResults = [{ stepId: 'prev', output: 'ok' }] as any;
+    const fakeResults: TaskResult[] = [
+      {
+        output: 'ok',
+        agentId: 'test-agent',
+        taskId: 'prev',
+        timestamp: Date.now(),
+        success: true,
+      },
+    ];
     const nextStep = step.nextTaskResolver!(fakeResults);
     // Since our condition () => true always returns true, it should pick 'a'
     expect(nextStep).toBe('a');
   });
 
   test('withLoop should configure collaborative loop', () => {
-    const condition = () => true;
+    const condition = (): boolean => true;
     const step = FluentTaskBuilder.create()
       .withId('loop')
       .addAgent('a')

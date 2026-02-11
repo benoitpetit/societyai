@@ -51,7 +51,7 @@ class DemoModel implements AIModel {
  * - OpenTelemetry tracing
  * - MCP tools
  */
-async function completeIntegrationExample() {
+async function completeIntegrationExample(): Promise<unknown> {
   console.log('🚀 Starting Complete Integration Example\n');
 
   // 1. Create OpenTelemetry observer for distributed tracing
@@ -173,7 +173,7 @@ async function completeIntegrationExample() {
 /**
  * Example showing mixed execution modes
  */
-async function mixedExecutionExample() {
+async function mixedExecutionExample(): Promise<unknown> {
   console.log('🔄 Mixed Execution Mode Example\n');
 
   const society = Society.create()
@@ -224,7 +224,7 @@ async function mixedExecutionExample() {
 /**
  * Run examples
  */
-async function main() {
+async function main(): Promise<void> {
   console.log('═'.repeat(60));
   console.log('    SocietyAI Complete Integration Examples');
   console.log('═'.repeat(60));

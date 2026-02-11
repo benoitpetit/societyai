@@ -118,8 +118,8 @@ describe('SocietyAI Functional Integration', () => {
 
     // Create a reactive model that simulates tool usage
     const reactiveModel = {
-      name: () => 'reactive-model',
-      process: jest.fn(async (prompt: string, _signal?: AbortSignal) => {
+      name: (): string => 'reactive-model',
+      process: jest.fn(async (prompt: string, _signal?: AbortSignal): Promise<string> => {
         callCount++;
         // Second call: After receiving tool output
         if (prompt.includes('Tool "get_weather" returned')) {
@@ -128,14 +128,14 @@ describe('SocietyAI Functional Integration', () => {
         // First call: Request tool
         return 'Checking weather...\n<tool_code>\n{\n  "name": "get_weather",\n  "arguments": { "city": "Paris" } \n}\n</tool_code>';
       }),
-      supportsPromptType: (_t: string) => true,
+      supportsPromptType: (_t: string): boolean => true,
     };
 
     const weatherTool = ToolBuilder.create()
       .withName('get_weather')
       .withDescription('Get weather')
       .withParameters({ type: 'object', properties: { city: { type: 'string' } } })
-      .withExecutor(async (_args) => {
+      .withExecutor(async (_args): Promise<{ condition: string; temp: number }> => {
         return { condition: 'Sunny', temp: 20 };
       })
       .build();
@@ -144,7 +144,7 @@ describe('SocietyAI Functional Integration', () => {
       .addAgent((a) =>
         a
           .withId('tool-user-agent')
-          .withModel(reactiveModel as any)
+          .withModel(reactiveModel as unknown as typeof mockModel)
           .withRole({
             id: 'weather-bot',
             name: 'Weather Bot',

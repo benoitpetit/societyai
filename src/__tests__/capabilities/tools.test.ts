@@ -2,7 +2,7 @@ import { ToolRegistry, Tool } from '../../capabilities/tools';
 
 // Mock logger
 jest.mock('../../observability/logger', () => ({
-  getLogger: () => ({
+  getLogger: (): Record<string, jest.Mock> => ({
     info: jest.fn(),
     debug: jest.fn(),
     warn: jest.fn(),

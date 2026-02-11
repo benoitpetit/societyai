@@ -58,14 +58,19 @@ describe('Event System', () => {
     // Should be capped at 5
     expect(history).toHaveLength(5);
     // Should keep latest events (5-9)
-    expect((history[4] as any).message).toBe('msg-9');
+    expect((history[4] as { message: string }).message).toBe('msg-9');
   });
 
   test('should filter history', async () => {
     emitter.enableHistory();
 
     await emitter.emit('debug', { level: 'info', message: 'a' });
-    await emitter.emit('society:start', { workflowId: 'w1' } as any);
+    await emitter.emit('society:start', {
+      workflowId: 'w1',
+      workflowName: 'Test Workflow',
+      input: 'test',
+      agentCount: 1,
+    });
 
     const debugs = emitter.getHistory((e) => e.type === 'debug');
     expect(debugs).toHaveLength(1);

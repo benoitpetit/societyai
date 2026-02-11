@@ -20,7 +20,7 @@ export class MockModel implements AIModel {
 
   when(prompt: string): { thenReturn: (response: string) => MockModel } {
     return {
-      thenReturn: (response: string) => {
+      thenReturn: (response: string): MockModel => {
         this.responses.set(prompt, response);
         return this;
       },

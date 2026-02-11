@@ -1,4 +1,10 @@
-import { MiddlewareChain, Middleware } from '../../core/middleware';
+import {
+  MiddlewareChain,
+  Middleware,
+  MiddlewareContext,
+  NextFunction,
+  MiddlewareResult,
+} from '../../core/middleware';
 import { AIModel } from '../../core/types';
 
 describe('Middleware System', () => {
@@ -109,9 +115,18 @@ describe('Middleware System', () => {
 
   test('should allow inserting middleware at specific positions', async () => {
     const chain = MiddlewareChain.create();
-    const m1 = { name: 'm1', fn: async (c: any, n: any) => n(c) };
-    const m2 = { name: 'm2', fn: async (c: any, n: any) => n(c) };
-    const m3 = { name: 'm3', fn: async (c: any, n: any) => n(c) };
+    const m1 = {
+      name: 'm1',
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
+    const m2 = {
+      name: 'm2',
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
+    const m3 = {
+      name: 'm3',
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
 
     chain.use(m1);
     chain.useBefore('m1', m2); // m2, m1
@@ -123,9 +138,21 @@ describe('Middleware System', () => {
 
   test('should sort middlewares by priority', async () => {
     const chain = MiddlewareChain.create();
-    const low = { name: 'low', priority: 1, fn: async (c: any, n: any) => n(c) };
-    const high = { name: 'high', priority: 10, fn: async (c: any, n: any) => n(c) };
-    const medium = { name: 'medium', priority: 5, fn: async (c: any, n: any) => n(c) };
+    const low = {
+      name: 'low',
+      priority: 1,
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
+    const high = {
+      name: 'high',
+      priority: 10,
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
+    const medium = {
+      name: 'medium',
+      priority: 5,
+      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+    };
 
     chain.use(low).use(high).use(medium);
     chain.sortByPriority();

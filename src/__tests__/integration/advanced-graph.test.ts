@@ -76,7 +76,7 @@ describe('Advanced Graph Features', () => {
     test('should support withLoop for iterative refinement', async () => {
       let callCount = 0;
       const improverModel = new MockModel();
-      improverModel.process = async () => {
+      improverModel.process = async (): Promise<string> => {
         callCount++;
         return callCount >= 3 ? 'perfect result' : `iteration ${callCount}`;
       };
@@ -105,7 +105,7 @@ describe('Advanced Graph Features', () => {
     test('should respect maxIterations in loop', async () => {
       let callCount = 0;
       const workerModel = new MockModel();
-      workerModel.process = async () => {
+      workerModel.process = async (): Promise<string> => {
         callCount++;
         return `iteration ${callCount}`;
       };

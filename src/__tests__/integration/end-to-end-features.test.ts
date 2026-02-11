@@ -335,7 +335,7 @@ describe('End-to-End Feature Integration', () => {
       });
 
       // Create model that fails
-      mockModel.process = async () => {
+      mockModel.process = async (): Promise<string> => {
         throw new Error('Simulated failure');
       };
 

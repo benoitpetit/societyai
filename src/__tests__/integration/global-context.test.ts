@@ -7,7 +7,7 @@ describe('Global Context Integration', () => {
 
     // Mock that captures the prompt to verify context is passed
     let capturedPrompt = '';
-    mockModel.process = async (prompt: unknown) => {
+    mockModel.process = async (prompt: unknown): Promise<string> => {
       capturedPrompt = String(prompt);
       return 'Context received';
     };

@@ -75,15 +75,15 @@ describe('Collaborative Mode', () => {
       // Mock agent that says "CONSENSUS" on second iteration
       let aliceIteration = 0;
       const aliceModel = {
-        name: () => 'alice-model',
-        process: async () => {
+        name: (): string => 'alice-model',
+        process: async (): Promise<string> => {
           aliceIteration++;
           return aliceIteration >= 2 ? 'CONSENSUS reached!' : 'Still discussing...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
-      agent1.model = aliceModel as any;
+      agent1.model = aliceModel as unknown as typeof agent1.model;
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
@@ -111,25 +111,25 @@ describe('Collaborative Mode', () => {
   describe('Targeted Message Routing', () => {
     test('should parse and route targeted messages with @mentions', async () => {
       const aliceModel = {
-        name: () => 'alice',
-        process: async () => '@bob: Hey Bob, what do you think?',
-        supportsPromptType: () => true,
+        name: (): string => 'alice',
+        process: async (): Promise<string> => '@bob: Hey Bob, what do you think?',
+        supportsPromptType: (): boolean => true,
       };
 
       const bobModel = {
-        name: () => 'bob',
-        process: async (prompt: unknown) => {
+        name: (): string => 'bob',
+        process: async (prompt: unknown): Promise<string> => {
           const promptStr = String(prompt);
           if (promptStr.includes('what do you think')) {
             return "@alice: I think it's great!";
           }
           return 'Just observing...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
-      agent1.model = aliceModel as any;
-      agent2.model = bobModel as any;
+      agent1.model = aliceModel as unknown as typeof agent1.model;
+      agent2.model = bobModel as unknown as typeof agent2.model;
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
@@ -160,32 +160,44 @@ describe('Collaborative Mode', () => {
     test('should use custom message router for hierarchical communication', async () => {
       // Junior → Senior → Manager flow
       const juniorModel = {
-        name: () => 'junior',
-        process: async () => 'I have a question about the architecture',
-        supportsPromptType: () => true,
+        name: (): string => 'junior',
+        process: async (): Promise<string> => 'I have a question about the architecture',
+        supportsPromptType: (): boolean => true,
       };
 
       const seniorModel = {
-        name: () => 'senior',
-        process: async (prompt: unknown) => {
+        name: (): string => 'senior',
+        process: async (prompt: unknown): Promise<string> => {
           const p = String(prompt);
           if (p.includes('question about')) {
             return 'Let me escalate this to the manager';
           }
           return 'Reviewing...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const managerModel = {
-        name: () => 'manager',
-        process: async () => 'Approved. Proceed with the plan.',
-        supportsPromptType: () => true,
+        name: (): string => 'manager',
+        process: async (): Promise<string> => 'Approved. Proceed with the plan.',
+        supportsPromptType: (): boolean => true,
       };
 
-      const junior = { ...agent1, id: 'junior', model: juniorModel as any };
-      const senior = { ...agent2, id: 'senior', model: seniorModel as any };
-      const manager = { ...agent3, id: 'manager', model: managerModel as any };
+      const junior = {
+        ...agent1,
+        id: 'junior',
+        model: juniorModel as unknown as typeof agent1.model,
+      };
+      const senior = {
+        ...agent2,
+        id: 'senior',
+        model: seniorModel as unknown as typeof agent2.model,
+      };
+      const manager = {
+        ...agent3,
+        id: 'manager',
+        model: managerModel as unknown as typeof agent3.model,
+      };
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
@@ -227,32 +239,32 @@ describe('Collaborative Mode', () => {
       const charliePrompts: string[] = [];
 
       const aliceModel = {
-        name: () => 'alice',
-        process: async () => '@bob: Private message for Bob only',
-        supportsPromptType: () => true,
+        name: (): string => 'alice',
+        process: async (): Promise<string> => '@bob: Private message for Bob only',
+        supportsPromptType: (): boolean => true,
       };
 
       const bobModel = {
-        name: () => 'bob',
-        process: async (prompt: unknown) => {
+        name: (): string => 'bob',
+        process: async (prompt: unknown): Promise<string> => {
           bobPrompts.push(String(prompt));
           return 'Bob received the message';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const charlieModel = {
-        name: () => 'charlie',
-        process: async (prompt: unknown) => {
+        name: (): string => 'charlie',
+        process: async (prompt: unknown): Promise<string> => {
           charliePrompts.push(String(prompt));
           return 'Charlie is working';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
-      agent1.model = aliceModel as any;
-      agent2.model = bobModel as any;
-      agent3.model = charlieModel as any;
+      agent1.model = aliceModel as unknown as typeof agent1.model;
+      agent2.model = bobModel as unknown as typeof agent2.model;
+      agent3.model = charlieModel as unknown as typeof agent3.model;
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
@@ -283,41 +295,45 @@ describe('Collaborative Mode', () => {
       let conArguments = 0;
 
       const proModel = {
-        name: () => 'pro',
-        process: async () => {
+        name: (): string => 'pro',
+        process: async (): Promise<string> => {
           proArguments++;
           return proArguments === 1
             ? 'AI will improve productivity'
             : 'AI creates new job opportunities';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const conModel = {
-        name: () => 'con',
-        process: async () => {
+        name: (): string => 'con',
+        process: async (): Promise<string> => {
           conArguments++;
           return conArguments === 1
             ? 'AI will cause job displacement'
             : 'AI raises ethical concerns';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const moderatorModel = {
-        name: () => 'moderator',
-        process: async (_prompt: unknown, _signal?: AbortSignal) => {
+        name: (): string => 'moderator',
+        process: async (_prompt: unknown, _signal?: AbortSignal): Promise<string> => {
           if (proArguments >= 2 && conArguments >= 2) {
             return "CONSENSUS: Both perspectives have merit. Let's proceed with balanced implementation.";
           }
           return 'Continue the debate...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
-      const pro = { ...agent1, id: 'pro', model: proModel as any };
-      const con = { ...agent2, id: 'con', model: conModel as any };
-      const moderator = { ...agent3, id: 'moderator', model: moderatorModel as any };
+      const pro = { ...agent1, id: 'pro', model: proModel as unknown as typeof agent1.model };
+      const con = { ...agent2, id: 'con', model: conModel as unknown as typeof agent2.model };
+      const moderator = {
+        ...agent3,
+        id: 'moderator',
+        model: moderatorModel as unknown as typeof agent3.model,
+      };
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
@@ -347,8 +363,8 @@ describe('Collaborative Mode', () => {
 
     test('should support expert consultation pattern', async () => {
       const requesterModel = {
-        name: () => 'requester',
-        process: async (prompt: unknown) => {
+        name: (): string => 'requester',
+        process: async (prompt: unknown): Promise<string> => {
           const p = String(prompt);
           // On first iteration, ask question
           if (!p.includes('input validation') && !p.includes('caching')) {
@@ -358,34 +374,46 @@ describe('Collaborative Mode', () => {
           // After receiving responses
           return 'Thank you for the feedback. Proceeding with implementation.';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const securityModel = {
-        name: () => 'security',
-        process: async (prompt: unknown) => {
+        name: (): string => 'security',
+        process: async (prompt: unknown): Promise<string> => {
           if (String(prompt).includes('Is this implementation secure')) {
             return '@requester: Yes, but add input validation';
           }
           return 'Monitoring...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
       const performanceModel = {
-        name: () => 'performance',
-        process: async (prompt: unknown) => {
+        name: (): string => 'performance',
+        process: async (prompt: unknown): Promise<string> => {
           if (String(prompt).includes('Will this scale')) {
             return '@requester: Consider adding caching';
           }
           return 'Monitoring...';
         },
-        supportsPromptType: () => true,
+        supportsPromptType: (): boolean => true,
       };
 
-      const requester = { ...agent1, id: 'requester', model: requesterModel as any };
-      const security = { ...agent2, id: 'security', model: securityModel as any };
-      const performance = { ...agent3, id: 'performance', model: performanceModel as any };
+      const requester = {
+        ...agent1,
+        id: 'requester',
+        model: requesterModel as unknown as typeof agent1.model,
+      };
+      const security = {
+        ...agent2,
+        id: 'security',
+        model: securityModel as unknown as typeof agent2.model,
+      };
+      const performance = {
+        ...agent3,
+        id: 'performance',
+        model: performanceModel as unknown as typeof agent3.model,
+      };
 
       const graph = GraphBuilder.create()
         .addNode('start', NodeType.START)
