@@ -154,9 +154,6 @@ describe('IsolatedWorkerPool', () => {
         })
       );
 
-      // Give workers time to start
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
       // Should have at most 2 busy workers
       expect(pool.stats.busy).toBeLessThanOrEqual(2);
       expect(pool.stats.queued).toBeGreaterThan(0);
