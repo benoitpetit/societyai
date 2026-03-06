@@ -506,7 +506,7 @@ export class Society {
 
       // Combine with external signal if provided
       if (signal) {
-        abortListener = () => controller.abort();
+        abortListener = (): void => controller.abort();
         signal.addEventListener('abort', abortListener);
       }
       timeoutSignal = controller.signal;
