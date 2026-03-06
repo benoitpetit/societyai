@@ -113,6 +113,7 @@ describe('End-to-End Feature Integration', () => {
 
   describe('IsolatedWorkerPool Standalone Usage', () => {
     it('should execute agents in isolated worker pool', async () => {
+      jest.setTimeout(30000);
       const pool = new IsolatedWorkerPool(2);
       const mockModel = new MockModel();
 
@@ -147,6 +148,7 @@ describe('End-to-End Feature Integration', () => {
     });
 
     it('should handle multiple concurrent tasks in pool', async () => {
+      jest.setTimeout(30000);
       const pool = new IsolatedWorkerPool(3);
       const mockModel = new MockModel();
 

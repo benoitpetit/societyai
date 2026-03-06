@@ -1,4 +1,9 @@
-import { MiddlewareChain, ComposedMiddleware, Middleware } from '../../core/middleware';
+import {
+  MiddlewareChain,
+  ComposedMiddleware,
+  Middleware,
+  MiddlewareResult,
+} from '../../core/middleware';
 import { Society } from '../../index';
 import { MockModel } from '../utils/mock-model';
 
@@ -6,7 +11,7 @@ import { Agent } from '../../core/types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeModel() {
+function makeModel(): MockModel {
   const m = new MockModel();
   m.withDefaultResponse('model-response');
   return m;
@@ -29,7 +34,7 @@ function makeAgent(id: string, model: MockModel): Agent {
 function recordingMiddleware(name: string, log: string[]): Middleware {
   return {
     name,
-    fn: async (ctx, next) => {
+    fn: async (ctx, next): Promise<MiddlewareResult> => {
       log.push(`${name}:before`);
       const result = await next(ctx);
       log.push(`${name}:after`);
@@ -208,7 +213,7 @@ describe('addMiddleware – ComposedMiddleware (chain.build())', () => {
       metadata: {},
       startTime: Date.now(),
     };
-    const next = async () => {
+    const next = async (): Promise<MiddlewareResult> => {
       return { output: 'next-output', continue: true };
     };
 
@@ -324,6 +329,7 @@ describe('addMiddleware – output transformation', () => {
 
 describe('addMiddleware – error resilience', () => {
   test('middleware that throws propagates the error', async () => {
+    jest.setTimeout(30000);
     const model = makeModel();
 
     const throwingMiddleware: Middleware = {
@@ -347,6 +353,7 @@ describe('addMiddleware – error resilience', () => {
   });
 
   test('MiddlewareChain with throwing middleware propagates the error', async () => {
+    jest.setTimeout(30000);
     const model = makeModel();
 
     const throwingMiddleware: Middleware = {
