@@ -355,6 +355,20 @@ export interface Task {
    * Used for graph validation and pruning.
    */
   possibleNextTasks?: string[];
+
+  /**
+   * Explicit dependencies: list of task IDs that must complete before this task starts.
+   *
+   * Declaring `dependencies: ['taskA', 'taskB']` (or via `.dependsOn()` in the builder)
+   * causes the executor to create directed edges `taskA → thisTask` and `taskB → thisTask`
+   * in the execution graph, ensuring proper ordering.
+   *
+   * @example
+   * ```typescript
+   * .addTask(t => t.withId('review').withAgents(['editor']).dependsOn('draft'))
+   * ```
+   */
+  dependencies?: string[];
 }
 
 /**

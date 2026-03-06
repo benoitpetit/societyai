@@ -1,6 +1,12 @@
-# Guide: Creating Custom Tools
+# Tools & Functions
 
-This guide shows you how to create custom tools for your SocietyAI agents. Tools allow agents to perform concrete actions: call APIs, manipulate files, perform calculations, etc.
+Tools give your agents the ability to take concrete actions in the world: call
+external APIs, read and write files, run calculations, query databases, and more.
+When an agent has tools, SocietyAI automatically runs a **ReAct loop**
+(Reasoning + Acting) to let it decide which tool to call, observe the result,
+and continue until it has a final answer.
+
+---
 
 ## 📋 Table of Contents
 
@@ -11,8 +17,14 @@ This guide shows you how to create custom tools for your SocietyAI agents. Tools
 - [Error Handling](#error-handling)
 - [Stateful Tools](#stateful-tools)
 - [Advanced Examples](#advanced-examples)
+- [Usage with an Agent](#usage-with-an-agent)
+- [Best Practices](#best-practices)
+- [API Reference](#api-reference)
+- [Next Steps](#next-steps)
 
-## Basic Concepts
+---
+
+## 🔑 Basic Concepts
 
 A tool in SocietyAI is an object that defines:
 - **A name**: Unique identifier.
@@ -20,7 +32,9 @@ A tool in SocietyAI is an object that defines:
 - **A parameter schema**: JSON Schema structure of expected parameters.
 - **An execution function**: The business logic.
 
-## Creating a Simple Tool
+---
+
+## 🛠️ Creating a Simple Tool
 
 ### Example 1: Calculator
 
@@ -95,7 +109,9 @@ const webSearchTool = ToolBuilder.create()
   .build();
 ```
 
-## Parameter Validation
+---
+
+## ✅ Parameter Validation
 
 The system automatically validates parameters according to the provided JSON Schema. Use all JSON Schema capabilities:
 
@@ -164,7 +180,9 @@ const emailTool = ToolBuilder.create()
   .build();
 ```
 
-## Asynchronous Tools
+---
+
+## ⚡ Asynchronous Tools
 
 Tools can be asynchronous and perform I/O operations:
 
@@ -214,7 +232,9 @@ const databaseQueryTool = ToolBuilder.create()
   .build();
 ```
 
-## Error Handling
+---
+
+## 🚨 Error Handling
 
 Errors raised in the executor are captured and passed back to the agent:
 
@@ -263,7 +283,9 @@ const fileReadTool = ToolBuilder.create()
   .build();
 ```
 
-## Stateful Tools
+---
+
+## 🗃️ Stateful Tools
 
 Tools can maintain state via the shared context:
 
@@ -311,7 +333,9 @@ const counterTool = ToolBuilder.create()
   .build();
 ```
 
-## Advanced Examples
+---
+
+## 🔬 Advanced Examples
 
 ### Tool with Streaming
 
@@ -384,7 +408,9 @@ const researchTool = ToolBuilder.create()
   .build();
 ```
 
-## Usage with an Agent
+---
+
+## 🤖 Usage with an Agent
 
 Once your tools are created, attach them to an agent:
 
@@ -415,7 +441,9 @@ const society = Society.create()
 const result = await society.execute('Start research');
 ```
 
-## Best Practices
+---
+
+## ✅ Best Practices
 
 ### 1. **Clear Descriptions**
 Descriptions must be precise. The agent decides when to use the tool based on them.
@@ -488,44 +516,91 @@ properties: {
 }
 ```
 
-## Summary
+---
 
-Custom tools give superpowers to your agents! Follow these principles:
+## 📦 API Reference
 
-- ✅ Clear and detailed descriptions.
-- ✅ Strict validation with JSON Schema.
-- ✅ Clean error handling.
-- ✅ Cancellation support (signal).
-- ✅ Security limits and quotas.
-- ✅ Parameter documentation.
+### `ToolRegistry`
 
-For more examples, see [capabilities/tools.md](./tools.md).
-
-
-# API Reference
-
-## `ToolRegistry`
-
-Registry for registering and managing tools.
+Registry for registering and managing tools globally.
 
 ```typescript
+import { ToolRegistry } from 'societyai';
+
 const registry = new ToolRegistry();
 registry.register(calculatorTool);
 registry.register(searchTool);
 
+// Execute a registered tool by name
 const result = await registry.execute('calculate', { expression: '2 + 2' });
 ```
 
-## `Tool`
+### `ToolBuilder`
 
-Interface for defining a tool.
+Fluent builder for creating tools. Always prefer `ToolBuilder` over constructing
+a plain `Tool` object — it validates the schema and executor at build time.
+
+```typescript
+import { ToolBuilder } from 'societyai';
+
+const myTool = ToolBuilder.create('my-tool')
+  .withDescription('A short, precise description of what the tool does.')
+  .withParameters({
+    type: 'object',
+    properties: {
+      input: { type: 'string', description: 'The input value.' },
+    },
+    required: ['input'],
+  })
+  .withExecutor(async (params, context) => {
+    return `Processed: ${params.input}`;
+  })
+  .build();
+```
+
+### `Tool` Interface
 
 ```typescript
 interface Tool {
+  /** Unique name used by the agent to reference this tool. */
   name: string;
+
+  /**
+   * Human-readable description of what the tool does and when to use it.
+   * This is the most critical field — the agent reads it to decide whether
+   * to call the tool.
+   */
   description: string;
+
+  /** JSON Schema describing the tool's input parameters. */
   parameters: ToolParameterSchema;
-  execute: (params: Record<string, unknown>, context?: ToolContext) => Promise<string>;
+
+  /**
+   * Executes the tool with the given parameters.
+   * @param params   Validated arguments from the agent.
+   * @param context  Execution context (sharedData, signal, agentId).
+   * @returns        Result string passed back to the agent as an observation.
+   */
+  execute: (
+    params: Record<string, unknown>,
+    context?: ToolContext
+  ) => Promise<string>;
 }
 ```
+
+---
+
+## 📚 Next Steps
+
+- **[MCP Support](../4-advanced/mcp.md)** — Connect agents to the Model Context
+  Protocol ecosystem for filesystem, Git, web search, and hundreds of other
+  tools without writing custom executors.
+- **[Agent Interfaces](../5-architecture/agent-interfaces.md)** — Full `Tool`,
+  `ToolContext`, and `ToolParameterSchema` interface definitions.
+- **[Core Concepts](../1-basics/core-concepts.md)** — How the ReAct loop works
+  and when tools are called automatically.
+- **[Validation](./validation.md)** — Enforce structured output schemas on top
+  of tool-enabled agents for reliable data pipelines.
+- **[Observability](../4-advanced/observability.md)** — Track tool execution
+  events (`tool:execute`, `tool:result`) via the event system.
 

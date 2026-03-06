@@ -1,9 +1,23 @@
-# Context Management System
+# Context Management
 
 The **Context Management System** in SocietyAI provides a type-safe, decoupled
 way to share state and dependencies between agents, steps, and workflows. It
 follows a Dependency Injection (DI) pattern similar to those found in modern
 frameworks, adapted for multi-agent systems.
+
+---
+
+## 📋 Table of Contents
+
+- [Key Concepts](#key-concepts)
+- [Creating a Provider](#creating-a-provider)
+- [Consuming Context](#consuming-context)
+- [Inheritance and Nesting](#inheritance-and-nesting)
+- [Mutable Context](#mutable-context)
+- [Best Practices](#best-practices)
+- [Next Steps](#next-steps)
+
+---
 
 ## 🔑 Key Concepts
 
@@ -16,21 +30,27 @@ ensuring that when you store a `User` object, you get a `User` object back.
 import { createContextToken } from 'societyai';
 
 // Define tokens (usually in a shared constants file)
-export const UserToken = createContextToken<User>('user');
-export const ConfigToken = createContextToken<AppConfig>('config');
+export const UserToken    = createContextToken<User>('user');
+export const ConfigToken  = createContextToken<AppConfig>('config');
 export const DatabaseToken = createContextToken<DatabaseConnection>('db');
 ```
 
-Optionally, you can provide a default value:
+Optionally, you can provide a default value that is returned when no explicit
+value has been provided:
 
 ```typescript
 export const ThemeToken = createContextToken<string>('theme', 'dark');
 ```
 
+> **Tip:** Define all your tokens in a shared `tokens.ts` file to avoid
+> circular dependencies and keep them discoverable.
+
+---
+
 ## 🏗️ Creating a Provider
 
-The `ContextProvider` is the container that holds your data. You typically build
-it once at the start of your application or workflow.
+The `ContextProvider` is the container that holds your data. Build it once at
+the start of your application or workflow, then pass it into the Society.
 
 ### Using the Builder
 
@@ -38,51 +58,53 @@ it once at the start of your application or workflow.
 import { ContextProvider, ContextScope } from 'societyai';
 
 const provider = ContextProvider.create()
-  // Provide static values
+  // Provide a static value
   .provide(UserToken, { id: 1, name: 'Alice' })
 
-  // Provide lazy factories (initialized only when requested)
+  // Provide a lazy factory — initialised only when first requested
   .provideFactory(
     DatabaseToken,
     () => new DatabaseConnection(),
     ContextScope.GLOBAL
   )
 
-  // Build the provider
   .build();
 ```
 
 ### Context Scopes
 
-Scopes define the lifecycle of the data. SocietyAI supports:
+Scopes define the lifecycle of the data in the provider.
 
-- **`ContextScope.GLOBAL`**: Shared across all executions. Singleton-like
-  behavior.
-- **`ContextScope.WORKFLOW`**: Exists for the duration of a single workflow run.
-- **`ContextScope.STEP`**: Created anew for each step in the graph.
-- **`ContextScope.AGENT`**: Specific to an agent instance.
+| Scope | Behaviour |
+|---|---|
+| `ContextScope.GLOBAL` | Shared across all executions. Singleton-like. |
+| `ContextScope.WORKFLOW` | Exists for the duration of a single workflow run. |
+| `ContextScope.STEP` | Created anew for each step in the graph. |
+| `ContextScope.AGENT` | Specific to a single agent instance. |
+
+---
 
 ## 📖 Consuming Context
 
 ### Basic Usage
 
 ```typescript
-// Retrieve value (throws if missing and no default value)
+// Retrieve a value (throws if missing and no default was set)
 const user = provider.get(UserToken);
 
-// Check existence
+// Check existence before retrieving
 if (provider.has(ConfigToken)) {
   const config = provider.get(ConfigToken);
 }
 
-// Get with optional undefined return
+// Return undefined instead of throwing when missing
 const db = provider.getOptional(DatabaseToken);
 ```
 
 ### In Agents
 
-Context is automatically injected into Agent execution contexts if the Society
-is configured with the provider.
+Context is automatically injected into agent execution contexts when the
+Society is configured with a provider.
 
 ```typescript
 // During agent execution
@@ -92,44 +114,73 @@ const agentAction = async (context: ExecutionContext) => {
 };
 ```
 
+---
+
 ## 🌱 Inheritance and Nesting
 
 Contexts can be nested. A child context inherits everything from its parent but
 can override specific tokens. This is useful for creating isolated scopes for
-specific branches of execution.
+specific execution branches.
 
 ```typescript
 const globalProvider = ContextProvider.create()
   .provide(ConfigToken, globalConfig)
   .build();
 
-// Create a child provider for specific request
+// Create a child provider for a specific request
 const requestProvider = globalProvider.createChild();
 requestProvider.provide(UserToken, currentUser);
 
-// Child has access to both
-const config = requestProvider.get(ConfigToken); // from parent
-const user = requestProvider.get(UserToken); // from child
+// The child has access to both parent and child values
+const config = requestProvider.get(ConfigToken); // inherited from parent
+const user   = requestProvider.get(UserToken);   // defined in child
 ```
+
+---
 
 ## 🔄 Mutable Context
 
-By default, providers are read-heavy, but `IMutableContextProvider` allows for
-dynamic updates during execution.
+By default, providers are read-optimised, but `IMutableContextProvider` allows
+for dynamic updates during execution.
 
 ```typescript
 if (provider instanceof ContextProvider) {
   provider.set(UserToken, updatedUser);
   provider.delete(TempToken);
-  provider.clear();
+  provider.clear(); // removes all values
 }
 ```
 
-## Best Practices
+> **Warning:** Mutating a shared context from multiple parallel agents can cause
+> race conditions. Prefer setting up context before workflow execution whenever
+> possible, or scope mutations to `ContextScope.AGENT`.
 
-1.  **Define Tokens Globally**: Keep your `createContextToken` calls in a shared
-    `tokens.ts` file to avoid circular dependencies.
-2.  **Use Factories for Heavy Objects**: Use `.provideFactory()` for database
-    connections or API clients so they are only instantiated if needed.
-3.  **Prefer Immutable Contexts**: Try to set up your context before starting
-    the workflow to avoid race conditions in parallel executions.
+---
+
+## ✅ Best Practices
+
+1. **Define Tokens Globally** — Keep `createContextToken` calls in a shared
+   `tokens.ts` file to avoid circular dependencies and ensure discoverability.
+
+2. **Use Factories for Heavy Objects** — Use `.provideFactory()` for database
+   connections, API clients, or any expensive resource so they are only
+   instantiated if actually needed.
+
+3. **Prefer Immutable Contexts** — Set up your context before the workflow
+   starts to avoid race conditions in parallel branches.
+
+4. **Use the Narrowest Scope** — Prefer `STEP` or `AGENT` scope over `GLOBAL`
+   when data does not need to persist across the entire workflow.
+
+---
+
+## 📚 Next Steps
+
+- **[Society Configuration](./society-configuration.md)** — Learn how to wire a
+  `ContextProvider` into your Society via `.withGlobalContext()`.
+- **[Prompt Templates](./prompts.md)** — Use `{context}` and `{sharedData}`
+  placeholders to inject context values directly into agent prompts.
+- **[Agents & Roles](./agents-roles.md)** — Attach initial context to
+  individual agents with `.withInitialContext()`.
+- **[Observability](../4-advanced/observability.md)** — Inspect context values
+  at runtime through the event system.

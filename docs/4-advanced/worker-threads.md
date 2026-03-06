@@ -302,7 +302,7 @@ npm test isolated-worker-pool.test.ts
 
 ---
 
-## 🔗 Next Steps
+## 📚 Next Steps
 
 - Learn about [OpenTelemetry Integration](./opentelemetry.md) for tracing
 - Explore [MCP Support](./mcp.md) for external tools

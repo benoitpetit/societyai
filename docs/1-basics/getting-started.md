@@ -1,6 +1,7 @@
 # Getting Started with SocietyAI
 
-SocietyAI is a TypeScript library for orchestrating multi-agent systems using a DAG (Directed Acyclic Graph) approach.
+SocietyAI is a TypeScript library for orchestrating multi-agent systems using a
+graph-based execution engine (DAGs and Cycles).
 
 ## Installation
 
@@ -11,280 +12,310 @@ npm install societyai
 ## Basic Concepts
 
 ### 1. Agents
-Agents are the workers in your society. They have:
-- An **ID** and **Name**
-- A **Role** (instructions on how to behave)
-- An **AI Model** (the brain)
+
+Agents are the workers in your society. Each agent has:
+
+- An **ID** — unique identifier
+- A **Role** — its "job description" (system prompt, name)
+- An **AI Model** — the LLM backing it (you provide the adapter)
 
 ### 2. Tasks
-A Task is a unit of work. It can be:
-- **Sequential**: Run by one agent.
-- **Parallel**: Run by multiple agents at the same time.
-- **Collaborative**: Agents talking to each other.
+
+A Task is a unit of work assigned to one or more agents:
+
+- **Sequential** — one agent runs, its output feeds the next task
+- **Parallel** — multiple agents run simultaneously on the same input
+- **Collaborative** — agents exchange messages across multiple rounds
 
 ### 3. Society (The Workflow)
-The Society connects agents and tasks into a workflow.
+
+The `Society` connects agents and tasks into an executable workflow through the
+fluent builder API.
+
+---
 
 ## Your First Society
 
 ```typescript
-import { Society, createRole, createAgent, AggregationStrategies } from 'societyai';
-import { YourAIModel } from './your-model';
+import { Society, createRole } from 'societyai';
+import { YourAIModel } from './your-model'; // your AIModel implementation
 
-// 1. Define a Role
+const model = new YourAIModel();
+
+// Define reusable roles
 const writerRole = createRole('writer')
-  .withSystemPrompt('You are a technical writer.');
+  .withName('Technical Writer')
+  .withSystemPrompt('You are a technical writer. Write clearly and concisely.');
 
-// 2. Create the Society logic
-const society = Society.create()
+const editorRole = createRole('editor')
+  .withName('Editor')
+  .withSystemPrompt('You review text for style, grammar, and clarity.');
+
+const result = await Society.create()
   .withId('blog-post-workflow')
-  .addAgent(agent => agent
-    .withId('writer')
-    .withRole(writerRole)
-    .withModel(new YourAIModel())
+
+  // Add agents
+  .addAgent((a) =>
+    a.withId('writer').withRole(writerRole).withModel(model)
   )
-  .addTask(task => task
-    .withId('write-article')
-    .withAgents(['writer'])
-    .withInstructions('Write a blog post about AI.')
-    .sequential()
+  .addAgent((a) =>
+    a.withId('editor').withRole(editorRole).withModel(model)
   )
+
+  // Add tasks — explicit dependency wiring
+  .addTask((t) =>
+    t
+      .withId('write-article')
+      .withAgents(['writer'])
+      .withInstructions('Write a blog post about the benefits of TypeScript.')
+      .sequential()
+  )
+  .addTask((t) =>
+    t
+      .withId('review-article')
+      .dependsOn('write-article') // runs after write-article completes
+      .withAgents(['editor'])
+      .withInstructions('Review the draft, correct mistakes, and improve the tone.')
+      .sequential()
+  )
+
   .execute('Start');
+
+console.log('Final output:', result.output);
+console.log('Per-task results:', result.taskResults);
 ```
 
-## Advanced Graph Patterns
+---
 
-SocietyAI supports complex execution patterns using its graph-based engine.
+## Advanced Graph Patterns (Low-Level API)
 
-### Cyclic Graphs with Self-Correction
+The high-level `Society` builder covers most use cases. For full graph control —
+cycles, custom node types, complex aggregations — use `GraphBuilder` directly.
 
-Create self-improving agents that loop until they produce valid output:
+### Self-Correction Loop
+
+Create a validate-and-retry feedback cycle:
 
 ```typescript
 import { GraphBuilder, NodeType } from 'societyai';
 
-// Create a self-correcting content generator
-const graph = GraphBuilder.create()
-  .addNode('start', NodeType.START)
-  .addNode('generate', NodeType.AGENT, { 
-    agentId: 'generator' 
-  })
-  .addNode('validate', NodeType.AGENT, { 
-    agentId: 'validator' 
-  })
-  .addNode('check', NodeType.CONDITION, {
-    condition: (result) => result.includes('APPROVED')
+const engine = GraphBuilder.create()
+  .addNode('start',    NodeType.START)
+  .addNode('generate', NodeType.AGENT,     { agentId: 'generator' })
+  .addNode('validate', NodeType.AGENT,     { agentId: 'validator' })
+  .addNode('check',    NodeType.CONDITION, {
+    condition: (result: string) => result.includes('APPROVED'),
   })
   .addNode('end', NodeType.END)
-  
-  // Define the validation loop
-  .addEdge('start', 'generate')
+
+  .addEdge('start',    'generate')
   .addEdge('generate', 'validate')
   .addEdge('validate', 'check')
-  .addEdge('check', 'end', { label: 'approved' })
-  .addEdge('check', 'generate', { label: 'retry' })  // Loop back with feedback
+  // Conditional branch: true → end, false → loop back
+  .addConditionalEdge({
+    from:      'check',
+    condition: (result: string) => result.includes('APPROVED'),
+    truePath:  'end',
+    falsePath: 'generate', // retry
+  })
   .build();
 
-const result = await graph.execute('Generate secure code', agents);
+const result = await engine.execute('Generate secure code', agents);
 ```
 
-### Recursive Societies with Hierarchical Communication
+### Parallel Processing
 
-Build complex organizational structures where agents can communicate in a hierarchical manner:
-
-```typescript
-const graph = GraphBuilder.create()
-  .addNode('start', NodeType.START)
-  .addNode('team', NodeType.COLLABORATIVE, {
-    agentIds: ['junior', 'senior', 'manager'],
-    maxIterations: 5,
-    // Custom message routing for hierarchy
-    messageRouter: (message, sender, allAgents, context) => {
-      // Juniors report to seniors
-      if (sender.id === 'junior') return ['senior'];
-      // Seniors escalate to manager
-      if (sender.id === 'senior') return ['manager'];
-      // Manager broadcasts decisions
-      if (sender.id === 'manager') return ['junior', 'senior'];
-      return [];
-    },
-    completionCondition: (results) => {
-      return results.some(r => r.output.includes('DECISION'));
-    }
-  })
-  .addNode('end', NodeType.END)
-  .addEdge('start', 'team')
-  .addEdge('team', 'end')
-  .build();
-
-const result = await graph.execute('Review architecture proposal', agents);
-```
-
-### Targeted Agent Communication with @mentions
-
-Agents can address specific teammates using the `@agentId` syntax:
+Execute multiple agents in parallel, then aggregate their results:
 
 ```typescript
-// Agent implementation that uses targeted messaging
-const consultantAgent = {
-  id: 'consultant',
-  model: {
-    process: async (prompt) => {
-      // Check expertise needed and route accordingly
-      if (prompt.includes('security')) {
-        return '@security-expert: Can you review this implementation?';
-      }
-      if (prompt.includes('performance')) {
-        return '@perf-expert: Is this approach scalable?';
-      }
-      return 'Analyzing...';
-    }
-  }
-};
+import { GraphBuilder, NodeType } from 'societyai';
 
-// The execution engine automatically routes these messages
-const result = await collaborativeGraph.execute(input, [
-  consultantAgent,
-  securityExpert,
-  perfExpert
-]);
-
-// Check message routing in the result
-result.messages.forEach(msg => {
-  console.log(`[${msg.from} → ${msg.to || 'all'}]: ${msg.content}`);
-});
-```
-
-### Parallel Processing with Aggregation
-
-Execute multiple agents in parallel and aggregate their results:
-
-```typescript
-const graph = GraphBuilder.create()
-  .addNode('start', NodeType.START)
-  .addNode('parallel', NodeType.PARALLEL, {
-    agentIds: ['analyst1', 'analyst2', 'analyst3']
-  })
+const engine = GraphBuilder.create()
+  .addNode('start',     NodeType.START)
+  .addNode('parallel',  NodeType.PARALLEL,  { agentIds: ['analyst1', 'analyst2', 'analyst3'] })
   .addNode('aggregate', NodeType.AGGREGATE, {
     aggregator: (results) => {
-      // Combine insights from all analysts
-      const insights = results.map(r => r.output).join('\n---\n');
+      const insights = results.map((r) => r.output).join('\n---\n');
       return `# Combined Analysis\n\n${insights}`;
-    }
+    },
   })
   .addNode('end', NodeType.END)
-  
-  .addEdge('start', 'parallel')
-  .addEdge('parallel', 'aggregate')
+
+  .addEdge('start',     'parallel')
+  .addEdge('parallel',  'aggregate')
   .addEdge('aggregate', 'end')
   .build();
 
-const result = await graph.execute('Analyze market trends', agents);
+const result = await engine.execute('Analyze market trends', agents);
 ```
 
-### Loop Controls with Maximum Iterations
+### Collaborative Node (Agents Debating)
 
-Protect against infinite loops with built-in safeguards:
+Agents exchange messages across multiple rounds until a condition is met:
 
 ```typescript
-const graph = GraphBuilder.create()
+import { GraphBuilder, NodeType } from 'societyai';
+
+const engine = GraphBuilder.create()
   .addNode('start', NodeType.START)
-  .addNode('loop', NodeType.LOOP, {
-    // Exit condition
-    loopCondition: (iteration, result, context) => {
-      return iteration < 10 && !result.includes('COMPLETE');
+  .addNode('debate', NodeType.COLLABORATIVE, {
+    agentIds: ['junior', 'senior', 'manager'],
+    maxIterations: 5,
+    messageRouter: (message, sender) => {
+      // Juniors report to seniors, seniors escalate to manager
+      if (sender.id === 'junior')  return ['senior'];
+      if (sender.id === 'senior')  return ['manager'];
+      if (sender.id === 'manager') return ['junior', 'senior'];
+      return [];
     },
-    maxIterations: 10  // Hard limit
+    completionCondition: (results) =>
+      results.some((r) => r.output.includes('DECISION')),
   })
-  .addNode('process', NodeType.AGENT, { agentId: 'processor' })
   .addNode('end', NodeType.END)
-  
-  .addEdge('start', 'loop')
-  .addEdge('loop', 'process')
-  .addEdge('process', 'loop')  // Continue loop
-  .addEdge('loop', 'end', { label: 'exit' })  // Exit when done
+
+  .addEdge('start',  'debate')
+  .addEdge('debate', 'end')
+  .build();
+
+const result = await engine.execute('Review architecture proposal', agents);
+```
+
+### Iterative Loop with Max Iterations
+
+Repeat a step until a condition is met or a hard cap is reached:
+
+```typescript
+import { GraphBuilder, NodeType } from 'societyai';
+
+const engine = GraphBuilder.create()
+  .addNode('start',   NodeType.START)
+  .addNode('process', NodeType.AGENT, { agentId: 'processor' })
+  .addNode('loop',    NodeType.LOOP,  {
+    maxIterations: 10,
+    loopCondition: (iteration: number, result: string) =>
+      iteration < 10 && !result.includes('COMPLETE'),
+  })
+  .addNode('end', NodeType.END)
+
+  .addEdge('start',   'process')
+  .addEdge('process', 'loop')
+  .addEdge('loop',    'process') // continue loop
+  .addConditionalEdge({
+    from:      'loop',
+    condition: (_result, ctx) => (ctx.iterationCount ?? 0) >= 10,
+    truePath:  'end',
+    falsePath: 'process',
+  })
   .build();
 ```
 
 ---
 
-## �准 Best Practices
+## Best Practices
 
-### 1. **Start Simple, Then Expand**
+### 1. Start Simple, Then Expand
 
 ```typescript
-// ✅ Good: Start with sequential
-Society.create()
-  .addAgent(agent1)
-  .addTask(s => s.withId('step1').withAgents(['agent1']).sequential())
+// ✅ Start with sequential tasks
+await Society.create()
+  .addAgent((a) => a.withId('agent1').withModel(model).withRole(role1))
+  .addTask((t) => t.withId('step1').withAgents(['agent1']).sequential())
   .execute(input);
 
-// Then add complexity as needed
+// Then add more agents and dependencies as needed
 ```
 
-### 2. **Use Meaningful IDs**
+### 2. Use Meaningful IDs
 
 ```typescript
-// ❌ Bad: Generic IDs
-.addAgent(a => a.withId('agent1')...)
+// ❌ Generic IDs make debugging hard
+.addAgent((a) => a.withId('agent1')...)
 
-// ✅ Good: Descriptive IDs
-.addAgent(a => a.withId('content-writer')...)
+// ✅ Descriptive IDs are self-documenting
+.addAgent((a) => a.withId('content-writer')...)
 ```
 
-### 3. **Leverage Global Context**
+### 3. Use Constants to Avoid Typos
+
+```typescript
+const AGENTS = {
+  WRITER: 'content-writer',
+  EDITOR: 'editor',
+} as const;
+
+Society.create()
+  .addAgent((a) => a.withId(AGENTS.WRITER)...)
+  .addTask((t) => t.withAgents([AGENTS.WRITER])...)
+```
+
+### 4. Leverage Global Context
 
 ```typescript
 Society.create()
-  .withGlobalContext({
-    language: 'fr',
-    tone: 'professional'
-  })
+  .withGlobalContext({ language: 'fr', tone: 'professional' })
   .addAgent(writerAgent)
   .execute(input);
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "Agent not found" Error
 
-Use constants to avoid typos:
-```typescript
-const AGENTS = {
-  WRITER: 'writer',
-  EDITOR: 'editor'
-} as const;
+The agent ID in `.withAgents([...])` does not match any `.addAgent()` call.
+Use the constants pattern above to prevent typos.
 
-Society.create()
-  .addAgent(a => a.withId(AGENTS.WRITER)...)
-  .addTask(s => s.withAgents([AGENTS.WRITER]))
+### Tasks Not Running in the Expected Order
+
+Use `.dependsOn()` to declare explicit ordering:
+
+```typescript
+.addTask((t) => t.withId('step1').withAgents(['writer']).sequential())
+.addTask((t) =>
+  t
+    .withId('step2')
+    .dependsOn('step1') // ← explicit dependency
+    .withAgents(['editor'])
+    .sequential()
+)
 ```
 
-### Steps Not Connecting
+Or use `.thenGoto()` on the preceding task:
 
-Enable implicit routing or define explicit nextTasks:
 ```typescript
-// Option 1: Implicit
-Society.create()
-  .withStrictRouting(false)
-  .addTask(s => s.withId('step1')...)
-  .addTask(s => s.withId('step2')...)
+.addTask((t) =>
+  t.withId('step1').withAgents(['writer']).sequential().thenGoto('step2')
+)
+.addTask((t) => t.withId('step2').withAgents(['editor']).sequential())
+```
 
-// Option 2: Explicit routing
-.addTask(s => s
-  .withId('step1')
-  .withNextSteps(['step2'])  // or .thenGoto(['step2'])
+### Conditional Routing Not Triggering
+
+Prefer the explicit `.withConditionalNext()` or `.withBranch()` helpers on
+`FluentTaskBuilder` rather than the low-level `GraphBuilder` `CONDITION` node
+when using the high-level API:
+
+```typescript
+.addTask((t) =>
+  t
+    .withId('validate')
+    .withAgents(['validator'])
+    .sequential()
+    .withConditionalNext(
+      (results) => results.get('validate')?.[0].output.includes('APPROVED') ?? false,
+      'deploy',     // next task if true
+      'fix-issues'  // next task if false
+    )
 )
 ```
 
 ---
 
-## Next Steps
+## 📚 Next Steps
 
-- Explore [Architecture Documentation](../5-architecture/execution-engine.md) for deep dive into the execution engine
-- Check [Core Concepts](./core-concepts.md) for Society and Workflow details
-- Learn about [Custom Tools](../3-capabilities/tools-functions.md) and [Middleware](../4-advanced/middleware.md)
-
-
+- [Core Concepts](./core-concepts.md) — Society, agents, tasks, and the execution graph
+- [Society Builder](../2-building-societies/society-builder.md) — Full fluent API reference
+- [Execution Engine](../5-architecture/execution-engine.md) — Deep dive into the DAG engine
+- [Tools & Functions](../3-capabilities/tools-functions.md) — Give agents real-world capabilities
+- [Middleware](../4-advanced/middleware.md) — Cross-cutting concerns (logging, retry, cache)

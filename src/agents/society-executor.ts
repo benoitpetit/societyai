@@ -80,59 +80,117 @@ export class SocietyExecutor {
       });
     }
 
-    // Add Edges (Séquentiel par défaut pour la compatibilité)
+    // Add Edges (Sequential by default for compatibility)
     const entryTaskId = society.entryTaskId || tasks[0]?.id;
+
+    // Build a set of task IDs that are depended upon by others (via dependsOn/dependencies).
+    // These tasks should NOT receive an implicit edge from 'start' or from the previous task,
+    // because their ordering is already expressed through explicit dependency edges.
+    const taskMap = new Map(tasks.map((t) => [t.id, t]));
+
+    // Collect all tasks that are explicitly listed as a dependency of another task.
+    const tasksWithIncomingDependency = new Set<string>();
+    for (const task of tasks) {
+      const deps = task.dependencies;
+      if (deps && deps.length > 0) {
+        tasksWithIncomingDependency.add(task.id); // this task depends on others → it has explicit incoming routing
+      }
+    }
+
+    // Wire the entry point
     if (entryTaskId) {
       graphBuilder.addEdge('start', entryTaskId);
     } else {
       graphBuilder.addEdge('start', 'end');
     }
 
-    // First pass: create normal edges (incoming)
-    for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
-      const isLastTask = i === tasks.length - 1;
-      const hasNextResolver = !!task.nextTaskResolver;
-
-      if (hasNextResolver) {
-        // Create nothing here, the second pass will handle outgoing routing
-        continue;
-      }
-
-      // Case 1: Explicit next steps handling (nextTasks defined)
-      if (task.nextTasks && task.nextTasks.length > 0) {
-        for (const nextId of task.nextTasks) {
-          graphBuilder.addEdge(task.id, nextId);
-        }
-      }
-      // Case 2: No explicitly defined next step
-      else {
-        // If it's the last step, naturally go to 'end'
-        if (isLastTask) {
-          graphBuilder.addEdge(task.id, 'end');
-        }
-        // If it's an intermediate step
-        else {
-          const nextTask = tasks[i + 1];
-
-          if (society.strictRouting && !nextTask.nextTaskResolver) {
+    // First pass: create dependency edges from dependsOn() declarations
+    // dependsOn('A') means: add edge A → thisTask
+    for (const task of tasks) {
+      const deps = task.dependencies;
+      if (deps && deps.length > 0) {
+        for (const depId of deps) {
+          if (!taskMap.has(depId)) {
             throw new InvalidWorkflowRoutingError(
-              `Task '${task.id}' (position ${i}) has no explicit nextTasks defined. ` +
-                `In strict routing mode, all intermediate tasks must explicitly define their transitions. ` +
-                `Use .withNextSteps([...]) or .thenGoto([...]) to define routing, or disable strict mode with .withStrictRouting(false).`
+              `Task '${task.id}' declares a dependency on unknown task '${depId}'. ` +
+                `Available tasks: ${Array.from(taskMap.keys()).join(', ')}.`
             );
           }
-
-          graphBuilder.addEdge(task.id, nextTask.id);
-          this.logger.debug(
-            `Implicit routing: Task '${task.id}' -> '${nextTask.id}' ` +
-              `(enable strictRouting to make this explicit)`
-          );
+          graphBuilder.addEdge(depId, task.id);
+          this.logger.debug(`Dependency edge: '${depId}' -> '${task.id}' (from dependsOn)`);
         }
       }
     }
 
-    // Second pass: Dynamic routing
+    // Second pass: create normal sequential / explicit routing edges
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+      const isLastTask = i === tasks.length - 1;
+      const hasNextResolver = !!task.nextTaskResolver;
+      const hasDependencies = !!task.dependencies?.length;
+
+      if (hasNextResolver) {
+        // The dynamic-routing second pass (below) will handle outgoing edges.
+        continue;
+      }
+
+      // Case 1: Explicit next steps defined via thenGoto() / withNextSteps()
+      if (task.nextTasks && task.nextTasks.length > 0) {
+        for (const nextId of task.nextTasks) {
+          graphBuilder.addEdge(task.id, nextId);
+        }
+        continue;
+      }
+
+      // Case 2: This task has dependency declarations — its outgoing edge will be
+      // handled either by an explicit nextTasks on the dependency target or by
+      // implicit sequential wiring below for the tasks that follow it.
+      // We still need to wire it to the next task or 'end' if it has no outgoing edges.
+
+      // If it's the last task, go to 'end' unless it already has outgoing dep edges
+      if (isLastTask) {
+        // Only add edge to 'end' if no other task depends on this one as a predecessor
+        // (i.e. this task hasn't already been wired forward via dependency edges)
+        graphBuilder.addEdge(task.id, 'end');
+        continue;
+      }
+
+      // Intermediate task with no explicit routing
+      const nextTask = tasks[i + 1];
+
+      // Skip implicit wiring if the next task already has an explicit dependency
+      // on THIS task (to avoid duplicate edges)
+      const nextTaskDeps = nextTask.dependencies;
+      const nextAlreadyDependsOnThis = nextTaskDeps?.includes(task.id) ?? false;
+
+      if (nextAlreadyDependsOnThis) {
+        // Edge already created in the dependency pass above.
+        continue;
+      }
+
+      // Skip implicit wiring for tasks that declare dependencies on other tasks —
+      // their incoming edges come from those dependency declarations.
+      if (hasDependencies) {
+        // This task already has incoming edges from its dependencies.
+        // We still need to wire it forward to the next task.
+      }
+
+      if (society.strictRouting) {
+        throw new InvalidWorkflowRoutingError(
+          `Task '${task.id}' (position ${i}) has no explicit nextTasks defined. ` +
+            `In strict routing mode, all intermediate tasks must explicitly define their transitions. ` +
+            `Use .withNextSteps([...]) or .thenGoto([...]) to define routing, or disable strict mode with .withStrictRouting(false).`
+        );
+      }
+
+      graphBuilder.addEdge(task.id, nextTask.id);
+      this.logger.debug(
+        `Implicit routing: Task '${task.id}' -> '${nextTask.id}' ` +
+          `(enable strictRouting to make this explicit)`
+      );
+    }
+
+    // Third pass: Dynamic routing (nextTaskResolver)
     for (const task of tasks) {
       if (!task.nextTaskResolver) continue;
 

@@ -1,6 +1,9 @@
-# Guide: Context Injection with Middleware
+# Middleware System
 
-This guide explains how to use the SocietyAI middleware system to inject context, intercept calls, and add cross-cutting behaviors to your agents.
+This guide explains how to use the SocietyAI middleware system to inject
+context, intercept calls, and add cross-cutting behaviours to your agents.
+
+---
 
 ## 📋 Table of Contents
 
@@ -11,8 +14,10 @@ This guide explains how to use the SocietyAI middleware system to inject context
 - [Built-in Middlewares](#built-in-middlewares)
 - [Middleware Composition](#middleware-composition)
 - [Advanced Examples](#advanced-examples)
+- [Usage with Society](#usage-with-society)
+- [Best Practices](#best-practices)
 
-## Basic Concepts
+## 🧅 Basic Concepts
 
 Middlewares in SocietyAI follow the "onion" pattern: each middleware wraps the next one, allowing for pre-processing and post-processing.
 
@@ -20,32 +25,54 @@ Middlewares in SocietyAI follow the "onion" pattern: each middleware wraps the n
 Request → MW1 → MW2 → MW3 → Agent → MW3 → MW2 → MW1 → Response
 ```
 
-## Middleware Types
+The `Middleware` interface in SocietyAI is a **named object** with a `fn` property:
+
+```typescript
+import { Middleware, MiddlewareFn, MiddlewareContext, MiddlewareResult } from 'societyai';
+
+// Option 1: raw MiddlewareFn (auto-wrapped by MiddlewareChain)
+const myFn: MiddlewareFn = async (ctx, next) => {
+  // ctx.input     — the raw input
+  // ctx.metadata  — Map<string, unknown> shared across the chain
+  // ctx.agentId   — agent executing the call (if available)
+  const result = await next(ctx);
+  return result;
+};
+
+// Option 2: named Middleware object
+const myMiddleware: Middleware = {
+  name: 'my-middleware',
+  priority: 50,         // higher = runs earlier (optional)
+  fn: myFn,
+};
+```
+
+## 🗂️ Middleware Types
 
 ### 1. **Model-Level Middleware**
-Intercepts calls to the AI model (before/after `model.process()`).
+Intercepts calls to the AI model (before/after `model.process()`). Applied via `Society.create().addMiddleware(...)`.
 
-### 2. **Step-Level Middleware**  
-Intercepts the complete execution of a workflow step.
+### 2. **Step-Level Middleware**
+Intercepts the complete execution of a workflow step. Uses `StepMiddleware` / `StepMiddlewareFn`.
 
-## Model Middleware
+## 🤖 Model Middleware
 
 ### Simple Example: Logger
 
 ```typescript
-import { Middleware, MiddlewareContext } from 'societyai';
+import { MiddlewareFn } from 'societyai';
 
-const loggingMiddleware: Middleware = async (prompt, next, context) => {
-  console.log(`[${context.agentId}] Sending prompt:`, prompt);
+const loggingFn: MiddlewareFn = async (ctx, next) => {
+  console.log(`[${ctx.agentId ?? 'unknown'}] Sending prompt:`, ctx.input);
   const startTime = Date.now();
-  
+
   try {
-    const result = await next(prompt);
+    const result = await next(ctx);
     const duration = Date.now() - startTime;
-    console.log(`[${context.agentId}] Received response in ${duration}ms`);
+    console.log(`[${ctx.agentId ?? 'unknown'}] Response in ${duration}ms`);
     return result;
   } catch (error) {
-    console.error(`[${context.agentId}] Error:`, error);
+    console.error(`[${ctx.agentId ?? 'unknown'}] Error:`, error);
     throw error;
   }
 };
@@ -54,22 +81,23 @@ const loggingMiddleware: Middleware = async (prompt, next, context) => {
 ### User Context Injection
 
 ```typescript
-const userContextMiddleware: Middleware = async (prompt, next, context) => {
-  // Retrieve user context from session
-  const userId = context.metadata.get('userId') as string;
+import { MiddlewareFn } from 'societyai';
+
+const userContextFn: MiddlewareFn = async (ctx, next) => {
+  const userId = ctx.metadata.get('userId') as string;
   const userProfile = await getUserProfile(userId);
-  
+
   // Inject context into the prompt
-  const enhancedPrompt = `
+  ctx.processedInput = `
 User Context:
 - Name: ${userProfile.name}
 - Role: ${userProfile.role}
 - Preferences: ${JSON.stringify(userProfile.preferences)}
 
-${prompt}
-  `;
-  
-  return await next(enhancedPrompt);
+${ctx.input}
+  `.trim();
+
+  return await next(ctx);
 };
 ```
 
@@ -80,41 +108,20 @@ import { Middlewares } from 'societyai';
 
 const rateLimitMiddleware = Middlewares.rateLimit({
   maxRequests: 10,      // 10 requests max
-  windowMs: 60 * 1000,  // per 60 seconds window
-  keyGenerator: (context) => context.agentId  // Per agent
+  windowMs: 60 * 1000, // per 60-second window
+  onLimitReached: () => console.warn('Rate limit reached'),
 });
-
-// Usage
-const wrappedModel = new MiddlewareWrappedModel(
-  originalModel,
-  [rateLimitMiddleware]
-);
 ```
 
 ### Intelligent Caching
 
 ```typescript
-const cachingMiddleware: Middleware = async (prompt, next, context) => {
-  // Generate cache key
-  const cacheKey = `${context.agentId}:${hashPrompt(prompt)}`;
-  
-  // Check cache
-  const cached = await cache.get(cacheKey);
-  if (cached) {
-    console.log('Cache hit!');
-    context.metadata.set('cacheHit', true);
-    return cached;
-  }
-  
-  // Call model
-  const result = await next(prompt);
-  
-  // Store in cache (TTL: 1 hour)
-  await cache.set(cacheKey, result, { ttl: 3600 });
-  context.metadata.set('cacheHit', false);
-  
-  return result;
-};
+import { Middlewares } from 'societyai';
+
+const cachingMiddleware = Middlewares.cache({
+  ttl: 3_600_000, // 1 hour in ms
+  keyGenerator: (input) => JSON.stringify(input).slice(0, 100),
+});
 ```
 
 ### Retry with Exponential Backoff
@@ -123,73 +130,79 @@ const cachingMiddleware: Middleware = async (prompt, next, context) => {
 import { Middlewares } from 'societyai';
 
 const retryMiddleware = Middlewares.retry({
-  maxRetries: 3,
-  initialDelay: 1000,     // 1 second
-  maxDelay: 10000,        // 10 seconds max
-  backoffMultiplier: 2,   // Double delay
-  retryableErrors: ['RateLimitError', 'TimeoutError']
+  maxAttempts: 3,       // maximum number of attempts
+  delay: 1_000,         // initial delay in ms
+  backoffFactor: 2,     // multiply delay by this factor each retry
+  retryOn: (error) =>   // optional: filter which errors trigger a retry
+    error.message.includes('rate_limit') || error.message.includes('timeout'),
 });
 ```
 
-### Content Filtering
+### Content Filtering (custom middleware)
+
+Because content filtering is domain-specific, SocietyAI does not ship a built-in
+`contentFilter` middleware. Implement it as a custom `MiddlewareFn`:
 
 ```typescript
-const contentFilterMiddleware: Middleware = async (prompt, next, context) => {
+import { MiddlewareFn } from 'societyai';
+
+const contentFilterFn: MiddlewareFn = async (ctx, next) => {
+  const prompt = String(ctx.input);
+
   // Pre-filtering: block sensitive content
   if (containsSensitiveData(prompt)) {
     throw new Error('Prompt contains sensitive data');
   }
-  
-  const result = await next(prompt);
-  
-  // Post-filtering: clean response
-  const filtered = removePII(result);
-  context.metadata.set('contentFiltered', filtered !== result);
-  
-  return filtered;
+
+  const result = await next(ctx);
+
+  // Post-filtering: remove PII from response
+  return { ...result, output: removePII(result.output) };
 };
 
 function containsSensitiveData(text: string): boolean {
   const patterns = [
-    /d{3}-d{2}-d{4}/,  // SSN
-    /d{16}/,             // Credit card
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+.[A-Z]{2,}/i  // Email
+    /\d{3}-\d{2}-\d{4}/,                    // SSN
+    /\d{16}/,                                // Credit card
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, // Email
   ];
-  return patterns.some(pattern => pattern.test(text));
+  return patterns.some((p) => p.test(text));
 }
 ```
 
-## Step Middleware
+## 📋 Step Middleware
 
-Step middlewares operate at the workflow level:
+Step middlewares operate at the workflow level and use the `StepMiddleware` /
+`StepMiddlewareFn` types:
 
 ### Audit Trail
 
 ```typescript
-import { StepMiddleware, StepMiddlewareContext } from 'societyai';
+import { StepMiddlewareFn } from 'societyai';
 
-const auditMiddleware: StepMiddleware = async (step, next, context) => {
-  const auditLog = {
-    taskId: context.taskId,
-    agentId: context.agentId,
-    startTime: Date.now(),
-    input: context.input
-  };
-  
+const auditFn: StepMiddlewareFn = async (ctx, next) => {
+  const startTime = Date.now();
+
   try {
-    const result = await next(step);
-    auditLog.success = true;
-    auditLog.output = result.output;
-    auditLog.duration = Date.now() - auditLog.startTime;
-    
-    await saveAuditLog(auditLog);
+    const result = await next(ctx);
+    await saveAuditLog({
+      taskId: ctx.taskId,
+      agentId: ctx.agentId,
+      startTime,
+      duration: Date.now() - startTime,
+      success: true,
+      output: result.output,
+    });
     return result;
   } catch (error) {
-    auditLog.success = false;
-    auditLog.error = error.message;
-    auditLog.duration = Date.now() - auditLog.startTime;
-    
-    await saveAuditLog(auditLog);
+    await saveAuditLog({
+      taskId: ctx.taskId,
+      agentId: ctx.agentId,
+      startTime,
+      duration: Date.now() - startTime,
+      success: false,
+      error: (error as Error).message,
+    });
     throw error;
   }
 };
@@ -198,143 +211,245 @@ const auditMiddleware: StepMiddleware = async (step, next, context) => {
 ### Metrics and Monitoring
 
 ```typescript
-const metricsMiddleware: StepMiddleware = async (step, next, context) => {
+import { StepMiddlewareFn } from 'societyai';
+
+const metricsFn: StepMiddlewareFn = async (ctx, next) => {
   const startTime = Date.now();
   const startMemory = process.memoryUsage().heapUsed;
-  
+
   try {
-    const result = await next(step);
-    
-    // Record metrics
+    const result = await next(ctx);
     metrics.record({
-      step: context.taskId,
-      agent: context.agentId,
+      step: ctx.taskId,
+      agent: ctx.agentId,
       duration: Date.now() - startTime,
       memoryDelta: process.memoryUsage().heapUsed - startMemory,
-      success: true
+      success: true,
     });
-    
     return result;
   } catch (error) {
     metrics.record({
-      step: context.taskId,
-      agent: context.agentId,
+      step: ctx.taskId,
+      agent: ctx.agentId,
       duration: Date.now() - startTime,
       success: false,
-      error: error.constructor.name
+      error: (error as Error).constructor.name,
     });
     throw error;
   }
 };
 ```
 
-## Built-in Middlewares
+## 📦 Built-in Middlewares
 
-SocietyAI provides ready-to-use middlewares:
+SocietyAI provides **13 ready-to-use middlewares** via the `Middlewares` object.
 
-### 1. Rate Limiting
+### Observability
+
+#### 1. Logging
 
 ```typescript
 import { Middlewares } from 'societyai';
 
-const rateLimit = Middlewares.rateLimit({
-  maxRequests: 100,
-  windowMs: 60000,  // 1 minute
-  keyGenerator: (context) => context.agentId
+const logging = Middlewares.logging({
+  prefix: '[MyApp]',    // optional log prefix
+  logInput: true,       // log the input prompt (default: true)
+  logOutput: true,      // log the model response (default: true)
 });
 ```
 
-### 2. Caching
+#### 2. Timing
 
 ```typescript
-const cache = Middlewares.cache({
-  ttl: 3600000,  // 1 hour
-  maxSize: 1000,
-  keyGenerator: (prompt, context) => `${context.agentId}:${prompt.slice(0, 100)}`
+const timing = Middlewares.timing({
+  onComplete: (durationMs) => console.log(`Completed in ${durationMs}ms`),
 });
 ```
 
-### 3. Retry
+#### 3. Metrics
+
+```typescript
+import { Middlewares, InMemoryMetricsCollector } from 'societyai';
+
+const collector = new InMemoryMetricsCollector();
+const metricsMiddleware = Middlewares.metrics(collector);
+```
+
+### Resilience
+
+#### 4. Timeout
+
+```typescript
+const timeout = Middlewares.timeout(30_000); // 30 s
+```
+
+#### 5. Retry
 
 ```typescript
 const retry = Middlewares.retry({
-  maxRetries: 3,
-  initialDelay: 1000,
-  backoffMultiplier: 2
+  maxAttempts: 3,
+  delay: 1_000,
+  backoffFactor: 2,
 });
 ```
 
-### 4. Logging
+#### 6. Cache
 
 ```typescript
-const logging = Middlewares.logging({
-  level: 'debug',
-  includePrompt: true,
-  includeResponse: true
+const cache = Middlewares.cache({
+  ttl: 3_600_000, // 1 hour
+  keyGenerator: (input) => JSON.stringify(input).slice(0, 100),
 });
 ```
 
-### 5. Content Filtering
+#### 7. Rate Limit
 
 ```typescript
-const contentFilter = Middlewares.contentFilter({
-  blockPatterns: [/sensitive-keyword/i],
-  sanitize: true
+const rateLimit = Middlewares.rateLimit({
+  maxRequests: 100,
+  windowMs: 60_000,              // 1 minute
+  onLimitReached: () => console.warn('Rate limit hit'),
 });
 ```
 
-### 6. Token Counting
+#### 8. Circuit Breaker
 
 ```typescript
-const tokenCounter = Middlewares.tokenCounter({
-  estimator: (text) => Math.ceil(text.length / 4),
-  onCount: (tokens, context) => {
-    console.log(`Agent ${context.agentId} used ${tokens} tokens`);
-  }
+const circuitBreaker = Middlewares.circuitBreaker({
+  threshold: 5,        // open after 5 consecutive failures
+  timeout: 60_000,     // attempt half-open after 60 s
+  onOpen: () => console.error('Circuit opened'),
+  onClose: () => console.info('Circuit closed'),
+  onHalfOpen: () => console.info('Circuit half-open'),
 });
 ```
 
-## Middleware Composition
-
-### Simple Chaining
+#### 9. Dedupe
 
 ```typescript
-import { MiddlewareChain } from 'societyai';
+const dedupe = Middlewares.dedupe();
+// Deduplicates concurrent identical requests — only one call is made
+// and the result is shared between all callers.
+```
 
-const chain = new MiddlewareChain([
-  loggingMiddleware,
-  rateLimitMiddleware,
-  cachingMiddleware,
-  retryMiddleware
-]);
+#### 10. Fallback
 
-const wrappedModel = new MiddlewareWrappedModel(originalModel, chain);
+```typescript
+const fallback = Middlewares.fallback('Sorry, the service is temporarily unavailable.');
+
+// Or with a dynamic fallback:
+const fallback = Middlewares.fallback((error) => `Error: ${error.message}`);
+```
+
+### Transform
+
+#### 11. Validation
+
+```typescript
+const validation = Middlewares.validation({
+  validateInput: (input) => {
+    if (!input) return 'Input cannot be empty';
+    return true;
+  },
+  validateOutput: (output) => {
+    if (output.length < 10) return 'Output too short';
+    return true;
+  },
+});
+```
+
+#### 12. Transform Input
+
+```typescript
+const transformInput = Middlewares.transformInput((input) => {
+  // Trim whitespace, add a prefix, etc.
+  return `[Sanitized] ${String(input).trim()}`;
+});
+```
+
+#### 13. Transform Output
+
+```typescript
+const transformOutput = Middlewares.transformOutput((output) => {
+  return output.trim().replace(/\n{3,}/g, '\n\n');
+});
+```
+
+## 🔗 Middleware Composition
+
+### Using `MiddlewareChain.create()` (recommended)
+
+```typescript
+import { MiddlewareChain, Middlewares } from 'societyai';
+
+const chain = MiddlewareChain.create()
+  .use(Middlewares.logging())
+  .use(Middlewares.timeout(30_000))
+  .use(Middlewares.retry({ maxAttempts: 3 }))
+  .use(Middlewares.cache({ ttl: 60_000 }))
+  .use(Middlewares.circuitBreaker({ threshold: 5, timeout: 60_000 }));
+```
+
+You can also add a raw `MiddlewareFn` directly — it will be auto-wrapped:
+
+```typescript
+chain.use(async (ctx, next) => {
+  ctx.metadata.set('traceId', crypto.randomUUID());
+  return next(ctx);
+});
+```
+
+### Priority ordering
+
+Each `Middleware` object has an optional `priority` field (higher = runs first).
+Call `.sortByPriority()` to reorder the chain before use:
+
+```typescript
+chain.sortByPriority();
+```
+
+### Wrapping a model directly
+
+Use `MiddlewareWrappedModel` to apply middleware to a single model instance
+rather than the whole society:
+
+```typescript
+import { MiddlewareWrappedModel, MiddlewareChain, Middlewares } from 'societyai';
+
+const chain = MiddlewareChain.create()
+  .use(Middlewares.logging())
+  .use(Middlewares.retry({ maxAttempts: 3 }));
+
+const wrappedModel = chain.wrap(originalModel);
+// wrappedModel implements AIModel — pass it to any agent
 ```
 
 ### Conditional Composition
 
 ```typescript
-const conditionalMiddleware: Middleware = async (prompt, next, context) => {
-  // Apply rate limit only in production
+import { MiddlewareFn } from 'societyai';
+
+const conditionalFn: MiddlewareFn = async (ctx, next) => {
   if (process.env.NODE_ENV === 'production') {
-    return await rateLimitMiddleware(prompt, next, context);
+    // Apply additional validation in production
+    if (!ctx.input) throw new Error('Input required in production');
   }
-  return await next(prompt);
+  return next(ctx);
 };
 ```
 
 ### Middleware Factory
 
 ```typescript
-function createAuthMiddleware(apiKey: string): Middleware {
-  return async (prompt, next, context) => {
-    // Inject authentication
-    context.metadata.set('apiKey', apiKey);
-    
+import { MiddlewareFn } from 'societyai';
+
+function createAuthMiddleware(apiKey: string): MiddlewareFn {
+  return async (ctx, next) => {
+    ctx.metadata.set('apiKey', apiKey);
     try {
-      return await next(prompt);
+      return await next(ctx);
     } catch (error) {
-      if (error.message.includes('401')) {
+      if ((error as Error).message.includes('401')) {
         throw new Error('Authentication failed. Check your API key.');
       }
       throw error;
@@ -342,44 +457,39 @@ function createAuthMiddleware(apiKey: string): Middleware {
   };
 }
 
-const authMiddleware = createAuthMiddleware(process.env.API_KEY);
+const authFn = createAuthMiddleware(process.env.API_KEY!);
 ```
 
-## Advanced Examples
+## 🔬 Advanced Examples
 
 ### Multi-Tenant Context
 
 ```typescript
-const multiTenantMiddleware: Middleware = async (prompt, next, context) => {
-  const tenantId = context.metadata.get('tenantId') as string;
-  
-  if (!tenantId) {
-    throw new Error('Tenant ID required');
-  }
-  
-  // Load tenant config
+import { MiddlewareFn } from 'societyai';
+
+const multiTenantFn: MiddlewareFn = async (ctx, next) => {
+  const tenantId = ctx.metadata.get('tenantId') as string;
+
+  if (!tenantId) throw new Error('Tenant ID required');
+
   const tenantConfig = await getTenantConfig(tenantId);
-  
-  // Apply tenant limits
+
   const tokensUsed = await getTokenUsage(tenantId);
   if (tokensUsed >= tenantConfig.tokenLimit) {
-    throw new Error(`Tenant ${tenantId} has exceeded token limit`);
+    throw new Error(`Tenant ${tenantId} has exceeded its token limit`);
   }
-  
-  // Inject tenant context
-  const enhancedPrompt = `
+
+  ctx.processedInput = `
 [Tenant: ${tenantConfig.name}]
 [Industry: ${tenantConfig.industry}]
 [Compliance: ${tenantConfig.complianceLevel}]
 
-${prompt}
-  `;
-  
-  const result = await next(enhancedPrompt);
-  
-  // Record usage
-  await recordTokenUsage(tenantId, estimateTokens(result));
-  
+${ctx.input}
+  `.trim();
+
+  const result = await next(ctx);
+
+  await recordTokenUsage(tenantId, estimateTokens(result.output));
   return result;
 };
 ```
@@ -387,160 +497,189 @@ ${prompt}
 ### A/B Testing
 
 ```typescript
-const abTestMiddleware: Middleware = async (prompt, next, context) => {
-  const userId = context.metadata.get('userId') as string;
-  const variant = getABTestVariant(userId);  // 'A' or 'B'
-  
-  context.metadata.set('variant', variant);
-  
-  let enhancedPrompt = prompt;
+import { MiddlewareFn } from 'societyai';
+
+const abTestFn: MiddlewareFn = async (ctx, next) => {
+  const userId = ctx.metadata.get('userId') as string;
+  const variant = getABTestVariant(userId); // 'A' or 'B'
+
+  ctx.metadata.set('variant', variant);
+
   if (variant === 'B') {
-    // Variant B: improved prompt
-    enhancedPrompt = `${prompt}\n\nProvide detailed reasoning for your answer.`;
+    ctx.processedInput = `${ctx.input}\n\nProvide detailed reasoning for your answer.`;
   }
-  
+
   const startTime = Date.now();
-  const result = await next(enhancedPrompt);
-  const duration = Date.now() - startTime;
-  
-  // Record metrics for analysis
+  const result = await next(ctx);
+
   await recordABTestMetrics({
     userId,
     variant,
-    duration,
-    promptLength: prompt.length,
-    responseLength: result.length
+    duration: Date.now() - startTime,
+    promptLength: String(ctx.input).length,
+    responseLength: result.output.length,
   });
-  
+
   return result;
 };
 ```
 
-### Circuit Breaker
+### Circuit Breaker (custom class pattern)
+
+The built-in `Middlewares.circuitBreaker()` covers most cases. If you need
+instance-level state (e.g. per-agent), use a class:
 
 ```typescript
+import { MiddlewareFn } from 'societyai';
+
 class CircuitBreakerMiddleware {
   private failures = 0;
   private lastFailureTime = 0;
   private isOpen = false;
-  
+
   constructor(
-    private threshold = 5,       // Failures before opening
-    private timeoutMs = 60000    // Time before retry
+    private threshold = 5,
+    private timeoutMs = 60_000
   ) {}
-  
-  middleware: Middleware = async (prompt, next, context) => {
-    // Check if circuit is open
+
+  readonly fn: MiddlewareFn = async (ctx, next) => {
     if (this.isOpen) {
-      const timeSinceFailure = Date.now() - this.lastFailureTime;
-      if (timeSinceFailure < this.timeoutMs) {
+      const elapsed = Date.now() - this.lastFailureTime;
+      if (elapsed < this.timeoutMs) {
         throw new Error('Circuit breaker is open. Service temporarily unavailable.');
       }
-      // Attempt to close circuit
       this.isOpen = false;
       this.failures = 0;
     }
-    
+
     try {
-      const result = await next(prompt);
-      // Success: reset counter
+      const result = await next(ctx);
       this.failures = 0;
       return result;
     } catch (error) {
       this.failures++;
       this.lastFailureTime = Date.now();
-      
       if (this.failures >= this.threshold) {
         this.isOpen = true;
         console.error(`Circuit breaker opened after ${this.failures} failures`);
       }
-      
       throw error;
     }
   };
 }
 
-const circuitBreaker = new CircuitBreakerMiddleware(5, 60000);
+const cb = new CircuitBreakerMiddleware(5, 60_000);
+// chain.use(cb.fn);
 ```
 
 ### Dynamic Prompt Enrichment
 
 ```typescript
-const dynamicEnrichmentMiddleware: Middleware = async (prompt, next, context) => {
-  const enrichments: string[] = [];
-  
-  // Add temporal context
+import { MiddlewareFn } from 'societyai';
+
+const enrichFn: MiddlewareFn = async (ctx, next) => {
   const now = new Date();
-  enrichments.push(`Current Date: ${now.toISOString()}`);
-  enrichments.push(`Day of Week: ${now.toLocaleDateString('en', { weekday: 'long' })}`);
-  
-  // Add business context
-  if (context.metadata.has('projectId')) {
-    const projectId = context.metadata.get('projectId');
-    const projectInfo = await getProjectInfo(projectId);
-    enrichments.push(`Project: ${projectInfo.name}`);
-    enrichments.push(`Status: ${projectInfo.status}`);
+  const enrichments = [
+    `Current Date: ${now.toISOString()}`,
+    `Day: ${now.toLocaleDateString('en', { weekday: 'long' })}`,
+  ];
+
+  if (ctx.metadata.has('projectId')) {
+    const info = await getProjectInfo(ctx.metadata.get('projectId'));
+    enrichments.push(`Project: ${info.name}`, `Status: ${info.status}`);
   }
-  
-  // Add real-time data
-  const systemLoad = await getSystemLoad();
-  enrichments.push(`System Load: ${systemLoad}%`);
-  
-  const enrichedPrompt = `
+
+  ctx.processedInput = `
 === Context ===
 ${enrichments.join('\n')}
 
 === Task ===
-${prompt}
-  `;
-  
-  return await next(enrichedPrompt);
+${ctx.input}
+  `.trim();
+
+  return next(ctx);
 };
 ```
 
-## Usage with Society
+## ⚡ Usage with Society
 
-Apply middlewares to your agents:
+Middlewares are applied at the **Society level** via `addMiddleware()`. They run
+for every agent in the society.
 
 ```typescript
 import { Society, MiddlewareChain, Middlewares } from 'societyai';
 
-// Create a middleware chain
-const middlewares = new MiddlewareChain([
-  Middlewares.logging({ level: 'info' }),
-  Middlewares.rateLimit({ maxRequests: 100, windowMs: 60000 }),
-  Middlewares.cache({ ttl: 3600000 }),
-  userContextMiddleware,
-  auditMiddleware
-]);
+// Build a reusable chain
+const chain = MiddlewareChain.create()
+  .use(Middlewares.logging())
+  .use(Middlewares.timeout(30_000))
+  .use(Middlewares.retry({ maxAttempts: 3 }))
+  .use(Middlewares.cache({ ttl: 3_600_000 }))
+  .use(Middlewares.rateLimit({ maxRequests: 100, windowMs: 60_000 }));
 
-const society = Society.create()
-  .addAgent(agent => agent
-    .withId('analyst')
-    .withModel(model)
-    .withMiddleware(middlewares)  // Apply middlewares
+// Pass the chain (or a single Middleware) to addMiddleware()
+const result = await Society.create()
+  .addMiddleware(chain)   // ← accepts Middleware | MiddlewareChain
+  .addAgent((a) =>
+    a.withId('analyst').withModel(model).withRole(/* ... */)
   )
+  .addTask((t) => t.withId('analyze').withAgents(['analyst']).sequential())
   .execute('Analyze this data...');
 ```
 
-## Best Practices
-
-### 1. **Middleware Order**
-Order matters! Generally:
-```
-Logging → Auth → Rate Limit → Cache → Retry → Business Logic
-```
-
-### 2. **Error Handling**
-Capture and transform errors consistently:
+You can also pass a raw `MiddlewareFn` or individual `Middleware` object:
 
 ```typescript
-const errorMiddleware: Middleware = async (prompt, next, context) => {
+Society.create()
+  .addMiddleware(Middlewares.logging())          // single built-in
+  .addMiddleware(async (ctx, next) => {          // raw fn — auto-wrapped
+    ctx.metadata.set('start', Date.now());
+    return next(ctx);
+  })
+  .addAgent(...)
+  .execute('...');
+```
+
+> **Note:** There is no per-agent `.withMiddleware()` method on
+> `FluentAgentBuilder`. If you need to apply middleware to a specific model
+> only, wrap it with `MiddlewareWrappedModel` before passing it to `.withModel()`.
+
+```typescript
+import { MiddlewareWrappedModel, MiddlewareChain, Middlewares } from 'societyai';
+
+const agentChain = MiddlewareChain.create()
+  .use(Middlewares.retry({ maxAttempts: 5 }));
+
+const wrappedModel = agentChain.wrap(myModel);
+
+Society.create()
+  .addAgent((a) => a.withId('resilient-agent').withModel(wrappedModel))
+  .addTask(/* ... */)
+  .execute('...');
+```
+
+## ✅ Best Practices
+
+### 1. Middleware Order
+
+Order matters — middlewares run in insertion order (modified by `priority`):
+
+```
+Logging → Timeout → Retry → Cache → Rate Limit → Business Logic
+```
+
+### 2. Error Handling
+
+Transform errors consistently:
+
+```typescript
+import { MiddlewareFn } from 'societyai';
+
+const errorFn: MiddlewareFn = async (ctx, next) => {
   try {
-    return await next(prompt);
+    return await next(ctx);
   } catch (error) {
-    // Transform error
-    if (error.code === 'ECONNREFUSED') {
+    if ((error as NodeJS.ErrnoException).code === 'ECONNREFUSED') {
       throw new Error('Service unavailable. Please try again later.');
     }
     throw error;
@@ -548,72 +687,101 @@ const errorMiddleware: Middleware = async (prompt, next, context) => {
 };
 ```
 
-### 3. **Performance**
-Avoid heavy operations in critical middlewares:
+### 3. Performance
+
+Avoid blocking operations in hot-path middlewares:
 
 ```typescript
-// ❌ Bad: Blocking synchronous call
-const badMiddleware: Middleware = async (prompt, next, context) => {
-  const data = await heavyDatabaseQuery();  // Blocks everything
-  return await next(prompt);
+// ❌ Bad: heavy synchronous/blocking work on every call
+const badFn: MiddlewareFn = async (ctx, next) => {
+  const data = await heavyDatabaseQuery(); // runs on every call
+  return next(ctx);
 };
 
-// ✅ Good: Cache or async
-const goodMiddleware: Middleware = async (prompt, next, context) => {
-  const cachedData = cache.get('key') || await heavyDatabaseQuery();
-  context.metadata.set('data', cachedData);
-  return await next(prompt);
+// ✅ Good: cache the result, or compute lazily
+let cachedData: unknown;
+const goodFn: MiddlewareFn = async (ctx, next) => {
+  cachedData ??= await heavyDatabaseQuery();
+  ctx.metadata.set('data', cachedData);
+  return next(ctx);
 };
 ```
 
-### 4. **Metadata**
-Use context to pass data:
+### 4. Using `metadata` to pass data between middlewares
 
 ```typescript
-context.metadata.set('startTime', Date.now());
-context.metadata.set('userId', userId);
-context.metadata.set('traceId', generateTraceId());
+// Upstream middleware sets a value
+ctx.metadata.set('startTime', Date.now());
+ctx.metadata.set('userId', userId);
+ctx.metadata.set('traceId', crypto.randomUUID());
+
+// Downstream middleware reads it
+const startTime = ctx.metadata.get('startTime') as number;
 ```
 
-## Summary
+## 📝 Summary
 
 Middlewares enable:
-- ✅ Dynamic context injection.
-- ✅ Centralized logging and auditing.
-- ✅ Rate limiting and quotas.
-- ✅ Intelligent caching.
-- ✅ Automatic retry.
-- ✅ Metrics and monitoring.
-- ✅ A/B testing.
-- ✅ Multi-tenancy.
+- ✅ Dynamic context and prompt injection
+- ✅ Centralised logging and auditing
+- ✅ Rate limiting and quotas
+- ✅ Intelligent caching
+- ✅ Automatic retry with backoff
+- ✅ Metrics and monitoring
+- ✅ A/B testing
+- ✅ Multi-tenancy
+- ✅ Circuit breaking and deduplication
 
-For more examples, see [core/middleware.md](./middleware.md).
+---
 
+## 📚 API Reference
 
-# API Reference
+### `Middleware`
 
-## `Middleware`
-
-Interface for model-level middlewares.
-
-```typescript
-type Middleware = (
-  prompt: unknown,
-  next: NextFunction,
-  context: MiddlewareContext
-) => Promise<string>;
-```
-
-## `MiddlewareChain`
-
-Chain of middlewares.
+Named middleware object:
 
 ```typescript
-const chain = new MiddlewareChain()
-  .use(loggingMiddleware)
-  .use(cachingMiddleware)
-  .use(rateLimitMiddleware);
-
-const model = chain.wrap(baseModel);
+interface Middleware {
+  name: string;
+  description?: string;
+  priority?: number; // higher = runs earlier
+  fn: MiddlewareFn;
+}
 ```
 
+### `MiddlewareFn`
+
+```typescript
+type MiddlewareFn = (
+  ctx: MiddlewareContext,
+  next: NextFunction
+) => Promise<MiddlewareResult>;
+```
+
+### `MiddlewareContext`
+
+```typescript
+interface MiddlewareContext {
+  input: unknown;           // original input
+  processedInput: unknown;  // mutated input (set this to transform the prompt)
+  metadata: Map<string, unknown>;
+  startTime: number;
+  agentId?: string;
+  stepId?: string;
+  signal?: AbortSignal;
+}
+```
+
+### `MiddlewareChain`
+
+```typescript
+MiddlewareChain.create()
+  .use(middleware | middlewareFn) // add a middleware
+  .useAt(index, middleware)       // insert at position
+  .useBefore(name, middleware)    // insert before named middleware
+  .useAfter(name, middleware)     // insert after named middleware
+  .remove(name)                   // remove by name
+  .sortByPriority()               // reorder by priority field
+  .wrap(model)                    // returns MiddlewareWrappedModel
+  .build()                        // returns ComposedMiddleware
+```

@@ -259,6 +259,28 @@ export class ComposedMiddleware {
 
     return next(ctx);
   }
+
+  /**
+   * Execute this composed middleware as part of a larger chain.
+   * Unlike `execute()`, this method accepts an external context and a `next`
+   * function, so it can be embedded inside another middleware chain.
+   */
+  async executeInChain(ctx: MiddlewareContext, next: NextFunction): Promise<MiddlewareResult> {
+    if (this.middlewares.length === 0) {
+      return next(ctx);
+    }
+
+    // Build a local chain that falls through to the outer `next`
+    let currentNext: NextFunction = next;
+
+    for (let i = this.middlewares.length - 1; i >= 0; i--) {
+      const middleware = this.middlewares[i];
+      const outerNext = currentNext;
+      currentNext = async (c): Promise<MiddlewareResult> => middleware.fn(c, outerNext);
+    }
+
+    return currentNext(ctx);
+  }
 }
 
 /**

@@ -1,21 +1,39 @@
-# Transformation Mechanisms Guide - SocietyAI
+# Graph Transformation Mechanisms
 
 This guide explains when and how to use the three transformation mechanisms
-available in SocietyAI.
-
-## Overview
-
-SocietyAI offers three ways to transform or modify data:
-
-1. **Middlewares** - Global transformations and cross-cutting concerns
-2. **Transform Nodes** - Transformations within the execution graph
-3. **Step Result Transformers** - Step-level result transformations
+available in SocietyAI, and how to choose the right one for your use case.
 
 ---
 
-## 1. Middlewares
+## 📋 Table of Contents
 
-### When to Use?
+- [Overview](#overview)
+- [Middlewares](#1-middlewares)
+- [Transform Nodes](#2-transform-nodes-graph)
+- [Step Result Transformers](#3-step-result-transformers)
+- [Decision Table](#decision-table)
+- [Combined Example](#combined-examples)
+- [Best Practices](#best-practices)
+- [Next Steps](#next-steps)
+
+---
+
+## 🗺️ Overview
+
+SocietyAI offers three complementary ways to transform or modify data as it
+flows through your workflow. Each operates at a different level of scope:
+
+| Mechanism | Scope | API Level |
+|---|---|---|
+| **Middlewares** | Global — all agents | High-level (`Society`) |
+| **Transform Nodes** | Local — a single node in the graph | Low-level (`GraphBuilder`) |
+| **Step Result Transformers** | Local — a single task step | High-level (`Society`) |
+
+---
+
+## 🔁 1. Middlewares
+
+### When to Use
 
 - **Cross-cutting concerns**: Logging, metrics, caching, rate limiting
 - **Global transformations**: Applied to all requests/responses
@@ -53,9 +71,9 @@ const result = await Society.create()
 
 ---
 
-## 2. Transform Nodes (Graph)
+## 🔀 2. Transform Nodes (Graph)
 
-### When to Use?
+### When to Use
 
 - **In-flow transformations**: Modify data between two steps
 - **Normalization**: Format outputs for the next step
@@ -98,9 +116,9 @@ const graph = GraphBuilder.create()
 
 ---
 
-## 3. Step Result Transformers
+## 🔧 3. Step Result Transformers
 
-### When to Use?
+### When to Use
 
 - **Step post-processing**: Transform a specific step's result
 - **Simple formatting**: Clean or format the output
@@ -150,7 +168,7 @@ const result = await Society.create()
 
 ---
 
-## Decision Table
+## 📊 Decision Table
 
 | Criteria            | Middlewares         | Transform Nodes  | Result Transformers |
 | ------------------- | ------------------- | ---------------- | ------------------- |
@@ -163,9 +181,10 @@ const result = await Society.create()
 
 ---
 
-## Combined Examples
+## 🧩 Combined Examples
 
-You can combine all three mechanisms:
+All three mechanisms are fully composable. Here is an example that uses all
+three in the same workflow:
 
 ```typescript
 import { Society, Middlewares, GraphBuilder, NodeType } from 'societyai';
@@ -201,7 +220,7 @@ const result = await Society.create()
 
 ---
 
-## Best Practices
+## ✅ Best Practices
 
 ### ✅ Do
 
@@ -219,8 +238,17 @@ const result = await Society.create()
 
 ---
 
-## Further Reading
+## 📚 Next Steps
 
-- [Middleware Documentation](../4-advanced/middleware.md)
-- [Execution Engine Guide](./execution-engine.md)
-- [Architecture Overview](./overview.md)
+- **[Middleware](../4-advanced/middleware.md)** — Complete guide to the 13
+  built-in middlewares, `MiddlewareChain`, custom middleware functions, and
+  composition patterns.
+- **[Execution Engine](./execution-engine.md)** — How `NodeType.TRANSFORM` and
+  `NodeType.AGGREGATE` are processed by the graph engine.
+- **[Architecture Overview](./overview.md)** — High-level map of all system
+  components and how they interact.
+- **[Society Builder](../2-building-societies/society-builder.md)** — Full
+  `FluentTaskBuilder` reference including `.transformResults()`.
+- **[Decision Guide](../reference/decision-guide.md)** — When to use the
+  High-Level API (with Result Transformers and Middlewares) vs the Low-Level
+  API (with Transform Nodes).

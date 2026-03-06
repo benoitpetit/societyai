@@ -1,6 +1,24 @@
 # Execution Engine Architecture
 
-## Overview
+The `ExecutionEngine` is the heart of SocietyAI. It takes your high-level
+workflow configuration and compiles it into a runnable directed graph,
+then executes it using an iterative state machine that supports infinite
+loops, pause/resume, and deep graphs without stack overflow.
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Iterative Execution Model](#iterative-execution-model)
+- [Node Types Reference](#node-types-reference)
+- [API Usage](#api-usage)
+- [EngineAsModel](#engineasmodel)
+- [Persistence & Reliability](#persistence--reliability)
+
+---
+
+## 🗺️ Overview
 
 The `ExecutionEngine` (formerly `SocietyGraph`) is the heart of SocietyAI. It
 transforms the high-level configuration into a runnable Directed Graph.
@@ -12,7 +30,7 @@ an **Iterative State Machine** approach. This allows for:
 2.  **Pause/Resume** capabilities (State Persistence).
 3.  **Deep Graphs** without stack overflow.
 
-## Iterative Execution Model
+## 🔄 Iterative Execution Model
 
 The engine maintains a `GraphContext` that holds the current state of execution.
 
@@ -32,7 +50,7 @@ Cycles are managed by the `LoopController`. When a `LOOP` node is encountered:
 4.  It manages how memory is aggregated (e.g., should the agent remember _every_
     failed attempt or just the last one?).
 
-## Node Types Reference
+## 🧩 Node Types Reference
 
 The graph is composed of 10 node types, each handling a specific control flow or
 execution logic.
@@ -80,7 +98,7 @@ execution logic.
   - _Behavior_: Modifies the data passing through (e.g., simple formatting)
     without using an LLM.
 
-## API Usage
+## ⚙️ API Usage
 
 ### Using GraphBuilder
 
@@ -113,7 +131,7 @@ const engine = GraphBuilder.create()
 const result = await engine.execute(initialInput, availableAgents);
 ```
 
-## `EngineAsModel`
+## 🏗️ `EngineAsModel`
 
 Adapter that allows an `ExecutionEngine` to be used as an `AIModel`. This
 enables **Hierarchical Societies** (societies within societies).
@@ -138,7 +156,7 @@ const orchestrator = Society.create()
   .execute('...');
 ```
 
-## Persistence & Reliability
+## 💾 Persistence & Reliability
 
 The engine is designed for long-running workflows that must survive process
 crashes.

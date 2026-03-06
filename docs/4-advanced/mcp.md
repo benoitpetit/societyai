@@ -468,7 +468,7 @@ class SecureMCPServer extends MCPToolProvider {
 
 ---
 
-## 🔗 Resources
+## 📖 Resources
 
 - [MCP Specification](https://modelcontextprotocol.io/)
 - [Official MCP Servers](https://github.com/modelcontextprotocol/servers)
@@ -476,7 +476,7 @@ class SecureMCPServer extends MCPToolProvider {
 
 ---
 
-## 🔗 Next Steps
+## 📚 Next Steps
 
 - Explore [Worker Threads](./worker-threads.md) with MCP tools
 - Set up [OpenTelemetry](./opentelemetry.md) to trace tool usage

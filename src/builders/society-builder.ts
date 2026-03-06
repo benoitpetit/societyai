@@ -159,7 +159,31 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Define dependencies (tasks that must be completed before this one)
+   * Declare that this task depends on one or more previously defined tasks.
+   *
+   * This creates a directed graph edge from each listed task to this one,
+   * ensuring the dependency tasks complete before this task starts.
+   * It is the recommended way to express ordering when you do not want to
+   * rely on the implicit sequential wiring (tasks array position).
+   *
+   * **Note**: `dependsOn()` and implicit sequential ordering can coexist.
+   * When a task has explicit dependencies, the executor will create edges
+   * from those dependency tasks to this task. Implicit sequential edges
+   * (based on array position) are skipped for tasks that are already
+   * wired via dependency declarations.
+   *
+   * @param taskIds One or more task IDs that must finish before this task runs
+   *
+   * @example
+   * ```typescript
+   * .addTask(t => t.withId('draft').withAgents(['writer']).sequential())
+   * .addTask(t => t
+   *   .withId('review')
+   *   .dependsOn('draft')      // explicit dependency — no position assumption
+   *   .withAgents(['editor'])
+   *   .sequential()
+   * )
+   * ```
    */
   dependsOn(taskIds: string | string[]): this {
     const ids = Array.isArray(taskIds) ? taskIds : [taskIds];
@@ -184,12 +208,21 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Create a loop: repeatedly execute agents until a condition is met or max iterations reached
-   * @param maxIterations Maximum number of iterations
-   * @param completionCondition Optional condition to exit loop early
+   * Create a loop: repeatedly execute this task's agents until a condition is met
+   * or the maximum number of iterations is reached.
    *
-   * Note: Currently implemented using collaborative execution type with iteration control.
-   * For more complex loop patterns, consider using the graph API directly.
+   * **Important**: This convenience method sets the task's execution type to
+   * `'collaborative'` internally, which is the mechanism used to drive iterative
+   * re-execution. If you assign `collaborative()` and `withLoop()` to the same
+   * task, the last call wins.
+   *
+   * For more advanced loop patterns (e.g. looping over a sub-graph with
+   * conditional branching), use the low-level `GraphBuilder` API with
+   * `NodeType.LOOP` directly.
+   *
+   * @param maxIterations Maximum number of loop iterations before stopping
+   * @param completionCondition Optional early-exit predicate. Return `true` to
+   *   stop the loop before `maxIterations` is reached.
    *
    * @example
    * ```typescript
@@ -207,6 +240,8 @@ export class FluentTaskBuilder {
     maxIterations: number,
     completionCondition?: (results: TaskResult[], iteration: number) => boolean
   ): this {
+    // Internally, loops are driven by the collaborative execution engine which
+    // re-runs agents in sequence until the completion condition or max iterations.
     this._executionType = 'collaborative';
     this._maxIterations = maxIterations;
     if (completionCondition) {
@@ -248,11 +283,22 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Create a conditional branch: execute different next tasks based on a condition
+   * Create a conditional branch: route to different next tasks based on a
+   * runtime condition evaluated against all previous task results.
    *
-   * @param condition Function that evaluates previous results
-   * @param trueTasks Tasks to execute if condition is true
-   * @param falseTasks Tasks to execute if condition is false
+   * The task itself executes normally (using its existing `executionType`).
+   * After it completes, the `condition` is evaluated and the workflow is routed
+   * to either `trueTasks[0]` (condition is `true`) or `falseTasks[0]`
+   * (condition is `false`). Only the first element of each array is used as
+   * the next task — use `thenResolve()` for multi-target dynamic routing.
+   *
+   * **Note**: Calling `withBranch()` sets an internal `nextTaskResolver`, which
+   * means any subsequent `thenGoto()` / `withNextSteps()` call will be ignored.
+   *
+   * @param condition Predicate function receiving a Map of all previous task results
+   * @param trueTasks Task IDs to route to when condition returns `true`
+   * @param falseTasks Task IDs to route to when condition returns `false`.
+   *   Pass an empty array `[]` to route to `'end'` when condition is false.
    *
    * @example
    * ```typescript
@@ -262,8 +308,8 @@ export class FluentTaskBuilder {
    *   .sequential()
    *   .withBranch(
    *     (results) => results.get('analyze')?.[0].output.includes('valid'),
-   *     ['approve'],
-   *     ['reject']
+   *     ['approve'],   // → go to 'approve' if valid
+   *     ['reject']     // → go to 'reject' otherwise
    *   )
    * )
    * ```
@@ -274,13 +320,12 @@ export class FluentTaskBuilder {
     falseTasks: string[]
   ): this {
     this._condition = condition;
-    // NOTE: We keep the existing executionType (usually 'sequential')
-    // The task itself executes normally, and nextTaskResolver handles the routing
 
-    // Store both paths - we'll need to handle this in the executor
-    // Use nextTaskResolver to dynamically choose the next task
+    // The task's own execution type is unchanged.
+    // After execution, a resolver node is injected by the SocietyExecutor
+    // that evaluates the condition and picks the appropriate outgoing edge.
     this._nextTaskResolver = (results: TaskResult[]): string | null => {
-      // Convert results array to Map format expected by condition
+      // Convert results array to Map format expected by the condition predicate
       const resultsMap = new Map<string, TaskResult[]>();
       for (const result of results) {
         const taskId = result.taskId;
@@ -295,7 +340,8 @@ export class FluentTaskBuilder {
       return targetTasks[0] || null;
     };
 
-    // Hint for the execution engine/graph builder
+    // Provide the full set of reachable task IDs as a hint to the graph builder
+    // so it can pre-wire all potential outgoing edges for validation purposes.
     this._possibleNextTasks = [...trueTasks, ...falseTasks];
 
     return this;
@@ -348,7 +394,7 @@ export class FluentTaskBuilder {
   /**
    * Build the task configuration
    */
-  build(): Task & { timeout?: number; dependencies?: string[] } {
+  build(): Task & { timeout?: number } {
     if (!this._id) throw new InvalidConfigurationError('Task id is required');
     if (!this._name) throw new InvalidConfigurationError('Task name is required');
 

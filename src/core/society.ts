@@ -9,7 +9,7 @@ import {
 } from './types';
 import { SocietyExecutor } from '../agents/society-executor';
 import { InvalidConfigurationError } from './errors';
-import { Middleware, MiddlewareChain } from './middleware';
+import { Middleware, MiddlewareChain, ComposedMiddleware } from './middleware';
 import { FluentAgentBuilder } from '../builders/agent-builder';
 import {
   FluentTaskBuilder,
@@ -193,10 +193,42 @@ export class Society {
   }
 
   /**
-   * Add a middleware to the execution chain
+   * Add a middleware to the execution chain.
+   *
+   * Accepts three forms:
+   * - A raw `Middleware` object (name + fn)
+   * - A `MiddlewareChain` instance (will be converted to a composed middleware)
+   * - A `ComposedMiddleware` instance (wrapped as a named Middleware)
+   *
+   * @example
+   * // Option 1: raw middleware
+   * .addMiddleware(Middlewares.logging())
+   *
+   * // Option 2: a full middleware chain
+   * const chain = MiddlewareChain.create()
+   *   .use(Middlewares.logging())
+   *   .use(Middlewares.retry({ maxAttempts: 3 }));
+   * .addMiddleware(chain)
+   *
+   * // Option 3: composed middleware (result of chain.build())
+   * .addMiddleware(chain.build())
    */
-  addMiddleware(middleware: Middleware): this {
-    this._middlewares.push(middleware);
+  addMiddleware(middleware: Middleware | MiddlewareChain | ComposedMiddleware): this {
+    if (middleware instanceof MiddlewareChain) {
+      // Flatten the chain's middlewares directly into our list
+      for (const m of middleware.getMiddlewares()) {
+        this._middlewares.push(m);
+      }
+    } else if (middleware instanceof ComposedMiddleware) {
+      // Wrap the ComposedMiddleware as a named Middleware so it fits the chain
+      this._middlewares.push({
+        name: 'composed-middleware',
+        description: 'Pre-composed middleware chain',
+        fn: async (ctx, next) => middleware.executeInChain(ctx, next),
+      });
+    } else {
+      this._middlewares.push(middleware);
+    }
     return this;
   }
 

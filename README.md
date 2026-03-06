@@ -6,7 +6,7 @@
   <p>
     <a href="https://www.npmjs.com/package/societyai"><img src="https://img.shields.io/npm/v/societyai.svg" alt="npm version"></a>
     <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="license"></a>
-    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue.svg" alt="TypeScript"></a>
+    <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.5%2B-blue.svg" alt="TypeScript 5.5+"></a>
     <a href="package.json"><img src="https://img.shields.io/badge/dependencies-0-brightgreen.svg" alt="Zero Dependencies"></a>
   </p>
 </div>
@@ -17,7 +17,7 @@ workflows where AI agents, equipped with specific roles and capabilities,
 collaborate through a graph-based execution engine (DAG & Cycles).
 
 The library is **fully model-agnostic**, **domain-independent**, and designed to
-be modular.
+be modular. Requires TypeScript **5.5 or higher** (developed and tested on 5.9).
 
 ## 🎯 Why SocietyAI?
 
@@ -96,13 +96,13 @@ your model to the `AIModel` interface. Here is a minimal example for OpenAI:
 
 ```typescript
 import { AIModel } from 'societyai';
-import OpenAI from 'openai'; // Install openai separately
+import OpenAI from 'openai'; // Install openai separately: npm install openai
 
 export class OpenAIModel implements AIModel {
   private client: OpenAI;
   private modelName: string;
 
-  constructor(apiKey: string, model: string = 'gpt-4') {
+  constructor(apiKey: string, model: string = 'gpt-4o') {
     this.client = new OpenAI({ apiKey });
     this.modelName = model;
   }
@@ -111,16 +111,19 @@ export class OpenAIModel implements AIModel {
     return this.modelName;
   }
 
-  supportsPromptType(type: string): boolean {
+  supportsPromptType(_type: string): boolean {
     return true;
   }
 
-  async process(prompt: unknown): Promise<string> {
-    const response = await this.client.chat.completions.create({
-      model: this.modelName,
-      messages: [{ role: 'user', content: String(prompt) }],
-    });
-    return response.choices[0].message.content || '';
+  async process(prompt: unknown, signal?: AbortSignal): Promise<string> {
+    const response = await this.client.chat.completions.create(
+      {
+        model: this.modelName,
+        messages: [{ role: 'user', content: String(prompt) }],
+      },
+      { signal }
+    );
+    return response.choices[0].message.content ?? '';
   }
 }
 ```
@@ -196,12 +199,12 @@ console.log('History:', result.taskResults);
 For CPU-intensive agents, use worker threads to prevent blocking:
 
 ```typescript
-import { Society, createOpenTelemetryObserver } from 'societyai';
+import { Society, Middlewares, MiddlewareChain, createOpenTelemetryObserver } from 'societyai';
 import { OpenAIModel } from './my-model-impl';
 
-const model = new OpenAIModel(process.env.OPENAI_API_KEY);
+const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
 
-// Optional: Enable distributed tracing
+// Optional: enable distributed tracing (peer dep: @opentelemetry/*)
 const observer = createOpenTelemetryObserver({
   serviceName: 'my-app',
   exporterType: 'console',
@@ -209,56 +212,66 @@ const observer = createOpenTelemetryObserver({
 
 const result = await Society.create()
   .withId('advanced-team')
-  .withObserver(observer) // ← Add OpenTelemetry tracing
+  .withObserver(observer)               // ← OpenTelemetry tracing
+  .addMiddleware(
+    MiddlewareChain.create()
+      .use(Middlewares.logging())
+      .use(Middlewares.retry({ maxAttempts: 3 }))
+  )
 
-  // Standard agent (I/O-bound tasks)
-  .addAgent(
-    (agent) =>
-      agent
-        .withId('coordinator')
-        .withRole((role) =>
-          role.withSystemPrompt(
-            'You coordinate tasks and handle I/O operations.'
-          )
-        )
-        .withModel(model)
+  // Standard agent — I/O-bound (runs in main thread)
+  .addAgent((agent) =>
+    agent
+      .withId('coordinator')
+      .withRole((role) =>
+        role.withSystemPrompt('You coordinate tasks and handle I/O operations.')
+      )
+      .withModel(model)
     // executionMode defaults to 'default' (main thread)
   )
 
-  // CPU-intensive agent (runs in worker thread)
-  .addAgent(
-    (agent) =>
-      agent
-        .withId('data-processor')
-        .withRole((role) =>
-          role.withSystemPrompt(
-            'You perform heavy data analysis and complex calculations.'
-          )
+  // CPU-intensive agent — runs in an isolated Worker Thread
+  .addAgent((agent) =>
+    agent
+      .withId('data-processor')
+      .withRole((role) =>
+        role.withSystemPrompt(
+          'You perform heavy data analysis and complex calculations.'
         )
-        .withModel(model)
-        .withExecutionMode('isolated') // ← Runs in Worker Thread
+      )
+      .withModel(model)
+      .withExecutionMode('isolated')    // ← Worker Thread
   )
 
   .addTask((task) =>
-    task.withId('coordinate').withAgents(['coordinator']).thenGoto(['process'])
+    task
+      .withId('coordinate')
+      .withAgents(['coordinator'])
+      .sequential()
+      .thenGoto('process')              // explicit routing to next task
   )
-  .addTask((task) => task.withId('process').withAgents(['data-processor']))
+  .addTask((task) =>
+    task.withId('process').withAgents(['data-processor']).sequential()
+  )
 
   .execute('Start workflow');
 
 console.log('Result:', result.output);
 
-// Cleanup observer
+// Always shut down the observer to flush pending spans
 await observer.shutdown();
 ```
 
 **Key Points:**
 
-- **executionMode: 'isolated'**: Agent runs in a Worker Thread, preventing main
-  thread blocking.
-- **OpenTelemetry Observer**: Distributed tracing for production monitoring.
+- **`executionMode: 'isolated'`**: Runs the agent in a Worker Thread, preventing
+  main-event-loop blocking for CPU-heavy work.
+- **`withObserver(observer)`**: Accepts any `SocietyObserver` implementation —
+  `OpenTelemetryObserver` provides distributed tracing for production.
+- **Middlewares**: Applied to every agent call via `.addMiddleware()`. Accepts a
+  single `Middleware`, a raw `MiddlewareFn`, or a `MiddlewareChain`.
 - **MCP Tools**: Add external tools via
-  `withTools(await MCPServers.filesystem('/path'))`.
+  `withTools(await MCPServers.filesystem('/path'))` on any agent.
 
 ## 📚 Documentation
 

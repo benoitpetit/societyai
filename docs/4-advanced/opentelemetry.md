@@ -363,7 +363,7 @@ OpenTelemetry adds minimal overhead:
 
 ---
 
-## 🔗 Next Steps
+## 📚 Next Steps
 
 - Set up [Jaeger locally](https://www.jaegertracing.io/docs/getting-started/)
 - Explore [Worker Threads](./worker-threads.md) with tracing
