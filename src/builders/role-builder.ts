@@ -100,7 +100,7 @@ export class FluentRoleBuilder {
 
   /**
    * Set a custom prompt template for this role
-   * Available placeholders: {systemPrompt}, {input}, {context}, {history}, {capabilities}, {constraints}
+   * Available placeholders: {system}, {input}, {context}, {history}, {capabilities}, {constraints}
    */
   withPromptTemplate(template: string): this {
     this._promptTemplate = template;

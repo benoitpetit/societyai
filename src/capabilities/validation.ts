@@ -199,12 +199,12 @@ export class StructuredOutputValidator<T = unknown> {
 
       // Generate error feedback
       const feedback = this.generateErrorFeedback(result.errors!);
-      this.logger.debug(`Retry ${attempt + 1}: ${feedback}`);
+      attempt++;
+      this.logger.debug(`Retry attempt ${attempt}/${this.maxRetries}: ${feedback}`);
 
       // Retry with feedback
       try {
         currentOutput = await retryFunc(feedback);
-        attempt++;
       } catch (error) {
         return {
           valid: false,
@@ -662,6 +662,9 @@ export class StructuredOutputBuilder<T = unknown> {
       const arr = obj as unknown[];
       if (arr.length > 0) {
         schema.items = this.inferSchema(arr[0]);
+      } else {
+        // Empty array: provide a generic string items hint so the model knows what to produce
+        schema.items = { type: 'string' };
       }
     }
 

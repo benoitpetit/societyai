@@ -269,8 +269,8 @@ export class InMemoryVectorStore {
     const denominator = Math.sqrt(normA) * Math.sqrt(normB);
     if (denominator === 0) return 0;
 
-    // Convert from [-1, 1] to [0, 1] range
-    return (dotProduct / denominator + 1) / 2;
+    // Raw cosine similarity, clamped to [0, 1]
+    return Math.max(0, Math.min(1, dotProduct / denominator));
   }
 
   /**

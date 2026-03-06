@@ -65,37 +65,63 @@ export class SocietyExecutor {
           }
         : undefined;
 
-      graphBuilder.addNode(task.id, type, {
-        agentId: task.agentIds && task.agentIds.length > 0 ? task.agentIds[0] : undefined,
-        agentIds: task.agentIds,
-        maxIterations: task.maxIterations,
-        completionCondition: task.completionCondition,
-        condition: conditionAdapter,
-        metadata: {
-          name: task.name,
-          instructions: task.instructions,
-          promptTemplate: task.promptTemplate,
-        },
-        outputSchema: task.outputSchema as JSONSchema | undefined,
-      });
+      // For sequential tasks with multiple agents, create a chain of AGENT nodes
+      // so every agent actually executes (#16). Without this, only agentIds[0] runs.
+      if (type === NodeType.AGENT && task.agentIds && task.agentIds.length > 1) {
+        for (let ai = 0; ai < task.agentIds.length; ai++) {
+          const agentNodeId = ai === 0 ? task.id : `${task.id}_agent${ai}`;
+          graphBuilder.addNode(agentNodeId, NodeType.AGENT, {
+            agentId: task.agentIds[ai],
+            maxIterations: task.maxIterations,
+            metadata: {
+              name: task.name,
+              instructions: task.instructions,
+              promptTemplate: task.promptTemplate,
+            },
+            outputSchema: task.outputSchema as JSONSchema | undefined,
+          });
+          // Wire each agent to the next in the chain
+          if (ai > 0) {
+            const prevNodeId = ai === 1 ? task.id : `${task.id}_agent${ai - 1}`;
+            graphBuilder.addEdge(prevNodeId, agentNodeId);
+          }
+        }
+        // The "task" node in the graph is the first agent node (task.id).
+        // The "exit" node (last in chain) is `${task.id}_agent${agentIds.length - 1}`.
+        // We store the exit node id so we can wire outgoing edges correctly.
+        // We do this by overriding the task's nextTasks source later — handled below
+        // by recording a synthetic alias.
+      } else {
+        graphBuilder.addNode(task.id, type, {
+          agentId: task.agentIds && task.agentIds.length > 0 ? task.agentIds[0] : undefined,
+          agentIds: task.agentIds,
+          maxIterations: task.maxIterations,
+          completionCondition: task.completionCondition,
+          condition: conditionAdapter,
+          metadata: {
+            name: task.name,
+            instructions: task.instructions,
+            promptTemplate: task.promptTemplate,
+          },
+          outputSchema: task.outputSchema as JSONSchema | undefined,
+        });
+      }
     }
 
     // Add Edges (Sequential by default for compatibility)
     const entryTaskId = society.entryTaskId || tasks[0]?.id;
 
-    // Build a set of task IDs that are depended upon by others (via dependsOn/dependencies).
-    // These tasks should NOT receive an implicit edge from 'start' or from the previous task,
-    // because their ordering is already expressed through explicit dependency edges.
+    // Build a map from task ID to task for dependency lookups
     const taskMap = new Map(tasks.map((t) => [t.id, t]));
 
-    // Collect all tasks that are explicitly listed as a dependency of another task.
-    const tasksWithIncomingDependency = new Set<string>();
-    for (const task of tasks) {
-      const deps = task.dependencies;
-      if (deps && deps.length > 0) {
-        tasksWithIncomingDependency.add(task.id); // this task depends on others → it has explicit incoming routing
+    // Helper: for multi-agent sequential chains, the actual graph exit node is
+    // the last agent in the chain; for all other tasks it is task.id itself (#16).
+    const exitNodeId = (task: (typeof tasks)[number]): string => {
+      if (!task.executionType && task.agentIds && task.agentIds.length > 1) {
+        return `${task.id}_agent${task.agentIds.length - 1}`;
       }
-    }
+      return task.id;
+    };
 
     // Wire the entry point
     if (entryTaskId) {
@@ -128,6 +154,7 @@ export class SocietyExecutor {
       const isLastTask = i === tasks.length - 1;
       const hasNextResolver = !!task.nextTaskResolver;
       const hasDependencies = !!task.dependencies?.length;
+      const src = exitNodeId(task); // may differ from task.id for multi-agent chains
 
       if (hasNextResolver) {
         // The dynamic-routing second pass (below) will handle outgoing edges.
@@ -137,7 +164,7 @@ export class SocietyExecutor {
       // Case 1: Explicit next steps defined via thenGoto() / withNextSteps()
       if (task.nextTasks && task.nextTasks.length > 0) {
         for (const nextId of task.nextTasks) {
-          graphBuilder.addEdge(task.id, nextId);
+          graphBuilder.addEdge(src, nextId);
         }
         continue;
       }
@@ -151,7 +178,7 @@ export class SocietyExecutor {
       if (isLastTask) {
         // Only add edge to 'end' if no other task depends on this one as a predecessor
         // (i.e. this task hasn't already been wired forward via dependency edges)
-        graphBuilder.addEdge(task.id, 'end');
+        graphBuilder.addEdge(src, 'end');
         continue;
       }
 
@@ -183,7 +210,7 @@ export class SocietyExecutor {
         );
       }
 
-      graphBuilder.addEdge(task.id, nextTask.id);
+      graphBuilder.addEdge(src, nextTask.id);
       this.logger.debug(
         `Implicit routing: Task '${task.id}' -> '${nextTask.id}' ` +
           `(enable strictRouting to make this explicit)`
@@ -214,7 +241,8 @@ export class SocietyExecutor {
         },
       });
 
-      graphBuilder.addEdge(task.id, resolverNodeId);
+      // Wire task exit node → resolver (#16: use exitNodeId for multi-agent chains)
+      graphBuilder.addEdge(exitNodeId(task), resolverNodeId);
 
       const targets =
         task.possibleNextTasks && task.possibleNextTasks.length > 0

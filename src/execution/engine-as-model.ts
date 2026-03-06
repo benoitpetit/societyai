@@ -192,7 +192,7 @@ export class EngineAsModel implements AIModel {
    * Checks if streaming is supported
    */
   supportsStreaming(): boolean {
-    return false; // Not yet implemented for hierarchical societies
+    return true;
   }
 
   /**

@@ -538,9 +538,15 @@ export class FilteredEventEmitter {
  * Adapter that converts event emitter to SocietyObserver
  */
 class EventEmitterObserver implements SocietyObserver {
+  /** Per-agent start timestamps (agentId → Date.now()) */
+  private agentStartTimes = new Map<string, number>();
+  /** Society-level start timestamp */
+  private societyStartTime = 0;
+
   constructor(private emitter: SocietyEventEmitter) {}
 
   onAgentStart(agentId: string, modelName: string, prompt: unknown): void {
+    this.agentStartTimes.set(agentId, Date.now());
     this.emitter.emit('agent:start', {
       agentId,
       modelName,
@@ -549,15 +555,18 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onAgentComplete(agentId: string, modelName: string, result: string): void {
+    const start = this.agentStartTimes.get(agentId) ?? Date.now();
+    this.agentStartTimes.delete(agentId);
     this.emitter.emit('agent:complete', {
       agentId,
       modelName,
       result,
-      duration: 0, // Duration would need to be tracked separately
+      duration: Date.now() - start,
     });
   }
 
   onAgentError(agentId: string, modelName: string, error: Error): void {
+    this.agentStartTimes.delete(agentId);
     this.emitter.emit('agent:error', {
       agentId,
       modelName,
@@ -582,6 +591,7 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onSocietyStart(prompt: string, agentCount: number): void {
+    this.societyStartTime = Date.now();
     this.emitter.emit('society:start', {
       workflowId: 'society',
       workflowName: 'Society',
@@ -591,17 +601,18 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onSocietyComplete(finalResult: string): void {
+    const duration = this.societyStartTime > 0 ? Date.now() - this.societyStartTime : 0;
     this.emitter.emit('society:complete', {
       workflowId: 'society',
       workflowName: 'Society',
       result: {
         success: true,
         output: finalResult,
-        taskResults: new Map(), // New property name
+        taskResults: new Map(),
         messages: [],
-        duration: 0,
+        duration,
       },
-      duration: 0,
+      duration,
     });
   }
 }

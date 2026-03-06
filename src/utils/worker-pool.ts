@@ -160,26 +160,33 @@ export class CpuWorkerPool {
 
     this.workers.push(worker);
 
+    // Guard against double-decrement: 'error' fires and then 'exit' also fires (#39).
+    // Use a flag so only the first event decrements activeWorkers and calls processNext.
+    let settled = false;
+    const settle = (): void => {
+      if (settled) return;
+      settled = true;
+      this.activeWorkers--;
+      this.processNext();
+    };
+
     worker.on('message', (result) => {
       task.resolve(result);
       worker.terminate();
-      this.activeWorkers--;
-      this.processNext();
+      settle();
     });
 
     worker.on('error', (err) => {
       task.reject(err);
       worker.terminate();
-      this.activeWorkers--;
-      this.processNext();
+      settle();
     });
 
     worker.on('exit', (code) => {
       if (code !== 0) {
         task.reject(new Error(`Worker stopped with exit code ${code}`));
-        this.activeWorkers--;
-        this.processNext();
       }
+      settle();
     });
   }
 }

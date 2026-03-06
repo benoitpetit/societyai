@@ -9,6 +9,7 @@ import {
 } from './types';
 import { SocietyExecutor } from '../agents/society-executor';
 import { InvalidConfigurationError } from './errors';
+import { getLogger } from '../observability/logger';
 import { Middleware, MiddlewareChain, ComposedMiddleware } from './middleware';
 import { FluentAgentBuilder } from '../builders/agent-builder';
 import {
@@ -47,6 +48,7 @@ export class Society {
   // Pipeline config is applied via usePipeline() to set steps
   private _timeout?: number;
   private _strictRouting: boolean = false;
+  private _logger = getLogger();
 
   /**
    * Create a new Society builder
@@ -144,6 +146,12 @@ export class Society {
    * Configure a pipeline pattern
    */
   usePipeline(builderFn: (builder: FluentPipelineBuilder) => FluentPipelineBuilder): this {
+    if (this._tasks.length > 0) {
+      this._logger.info(
+        `[Society] usePipeline() is overwriting ${this._tasks.length} existing task(s). ` +
+          `Call usePipeline() before adding tasks individually, or use useTasks() to append.`
+      );
+    }
     const builder = new FluentPipelineBuilder();
     const pipeline = builderFn(builder);
     // Pipeline config is stored implicitly through tasks
@@ -269,6 +277,11 @@ export class Society {
    * Executes all agents in parallel and aggregates results
    */
   scatterGather(aggregator?: (results: TaskResult[]) => string): this {
+    if (this._tasks.length > 0) {
+      this._logger.info(
+        `[Society] scatterGather() is overwriting ${this._tasks.length} existing task(s).`
+      );
+    }
     const agentIds = this._agents.map((a) => a.id);
     this._tasks = [
       {
@@ -289,6 +302,9 @@ export class Society {
    * Executes agents sequentially, passing context forward
    */
   chain(): this {
+    if (this._tasks.length > 0) {
+      this._logger.info(`[Society] chain() is overwriting ${this._tasks.length} existing task(s).`);
+    }
     const agentIds = this._agents.map((a) => a.id);
     this._tasks = agentIds.map((agentId, index) => ({
       id: `step-${index + 1}`,
@@ -304,6 +320,11 @@ export class Society {
    * Agents collaborate through multiple iterations
    */
   collaborate(maxIterations: number = 3): this {
+    if (this._tasks.length > 0) {
+      this._logger.info(
+        `[Society] collaborate() is overwriting ${this._tasks.length} existing task(s).`
+      );
+    }
     const agentIds = this._agents.map((a) => a.id);
     this._tasks = [
       {
@@ -477,6 +498,7 @@ export class Society {
     // Handle timeout
     let timeoutSignal: AbortSignal | undefined = signal;
     let timeoutId: NodeJS.Timeout | undefined;
+    let abortListener: (() => void) | undefined;
 
     if (this._timeout) {
       const controller = new AbortController();
@@ -484,7 +506,8 @@ export class Society {
 
       // Combine with external signal if provided
       if (signal) {
-        signal.addEventListener('abort', () => controller.abort());
+        abortListener = () => controller.abort();
+        signal.addEventListener('abort', abortListener);
       }
       timeoutSignal = controller.signal;
     }
@@ -492,9 +515,11 @@ export class Society {
     try {
       const result = await executor.execute(workflow, input, timeoutSignal, middlewareChain);
       if (timeoutId) clearTimeout(timeoutId);
+      if (abortListener && signal) signal.removeEventListener('abort', abortListener);
       return result;
     } catch (error) {
       if (timeoutId) clearTimeout(timeoutId);
+      if (abortListener && signal) signal.removeEventListener('abort', abortListener);
       throw error;
     }
   }

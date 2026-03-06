@@ -18,6 +18,8 @@ export interface WorkflowState {
   executionId: string;
   /** Current status of the workflow */
   status: 'active' | 'paused' | 'completed' | 'failed';
+  /** Original input passed to execute() — persisted so resume() can restore it (#4) */
+  input?: string;
   /** IDs of nodes currently in the execution queue */
   queue: string[];
   /** Results of completed tasks (Map serialized as array of entries) */

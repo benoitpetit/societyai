@@ -40,6 +40,11 @@ export class AgentExecutor {
     this.logger.debug(`Agent ${this.agent.id} starting execution for task ${options.taskId}`);
 
     while (loop.next()) {
+      // Reset per-iteration state so a prior failure doesn't bleed into a
+      // successful retry iteration (#12)
+      success = true;
+      error = undefined;
+
       try {
         // 1. Prepare Middleware Context
         const mwContext: MiddlewareContext = {

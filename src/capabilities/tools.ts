@@ -416,15 +416,48 @@ export class ToolExecutor {
   }
 
   /**
-   * Extract tool calls from agent output
-   * Expects JSON format: {"tool": "name", "parameters": {...}}
+   * Extract tool calls from agent output.
+   *
+   * Primary format (matches the prompt injected by AgentExecutor):
+   *   <tool_code>{"name": "tool_name", "arguments": {"param": "value"}}</tool_code>
+   *
+   * Legacy fallback format (plain JSON object):
+   *   {"tool": "tool_name", "parameters": {...}}
    */
   private extractToolCalls(output: string): ToolCall[] {
     const calls: ToolCall[] = [];
 
-    // Try to parse the entire output as JSON first
+    // Primary: extract all <tool_code>...</tool_code> blocks
+    const tagRegex = /<tool_code>([\s\S]*?)<\/tool_code>/g;
+    let tagMatch: RegExpExecArray | null;
+    while ((tagMatch = tagRegex.exec(output)) !== null) {
+      try {
+        const parsed = JSON.parse(tagMatch[1].trim()) as {
+          name?: string;
+          arguments?: Record<string, unknown>;
+          callId?: string;
+        };
+        if (parsed.name) {
+          calls.push({
+            name: parsed.name,
+            parameters: parsed.arguments || {},
+            callId: parsed.callId,
+          });
+        }
+      } catch {
+        // Malformed JSON inside tag — skip
+      }
+    }
+
+    if (calls.length > 0) return calls;
+
+    // Legacy fallback: try to parse plain JSON with {tool, parameters} shape
     try {
-      const parsed = JSON.parse(output);
+      const parsed = JSON.parse(output) as {
+        tool?: string;
+        parameters?: Record<string, unknown>;
+        callId?: string;
+      };
       if (parsed.tool && parsed.parameters !== undefined) {
         calls.push({
           name: parsed.tool,
@@ -434,17 +467,19 @@ export class ToolExecutor {
         return calls;
       }
     } catch {
-      // Not a single JSON object, try to find multiple
+      // Not a single JSON object, scan for embedded JSON blobs
     }
 
-    // Try to find JSON tool calls in the output
     const jsonRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
     const matches = output.match(jsonRegex);
-
     if (matches) {
       for (const match of matches) {
         try {
-          const call = JSON.parse(match);
+          const call = JSON.parse(match) as {
+            tool?: string;
+            parameters?: Record<string, unknown>;
+            callId?: string;
+          };
           if (call.tool && call.parameters !== undefined) {
             calls.push({
               name: call.tool,
@@ -454,7 +489,6 @@ export class ToolExecutor {
           }
         } catch {
           // Invalid JSON, skip
-          continue;
         }
       }
     }

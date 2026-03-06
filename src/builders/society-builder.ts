@@ -576,33 +576,111 @@ export class FluentPipelineBuilder {
         break;
 
       case 'fallback':
-        steps.push({
-          id: 'fallback',
-          name: 'Fallback Execution',
-          agentIds: this._agentIds,
-          executionType: 'sequential',
-          // Fallback logic is handled by the executor
+        // True fallback: try agents in order; if one succeeds, skip the rest (#24).
+        // Each agent task uses a nextTaskResolver:
+        //   - if the current agent succeeded → null (go to end)
+        //   - if it failed → next agent task id
+        // The graph executor will wire resolver → potentialNextTasks appropriately.
+        this._agentIds.forEach((agentId, index) => {
+          const taskId = `fallback-${index}`;
+          const nextTaskId = index < this._agentIds.length - 1 ? `fallback-${index + 1}` : null;
+
+          steps.push({
+            id: taskId,
+            name: `Fallback Attempt ${index + 1}`,
+            agentIds: [agentId],
+            executionType: 'sequential',
+            // Route: success → end (null), failure → next agent
+            nextTaskResolver: (results: TaskResult[]): string | null => {
+              const myResult = results.find((r) => r.taskId === taskId);
+              if (myResult?.success) return null; // done — route to 'end'
+              return nextTaskId; // try next agent
+            },
+            possibleNextTasks: nextTaskId ? [nextTaskId] : [],
+          });
         });
         break;
 
       case 'race':
+        // True race (first-result-wins) requires engine-level Promise.race support which is
+        // not available in the current PARALLEL node implementation. As the best approximation
+        // using the current engine, we run all agents in parallel and return the first
+        // successful result rather than concatenating all outputs (#25).
         steps.push({
           id: 'race',
           name: 'Race Execution',
           agentIds: this._agentIds,
           executionType: 'parallel',
-          // Race logic: first result wins
+          resultTransformer: (results: TaskResult[] | TaskResult): string => {
+            const arr = Array.isArray(results) ? results : [results];
+            const first = arr.find((r) => r.success);
+            return first?.output ?? arr[0]?.output ?? '';
+          },
         });
         break;
 
       case 'router':
-        steps.push({
-          id: 'router',
-          name: 'Router',
-          agentIds: this._agentIds,
-          executionType: 'conditional',
-          // Router logic is handled by the executor
+        // Route input to a specific agent using the caller-supplied router function (#26).
+        // Build a separate task per agent; a shared condition-based resolver selects one.
+        if (!this._router) {
+          throw new InvalidConfigurationError(
+            'Router pipeline requires a router function. Use .router(agentIds, routerFn).'
+          );
+        }
+        // Create per-agent tasks (sequential, single-agent)
+        this._agentIds.forEach((agentId, index) => {
+          steps.push({
+            id: `route-${index}`,
+            name: `Route to ${agentId}`,
+            agentIds: [agentId],
+            executionType: 'sequential',
+          });
         });
+
+        // Prepend a routing decision task that uses the router function to pick the target.
+        // We insert it at index 0 (before the per-agent tasks) using unshift.
+        {
+          const routerFn = this._router;
+          const agentIds = this._agentIds;
+          steps.unshift({
+            id: 'router',
+            name: 'Router',
+            agentIds: [], // no agents execute here — this is purely a routing node
+            executionType: 'conditional',
+            condition: (previousResults: Map<string, TaskResult[]>): boolean => {
+              // We abuse the condition slot to run the router and store the result.
+              // The actual routing is done via nextTaskResolver.
+              void previousResults; // unused
+              return true;
+            },
+            nextTaskResolver: (results: TaskResult[]): string | null => {
+              // Reconstruct a minimal ExecutionContext-like object for the router
+              const taskResults = new Map<string, TaskResult[]>();
+              for (const r of results) {
+                const existing = taskResults.get(r.taskId) || [];
+                existing.push(r);
+                taskResults.set(r.taskId, existing);
+              }
+              const lastResult = results[results.length - 1];
+              const input = lastResult?.output ?? '';
+
+              // ExecutionContext shape expected by router
+              const ctx = {
+                input,
+                sharedData: new Map<string, unknown>(),
+                taskResults,
+                messageHistory: [],
+                metadata: {},
+              };
+
+              const targetAgentId = routerFn(input, ctx as ExecutionContext);
+              const idx = agentIds.indexOf(targetAgentId);
+              if (idx === -1) return null;
+              return `route-${idx}`;
+            },
+            possibleNextTasks: agentIds.map((_, i) => `route-${i}`),
+          });
+        }
         break;
     }
 
@@ -735,7 +813,7 @@ export function createAgent(
   const builder = new FluentAgentBuilder().withId(id).withRole(role).withModel(model);
 
   if (options?.name) builder.withName(options.name);
-  if (options?.priority) builder.withPriority(options.priority);
+  if (options?.priority != null) builder.withPriority(options.priority);
   if (options?.canCommunicateWith) {
     builder.canCommunicateWith(options.canCommunicateWith);
   }

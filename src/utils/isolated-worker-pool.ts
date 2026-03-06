@@ -193,20 +193,23 @@ export class IsolatedWorkerPool {
     worker.on('error', errorHandler);
 
     // Send task to worker
-    // Serialize the task (remove non-serializable fields)
+    // Serialize the task (remove non-serializable fields).
+    // Rules enforced by the structured-clone algorithm used by postMessage:
+    //   - Functions (e.g. tool.execute) must be stripped — #41
+    //   - AbortSignal is not cloneable — #42
     const serializedTask = {
       agent: {
         ...task.task.agent,
         model: {
           name: task.task.agent.model.name(),
-          // Model will need to be reconstructed in worker
+          // Model will need to be reconstructed in worker via IsolatedWorkerRegistry
         },
         memory: undefined, // Memory not serializable
         tools: task.task.agent.tools?.map((t) => ({
           name: t.name,
           description: t.description,
           parameters: t.parameters,
-          // Executor function not serializable
+          // execute function stripped — not transferable across thread boundary (#41)
         })),
       },
       input: task.task.input,
@@ -215,7 +218,14 @@ export class IsolatedWorkerPool {
         sharedData: Array.from(task.task.context.sharedData.entries()),
         taskResults: Array.from(task.task.context.taskResults.entries()),
       },
-      options: task.task.options,
+      options: task.task.options
+        ? {
+            taskId: task.task.options.taskId,
+            instructions: task.task.options.instructions,
+            promptTemplate: task.task.options.promptTemplate,
+            // signal (AbortSignal) stripped — not structured-clone compatible (#42)
+          }
+        : undefined,
     };
 
     worker.postMessage(serializedTask);

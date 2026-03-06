@@ -22,7 +22,8 @@ export function extractJsonFromText<T = any>(text: string): T | null {
     }
   }
 
-  // 2. Try to find the first occurrence of { or [ and match with balance
+  // 2. Try to find the first occurrence of { or [ and match with balance,
+  //    skipping characters inside string literals to avoid false bracket counts.
   const startChars = ['{', '['];
   for (const startChar of startChars) {
     let startIndex = text.indexOf(startChar);
@@ -30,10 +31,31 @@ export function extractJsonFromText<T = any>(text: string): T | null {
       const endChar = startChar === '{' ? '}' : ']';
       let balance = 0;
       let endIndex = -1;
+      let inString = false;
+      let escaped = false;
 
       for (let i = startIndex; i < text.length; i++) {
-        if (text[i] === startChar) balance++;
-        else if (text[i] === endChar) balance--;
+        const ch = text[i];
+
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+
+        if (ch === '\\' && inString) {
+          escaped = true;
+          continue;
+        }
+
+        if (ch === '"') {
+          inString = !inString;
+          continue;
+        }
+
+        if (inString) continue;
+
+        if (ch === startChar) balance++;
+        else if (ch === endChar) balance--;
 
         if (balance === 0) {
           endIndex = i;
@@ -62,7 +84,14 @@ export function extractJsonFromText<T = any>(text: string): T | null {
 function cleanJsonString(str: string): string {
   return str
     .replace(/\\n/g, '\n') // Unescape newlines
-    .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1') // Remove comments
+    .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
+    .replace(removeLineCommentSafe, '') // Remove line comments, preserving URLs
     .replace(/,(\s*[\]}])/g, '$1') // Remove trailing commas
     .trim();
 }
+
+/**
+ * Matches a `//` line comment that is NOT preceded by `:` (to preserve `://` in URLs).
+ * Uses a lookbehind to leave `http://` and `https://` untouched.
+ */
+const removeLineCommentSafe = /(?<!:)\/\/[^\n\r"]*/gm;

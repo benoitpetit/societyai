@@ -213,6 +213,8 @@ export class ExecutionEngine {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: Map<string, GraphEdge[]> = new Map();
   private logger = getLogger();
+  /** Engine-level isolated worker pool — created once and reused (#8) */
+  private isolatedPool: IsolatedWorkerPool | null = null;
 
   /**
    * Get all nodes in the graph (read-only)
@@ -473,8 +475,8 @@ export class ExecutionEngine {
     // Hydrate Context
     const context: GraphContext = {
       executionId: state.executionId,
-      input: '', // Original input might be lost if not in state, but usually not needed for resume
-      currentResult: '', // Will be updated
+      input: state.input ?? '', // Restore original input from persisted state (#4)
+      currentResult: '', // Will be updated below
       nodeResults: arrayToMap(state.results),
       sharedData: arrayToMap(state.sharedData),
       iterationCounts: arrayToMap(state.iterationCounts),
@@ -548,6 +550,7 @@ export class ExecutionEngine {
     const state: WorkflowState = {
       executionId: context.executionId,
       status,
+      input: context.input, // Persist original input so resume() can restore it (#4)
       queue: queue.map((n) => n.id),
       results: mapToArray(context.nodeResults),
       sharedData: mapToArray(context.sharedData),
@@ -697,7 +700,7 @@ export class ExecutionEngine {
           break;
 
         case NodeType.PARALLEL:
-          result = await this.executeParallelNode(node, context, agents);
+          result = await this.executeParallelNode(node, context, agents, observer, middlewareChain);
           break;
 
         case NodeType.AGGREGATE:
@@ -799,38 +802,31 @@ export class ExecutionEngine {
 
     // Check if agent should execute in isolated worker thread
     if (agent.executionMode === 'isolated') {
-      // Use IsolatedWorkerPool for CPU-intensive operations
-      const workerPool = new IsolatedWorkerPool(4);
+      // Use the engine-level IsolatedWorkerPool — created once, not per-call (#8)
+      const workerPool = this.getIsolatedPool();
 
-      try {
-        const workerResult = await withRetry(
-          async () => {
-            const result = await workerPool.execute({
-              agent,
-              input: context.currentResult,
-              context: execContext,
-              options: {
-                taskId: node.id,
-                instructions: node.metadata?.instructions as string,
-                promptTemplate: node.metadata?.promptTemplate as string,
-              },
-            });
+      taskResult = await withRetry(
+        async () => {
+          const result = await workerPool.execute({
+            agent,
+            input: context.currentResult,
+            context: execContext,
+            options: {
+              taskId: node.id,
+              instructions: node.metadata?.instructions as string,
+              promptTemplate: node.metadata?.promptTemplate as string,
+            },
+          });
 
-            if (!result.result.success) {
-              throw result.result.error || new Error('Agent execution failed in isolated worker');
-            }
+          if (!result.result.success) {
+            throw result.result.error || new Error('Agent execution failed in isolated worker');
+          }
 
-            return result.result;
-          },
-          node.retryOptions,
-          context.signal
-        );
-
-        taskResult = workerResult;
-      } finally {
-        // Cleanup worker pool
-        await workerPool.shutdown();
-      }
+          return result.result;
+        },
+        node.retryOptions,
+        context.signal
+      );
     } else {
       // Standard execution using AgentExecutor
       const executor = new AgentExecutor(agent);
@@ -930,13 +926,17 @@ export class ExecutionEngine {
   }
 
   /**
-   * Execute a PARALLEL node with concurrency control
-   * Each parallel branch gets an isolated copy of sharedData to prevent race conditions
+   * Execute a PARALLEL node with concurrency control.
+   * Each parallel branch gets an isolated copy of sharedData to prevent race conditions.
+   * Uses AgentExecutor (not agent.model.process directly) so middleware, tools,
+   * memory, schema validation and retry logic all apply (#9).
    */
   private async executeParallelNode(
     node: GraphNode,
     context: GraphContext,
-    agents: Agent[]
+    agents: Agent[],
+    _observer?: SocietyObserver,
+    middlewareChain?: MiddlewareChain
   ): Promise<string> {
     const nodeAgents = node.agentIds!.map((id) => {
       const agent = agents.find((a) => a.id === id);
@@ -965,22 +965,40 @@ export class ExecutionEngine {
                 sharedData: isolatedSharedData,
               };
 
-              const prompt = this.buildPrompt(
-                agent,
-                isolatedContext.currentResult,
-                isolatedContext,
-                node
-              );
-              const result = await agent.model.process(prompt, isolatedContext.signal);
+              // Adapt GraphContext to ExecutionContext
+              const taskResultsMap = new Map<string, TaskResult[]>();
+              for (const [, r] of isolatedContext.nodeResults) {
+                const existing = taskResultsMap.get(r.agentId) || [];
+                existing.push(r);
+                taskResultsMap.set(r.agentId, existing);
+              }
 
-              const stepResult: TaskResult = {
-                agentId: agent.id,
-                taskId: node.id,
-                output: result,
-                success: true,
-                timestamp: Date.now(),
-                duration: 0,
+              const execContext = {
+                input: isolatedContext.input,
+                sharedData: isolatedSharedData,
+                taskResults: taskResultsMap,
+                messageHistory: isolatedContext.messageHistory,
+                metadata: {},
               };
+
+              // Use AgentExecutor so all agent capabilities apply (#9)
+              const executor = new AgentExecutor(agent);
+              const stepResult = await executor.execute(
+                isolatedContext.currentResult,
+                execContext,
+                {
+                  taskId: node.id,
+                  instructions: node.metadata?.instructions as string,
+                  promptTemplate: node.metadata?.promptTemplate as string,
+                  outputSchema: node.outputSchema,
+                  signal: isolatedContext.signal,
+                  middlewareChain,
+                }
+              );
+
+              if (!stepResult.success) {
+                throw stepResult.error || new Error(`Parallel agent ${agent.id} failed`);
+              }
 
               results.push(stepResult);
               sharedDataSnapshots.push(isolatedSharedData);
@@ -1003,16 +1021,40 @@ export class ExecutionEngine {
   }
 
   /**
-   * Execute an AGGREGATE node
+   * Execute an AGGREGATE node.
+   * Only collects results from nodes that have a direct edge into this node (#5).
+   * Collecting all nodeResults would include unrelated branches.
    */
   private async executeAggregateNode(node: GraphNode, context: GraphContext): Promise<string> {
-    // Collect previous results (assuming they're in nodeResults)
-    const results = Array.from(context.nodeResults.values());
+    // Find the set of direct predecessors by scanning every node's outgoing edges
+    const predecessorIds = new Set<string>();
+    for (const [fromId, edgeList] of this.edges) {
+      for (const edge of edgeList) {
+        if (edge.to === node.id) {
+          predecessorIds.add(fromId);
+        }
+      }
+    }
+
+    // Collect only the results produced by those predecessor nodes
+    const results: TaskResult[] = [];
+    for (const predId of predecessorIds) {
+      const result = context.nodeResults.get(predId);
+      if (result) results.push(result);
+    }
+
+    // Fall back to all results if no predecessors found (e.g. programmatic use)
+    if (results.length === 0) {
+      results.push(...Array.from(context.nodeResults.values()));
+    }
+
     return node.aggregator!(results);
   }
 
   /**
-   * Execute a CONDITION node
+   * Execute a CONDITION node.
+   * Evaluates the condition, stores the result in nodeResults (#2),
+   * then queues exactly one downstream branch.
    */
   private async executeConditionNode(
     node: GraphNode,
@@ -1022,7 +1064,32 @@ export class ExecutionEngine {
     _middlewareChain?: MiddlewareChain,
     queue?: GraphNode[]
   ): Promise<string> {
-    const conditionResult = node.condition!(context.currentResult, context);
+    // Track how many times this condition node has been visited (for loop guard)
+    const iteration = (context.iterationCounts.get(node.id) || 0) + 1;
+    context.iterationCounts.set(node.id, iteration);
+
+    // If maxIterations is set and exceeded, force the true (exit) branch so the
+    // cycle terminates gracefully instead of running forever.
+    const maxIterations = node.maxIterations;
+    const limitReached = maxIterations != null && iteration > maxIterations;
+
+    if (limitReached) {
+      this.logger.info(
+        `Condition node ${node.id} reached maxIterations (${maxIterations}). Forcing exit (true) branch.`
+      );
+    }
+
+    const conditionResult = limitReached ? true : node.condition!(context.currentResult, context);
+
+    // Store result so downstream AGGREGATE / history nodes can reference it (#2)
+    context.nodeResults.set(node.id, {
+      agentId: node.id,
+      taskId: node.id,
+      output: String(conditionResult),
+      success: true,
+      timestamp: Date.now(),
+      duration: 0,
+    });
 
     // Find edges from this node
     const edges = this.edges.get(node.id) || [];
@@ -1247,7 +1314,14 @@ export class ExecutionEngine {
   }
 
   /**
-   * Execute a LOOP node
+   * Execute a LOOP node.
+   *
+   * Design: a LOOP node acts as a gatekeeper.
+   *   - On each visit it checks whether to continue iterating.
+   *   - If yes: queue the loop body (outgoing edges) AND re-queue the LOOP node
+   *     itself so it will be visited again after the body completes (#1).
+   *   - If no: let execution fall through to whatever follows the loop body's
+   *     terminal path (handled by queueNextNodes on the final body node).
    */
   private async executeLoopNode(
     node: GraphNode,
@@ -1272,9 +1346,11 @@ export class ExecutionEngine {
       iteration++;
       context.iterationCounts.set(node.id, iteration);
 
-      // Queue loop body (next nodes)
       if (queue) {
+        // Queue loop body (child nodes)
         this.queueNextNodes(node, context, queue);
+        // Re-queue the LOOP node itself so it runs again after the body (#1)
+        queue.push(node);
       }
     } else {
       this.logger.info(`Loop node ${node.id} reached maxIterations (${maxIterations})`);
@@ -1398,6 +1474,27 @@ Input: {input}`;
   }
 
   /**
+   * Get (or lazily create) the engine-level IsolatedWorkerPool (#8).
+   */
+  private getIsolatedPool(): IsolatedWorkerPool {
+    if (!this.isolatedPool) {
+      this.isolatedPool = new IsolatedWorkerPool(4);
+    }
+    return this.isolatedPool;
+  }
+
+  /**
+   * Release engine-level resources (e.g. the IsolatedWorkerPool).
+   * Call this when you are done with the engine to avoid resource leaks (#8).
+   */
+  async dispose(): Promise<void> {
+    if (this.isolatedPool) {
+      await this.isolatedPool.shutdown();
+      this.isolatedPool = null;
+    }
+  }
+
+  /**
    * Visualize graph structure (for debugging)
    */
   visualize(): string {
@@ -1512,10 +1609,16 @@ export class GraphBuilder {
       if (!visited.has(node.id)) {
         const cycle = detectCycle(node.id, []);
         if (cycle) {
-          // Check if cycle is safe (has LOOP node or maxIterations)
+          // Check if cycle is safe. A cycle is bounded (safe) when:
+          //   1. It contains a dedicated LOOP node (which always has maxIterations), OR
+          //   2. It contains a CONDITION node whose maxIterations property is set
+          //      (the CONDITION node acts as the loop guard and will break the cycle).
           const isSafe = cycle.some((id) => {
             const n = nodesMap.get(id);
-            return n && (n.type === NodeType.LOOP || n.maxIterations !== undefined);
+            if (!n) return false;
+            if (n.type === NodeType.LOOP) return true;
+            if (n.type === NodeType.CONDITION && n.maxIterations != null) return true;
+            return false;
           });
 
           if (!isSafe) {

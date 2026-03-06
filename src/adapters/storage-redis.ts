@@ -112,7 +112,9 @@ export class RedisStorageAdapter implements StorageAdapter {
     try {
       const pattern = `${this.keyPrefix}*`;
       const keys = await this.client.keys(pattern);
-      return keys.map((key) => key.replace(this.keyPrefix, ''));
+      // Anchored replacement: only strip prefix at the start of the key
+      const prefixRegex = new RegExp(`^${this.keyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
+      return keys.map((key) => key.replace(prefixRegex, ''));
     } catch (error) {
       throw new ProcessingFailedError(
         `Failed to list states from Redis: ${(error as Error).message}`
