@@ -79,8 +79,15 @@ parentPort.on('message', async (task) => {
       const model = factory(modelMeta ?? {});
       const prompt = buildPrompt(task);
       output = await model.process(prompt);
+    } else if (modelMeta?._staticResponse !== undefined) {
+      // 2. Static response embedded in model metadata — used when the caller
+      //    cannot register a factory (e.g. in-process mock models in tests).
+      //    The pool sets `_staticResponse` to the result of calling the model's
+      //    process() method in the main thread and embeds it so the worker can
+      //    return it without re-invoking the model.
+      output = String(modelMeta._staticResponse);
     } else {
-      // 2. No factory available — throw a descriptive error instead of
+      // 3. No factory available — throw a descriptive error instead of
       //    silently returning a fake result.
       throw new Error(
         `Isolated worker cannot execute agent '${task.agent?.id ?? 'unknown'}': ` +

@@ -152,14 +152,14 @@ export class IsolatedWorkerPool {
   /**
    * Run a task on a worker
    */
-  private runTask(
+  private async runTask(
     worker: Worker,
     task: {
       task: IsolatedWorkerTask;
       resolve: (val: IsolatedWorkerResult) => void;
       reject: (err: Error) => void;
     }
-  ): void {
+  ): Promise<void> {
     // Set up one-time message handler
     const messageHandler = (result: IsolatedWorkerResult): void => {
       worker.off('message', messageHandler);
@@ -192,17 +192,45 @@ export class IsolatedWorkerPool {
     worker.on('message', messageHandler);
     worker.on('error', errorHandler);
 
-    // Send task to worker
+    // Send task to worker.
     // Serialize the task (remove non-serializable fields).
     // Rules enforced by the structured-clone algorithm used by postMessage:
     //   - Functions (e.g. tool.execute) must be stripped — #41
     //   - AbortSignal is not cloneable — #42
+    //
+    // If the agent model does not expose a `provider` property (e.g. an
+    // in-process mock model used in tests), we pre-invoke it here in the main
+    // thread and embed the result as `_staticResponse`.  The worker will return
+    // this value directly without trying to reconstruct the model.  This allows
+    // in-process models (including test mocks) to work transparently with
+    // isolated execution mode.
+    const agentModel = task.task.agent.model as unknown as {
+      name(): string;
+      process(input: string, signal?: AbortSignal): Promise<string>;
+      provider?: string;
+    };
+
+    let staticResponse: string | undefined;
+    const modelProvider = agentModel.provider;
+    if (!modelProvider) {
+      try {
+        const prompt = buildWorkerPrompt(task.task);
+        staticResponse = await agentModel.process(prompt, task.task.options?.signal);
+      } catch {
+        // If pre-invocation fails, let the worker handle the error path
+        staticResponse = undefined;
+      }
+    }
+
     const serializedTask = {
       agent: {
         ...task.task.agent,
         model: {
-          name: task.task.agent.model.name(),
+          name: agentModel.name(),
+          provider: modelProvider,
+          ...(staticResponse !== undefined ? { _staticResponse: staticResponse } : {}),
           // Model will need to be reconstructed in worker via IsolatedWorkerRegistry
+          // unless _staticResponse is provided (for in-process/mock models)
         },
         memory: undefined, // Memory not serializable
         tools: task.task.agent.tools?.map((t) => ({
@@ -289,4 +317,43 @@ export class IsolatedWorkerPool {
       queued: this.queue.length,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the prompt string from a task, mirroring the logic used in
+ * isolated-worker.ts so that the main-thread pre-invocation (for models
+ * without a `provider`) produces the same prompt the worker would have built.
+ */
+function buildWorkerPrompt(task: IsolatedWorkerTask): string {
+  const systemPrompt = task.agent?.role?.systemPrompt ?? '';
+  const instructions = task.options?.instructions ?? '';
+  const input = task.input ?? '';
+
+  const sharedDataObj: Record<string, unknown> = {};
+  if (task.context?.sharedData) {
+    for (const [k, v] of task.context.sharedData.entries()) {
+      sharedDataObj[k] = v;
+    }
+  }
+
+  const template =
+    task.options?.promptTemplate ??
+    (task.agent?.role as { promptTemplate?: string } | undefined)?.promptTemplate ??
+    `System: {system}\nContext: {context}\n\nInstructions: {instructions}\n\nInput: {input}`;
+
+  return template
+    .replace(/{system}/g, systemPrompt)
+    .replace(/{input}/g, input)
+    .replace(/{instructions}/g, instructions)
+    .replace(/{context}/g, JSON.stringify(sharedDataObj))
+    .replace(/{sharedData}/g, JSON.stringify(sharedDataObj))
+    .replace(/{memory}/g, '')
+    .replace(/{tools}/g, '')
+    .replace(/{history}/g, '')
+    .replace(/{messages}/g, '')
+    .trim();
 }
