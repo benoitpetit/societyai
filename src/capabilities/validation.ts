@@ -225,20 +225,31 @@ export class StructuredOutputValidator<T = unknown> {
    * Extract JSON from output (handles markdown code blocks, etc.)
    */
   private extractJSON(output: string): string {
+    const trimmed = output.trim();
+
+    // First, try to parse the output directly as-is — handles primitives
+    // (quoted strings, numbers, booleans, null) as well as objects/arrays
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      // Not valid JSON as-is, continue with extraction heuristics
+    }
+
     // Try to find JSON in markdown code block
-    const codeBlockMatch = output.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+    const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
     if (codeBlockMatch) {
       return codeBlockMatch[1].trim();
     }
 
     // Try to find JSON object/array
-    const jsonMatch = output.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    const jsonMatch = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
     if (jsonMatch) {
       return jsonMatch[1].trim();
     }
 
-    // Return as-is
-    return output.trim();
+    // Return as-is and let JSON.parse in validate() produce the error
+    return trimmed;
   }
 
   /**
