@@ -22,23 +22,24 @@ import {
 function makeVectorProvider(): VectorProvider & {
   store: Map<string, { content: string; metadata?: Record<string, unknown> }>;
 } {
+  type SearchResult = { id: string; score: number };
   const store = new Map<string, { content: string; metadata?: Record<string, unknown> }>();
   return {
     store,
-    async add(id: string, content: string, metadata?: Record<string, unknown>) {
+    async add(id: string, content: string, metadata?: Record<string, unknown>): Promise<void> {
       store.set(id, { content, metadata });
     },
-    async search(query: string, limit = 10) {
+    async search(query: string, limit = 10): Promise<SearchResult[]> {
       const results = Array.from(store.entries())
         .filter(([, v]) => v.content.toLowerCase().includes(query.toLowerCase()))
         .slice(0, limit)
         .map(([id]) => ({ id, score: 1 }));
       return results;
     },
-    async delete(id: string) {
+    async delete(id: string): Promise<void> {
       store.delete(id);
     },
-    async clear() {
+    async clear(): Promise<void> {
       store.clear();
     },
   };
@@ -87,7 +88,7 @@ describe('ShortTermMemory', () => {
   it('search with time range filters results', () => {
     const mem = new ShortTermMemory();
     const past = Date.now() - 10000;
-    const now = Date.now();
+    Date.now(); // trigger for test context
     mem.add('old memory');
     const result = mem.search({
       query: 'old',

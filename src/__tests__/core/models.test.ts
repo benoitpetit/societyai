@@ -166,7 +166,7 @@ describe('StandardModelBase', () => {
     const mockAdapter = {
       convertPrompt: jest.fn().mockResolvedValue('converted prompt'),
       convertResponse: jest.fn().mockResolvedValue('converted response'),
-      getSupportedPromptTypes: () => ['text'],
+      getSupportedPromptTypes: (): string[] => ['text'],
     };
     const model = new StandardModelBase(
       {
@@ -192,7 +192,7 @@ describe('StandardModelBase', () => {
         name: 'AbortTest',
         retryOptions: noRetry,
       },
-      async () => {
+      async (): Promise<string> => {
         await new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 50));
         return 'never';
       }
@@ -213,7 +213,7 @@ describe('StandardModelBase', () => {
     const mockAdapter = {
       convertPrompt: jest.fn().mockResolvedValue('p'),
       convertResponse: jest.fn().mockResolvedValue('r'),
-      getSupportedPromptTypes: () => ['text'],
+      getSupportedPromptTypes: (): string[] => ['text'],
     };
     const model = new StandardModelBase(
       {
@@ -234,7 +234,7 @@ describe('StandardModelBase', () => {
         adapter: undefined,
         retryOptions: noRetry,
       },
-      async () => 42 as unknown as string
+      async (): Promise<string> => 42 as unknown as string
     );
     // Need to force no adapter to hit the non-string branch
     (model as unknown as { options: { adapter: undefined } }).options.adapter = undefined;

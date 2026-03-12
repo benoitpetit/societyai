@@ -454,7 +454,7 @@ describe('ProgressTracker', () => {
 // ---------------------------------------------------------------------------
 
 describe('EventLogger', () => {
-  function makeLogger() {
+  function makeLogger(): { log: jest.Mock; error: jest.Mock; warn: jest.Mock; info: jest.Mock } {
     const log = jest.fn();
     const error = jest.fn();
     const warn = jest.fn();

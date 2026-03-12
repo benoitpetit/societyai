@@ -15,7 +15,12 @@ import {
 // Mock logger
 // ---------------------------------------------------------------------------
 jest.mock('../../observability/logger', () => ({
-  getLogger: () => ({
+  getLogger: (): {
+    info: jest.Mock;
+    debug: jest.Mock;
+    warn: jest.Mock;
+    error: jest.Mock;
+  } => ({
     info: jest.fn(),
     debug: jest.fn(),
     warn: jest.fn(),
@@ -197,7 +202,7 @@ describe('ToolExecutor', () => {
   it('executeWithTools runs tool loop until no more calls', async () => {
     registry.register(echoTool());
     let call = 0;
-    const agent = async (input: string): Promise<string> => {
+    const agent = async (_input: string): Promise<string> => {
       call++;
       if (call === 1)
         return `<tool_code>{"name": "echo", "arguments": {"msg": "step1"}}</tool_code>`;
@@ -242,7 +247,7 @@ describe('BuiltInTools.calculator', () => {
     registry.register(BuiltInTools.calculator());
   });
 
-  const calc = (expr: string) =>
+  const calc = (expr: string): Promise<{ success: boolean; result?: unknown; error?: Error }> =>
     registry.execute({ name: 'calculator', parameters: { expression: expr } });
 
   it('adds numbers', async () => {
@@ -285,7 +290,7 @@ describe('BuiltInTools.stringManipulation', () => {
     registry.register(BuiltInTools.stringManipulation());
   });
 
-  const str = (text: string, operation: string) =>
+  const str = (text: string, operation: string): Promise<{ success: boolean; result?: unknown; error?: Error }> =>
     registry.execute({ name: 'string_manipulation', parameters: { text, operation } });
 
   it('uppercases text', async () => {

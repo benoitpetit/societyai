@@ -25,7 +25,7 @@ function makeAgent(id: string, response: string): Agent {
   };
 }
 
-function makeGraph(agentId: string) {
+function makeGraph(agentId: string): ReturnType<typeof GraphBuilder.prototype.build> {
   return GraphBuilder.create()
     .addNode('start', NodeType.START)
     .addNode('step', NodeType.AGENT, { agentId })

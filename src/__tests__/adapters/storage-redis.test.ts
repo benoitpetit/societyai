@@ -16,25 +16,25 @@ function makeMockRedisClient(): RedisClient & { _store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     _store: store,
-    async get(key: string) {
+    async get(key: string): Promise<string | null> {
       return store.get(key) ?? null;
     },
-    async set(key: string, value: string) {
+    async set(key: string, value: string): Promise<'OK'> {
       store.set(key, value);
       return 'OK';
     },
-    async del(...keys: string[]) {
+    async del(...keys: string[]): Promise<number> {
       let count = 0;
       for (const k of keys) {
         if (store.delete(k)) count++;
       }
       return count;
     },
-    async setex(key: string, _seconds: number, value: string) {
+    async setex(key: string, _seconds: number, value: string): Promise<'OK'> {
       store.set(key, value);
       return 'OK';
     },
-    async keys(pattern: string) {
+    async keys(pattern: string): Promise<string[]> {
       const prefix = pattern.replace('*', '');
       return Array.from(store.keys()).filter((k) => k.startsWith(prefix));
     },

@@ -12,7 +12,7 @@ import {
   StepMiddlewares,
   MiddlewareContext,
   NextFunction,
-  MiddlewareResult,
+  Middleware,
 } from '../../core/middleware';
 import { AIModel } from '../../core/types';
 
@@ -20,7 +20,12 @@ import { AIModel } from '../../core/types';
 // Mock logger
 // ---------------------------------------------------------------------------
 jest.mock('../../observability/logger', () => ({
-  getLogger: () => ({
+  getLogger: (): {
+    info: jest.Mock;
+    debug: jest.Mock;
+    warn: jest.Mock;
+    error: jest.Mock;
+  } => ({
     info: jest.fn(),
     debug: jest.fn(),
     warn: jest.fn(),
@@ -103,7 +108,7 @@ describe('Middlewares.retry', () => {
 
   it('retries on failure and eventually succeeds', async () => {
     let attempts = 0;
-    const flakyNext: NextFunction = async (ctx) => {
+    const flakyNext: NextFunction = async (_ctx) => {
       attempts++;
       if (attempts < 3) throw new Error('flaky');
       return { output: 'ok', continue: true };
@@ -144,7 +149,7 @@ describe('Middlewares.retry', () => {
 describe('Middlewares.cache', () => {
   it('returns cached result on second call', async () => {
     let calls = 0;
-    const countingNext: NextFunction = async (ctx) => {
+    const countingNext: NextFunction = async (_ctx) => {
       calls++;
       return { output: 'fresh', continue: true };
     };
@@ -495,9 +500,9 @@ describe('ComposedMiddleware', () => {
 // ---------------------------------------------------------------------------
 describe('MiddlewareChain helpers', () => {
   it('remove deletes a middleware by name', () => {
-    const passThrough = {
+    const passThrough: Middleware = {
       name: 'pass',
-      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+      fn: async (c, n) => n(c),
     };
     const chain = MiddlewareChain.create().use(passThrough);
     expect(chain.getMiddlewares()).toHaveLength(1);
@@ -506,9 +511,9 @@ describe('MiddlewareChain helpers', () => {
   });
 
   it('useAt inserts at specific index', () => {
-    const make = (name: string) => ({
+    const make = (name: string): Middleware => ({
       name,
-      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+      fn: async (c, n) => n(c),
     });
     const chain = MiddlewareChain.create().use(make('a')).use(make('c'));
     chain.useAt(1, make('b'));
@@ -516,9 +521,9 @@ describe('MiddlewareChain helpers', () => {
   });
 
   it('useBefore unknown name appends at end', () => {
-    const make = (name: string) => ({
+    const make = (name: string): Middleware => ({
       name,
-      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+      fn: async (c, n) => n(c),
     });
     const chain = MiddlewareChain.create().use(make('x'));
     chain.useBefore('nonexistent', make('y'));
@@ -526,9 +531,9 @@ describe('MiddlewareChain helpers', () => {
   });
 
   it('useAfter unknown name appends at end', () => {
-    const make = (name: string) => ({
+    const make = (name: string): Middleware => ({
       name,
-      fn: async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c),
+      fn: async (c, n) => n(c),
     });
     const chain = MiddlewareChain.create().use(make('x'));
     chain.useAfter('nonexistent', make('y'));
@@ -542,7 +547,7 @@ describe('MiddlewareChain helpers', () => {
   });
 
   it('use with function creates named middleware', () => {
-    const fn = async (c: MiddlewareContext, n: NextFunction): Promise<MiddlewareResult> => n(c);
+    const fn: Middleware['fn'] = async (c, n) => n(c);
     const chain = MiddlewareChain.create().use(fn);
     expect(chain.getMiddlewares()[0].name).toMatch(/middleware-/);
   });
@@ -589,7 +594,14 @@ describe('MiddlewareWrappedModel streaming', () => {
 // StepMiddlewares
 // ---------------------------------------------------------------------------
 describe('StepMiddlewares', () => {
-  const makeStepCtx = () => ({
+  const makeStepCtx = (): {
+    stepId: string;
+    stepName: string;
+    agentIds: string[];
+    input: string;
+    executionContext: never;
+    metadata: Map<string, unknown>;
+  } => ({
     stepId: 'step-1',
     stepName: 'TestStep',
     agentIds: ['a1'],

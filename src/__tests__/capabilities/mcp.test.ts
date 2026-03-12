@@ -17,7 +17,10 @@ const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
 // ---------------------------------------------------------------------------
 // Helper: build a fake ChildProcess whose stdout emits lines on demand
 // ---------------------------------------------------------------------------
-function makeMockProcess(options: { nullStdout?: boolean; nullStdin?: boolean } = {}) {
+function makeMockProcess(options: { nullStdout?: boolean; nullStdin?: boolean } = {}): {
+  mockProcess: ChildProcess & { emit: (event: string, ...args: unknown[]) => boolean };
+  pushLine: (obj: unknown) => void;
+} {
   const stdoutEmitter = new EventEmitter();
   const processEmitter = new EventEmitter();
 
@@ -34,7 +37,7 @@ function makeMockProcess(options: { nullStdout?: boolean; nullStdin?: boolean } 
   } as unknown as ChildProcess & { emit: (event: string, ...args: unknown[]) => boolean };
 
   // Helper to push a NDJSON line to stdout
-  const pushLine = (obj: unknown) => {
+  const pushLine = (obj: unknown): void => {
     if (!options.nullStdout) {
       (stdoutEmitter as EventEmitter).emit('data', Buffer.from(JSON.stringify(obj) + '\n'));
     }
@@ -46,7 +49,11 @@ function makeMockProcess(options: { nullStdout?: boolean; nullStdin?: boolean } 
 // ---------------------------------------------------------------------------
 // Helpers: build minimal valid MCP protocol responses
 // ---------------------------------------------------------------------------
-function initResponse(id: number) {
+function initResponse(id: number): {
+  jsonrpc: string;
+  id: number;
+  result: { protocolVersion: string; capabilities: Record<string, unknown> };
+} {
   return {
     jsonrpc: '2.0',
     id,
@@ -57,7 +64,11 @@ function initResponse(id: number) {
   };
 }
 
-function toolsListResponse(id: number, tools: unknown[] = []) {
+function toolsListResponse(id: number, tools: unknown[] = []): {
+  jsonrpc: string;
+  id: number;
+  result: { tools: unknown[] };
+} {
   return { jsonrpc: '2.0', id, result: { tools } };
 }
 

@@ -5,16 +5,16 @@
  * 542-550, 559-561, 574-616
  */
 
-import { Society, SocietyPatterns, AggregationStrategies } from '../../builders/builder';
+import { Society, SocietyPatterns } from '../../builders/builder';
 import { InvalidConfigurationError } from '../../core/errors';
 import { Middlewares, MiddlewareChain } from '../../core/middleware';
-import { AIModel, Message, ExecutionContext } from '../../core/types';
+import { AIModel } from '../../core/types';
 
 // ---------------------------------------------------------------------------
 // Minimal mock model
 // ---------------------------------------------------------------------------
 
-function makeMockModel(response = 'ok'): AIModel {
+function makeMockModel(response = 'ok'): AIModel & { process: jest.Mock } {
   return {
     name: () => 'mock',
     supportsPromptType: () => true,
@@ -22,7 +22,7 @@ function makeMockModel(response = 'ok'): AIModel {
   };
 }
 
-function makeAgent(id: string, model?: AIModel) {
+function makeAgent(id: string, model?: AIModel): { id: string; name: string; role: { systemPrompt: string }; model: AIModel } {
   return {
     id,
     name: id,
@@ -35,7 +35,7 @@ function makeAgent(id: string, model?: AIModel) {
 // Helpers to build a minimal valid society
 // ---------------------------------------------------------------------------
 
-function buildMinimalSociety(id = 'test', agentId = 'a1', taskId = 'task1') {
+function buildMinimalSociety(id = 'test', agentId = 'a1', taskId = 'task1'): ReturnType<typeof Society.create> {
   return Society.create(id)
     .withName('Test Society')
     .addAgent((a) =>
