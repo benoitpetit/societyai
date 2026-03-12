@@ -19,7 +19,10 @@ function makeMockPool(): PostgresPool & {
   return {
     _states: states,
 
-    async query(text: string, values?: unknown[]): Promise<{ rows: unknown[]; rowCount: number }> {
+    async query(
+      text: string,
+      values?: unknown[]
+    ): Promise<{ rows: Array<Record<string, unknown>>; rowCount: number }> {
       const sql = text.trim().replace(/\s+/g, ' ').toLowerCase();
 
       // CREATE TABLE — no-op
