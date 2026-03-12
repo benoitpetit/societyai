@@ -115,7 +115,10 @@ export {
   FluentRoleBuilder as RoleBuilder,
   FluentAgentBuilder as AgentBuilder,
   FluentTaskBuilder as TaskBuilder,
-  // Quick helpers
+  // Quick helpers (preferred names)
+  roleBuilder,
+  agentBuilder,
+  // Quick helpers (deprecated — kept for backward compatibility)
   createRole,
   createAgent,
 } from './builders/builder';
@@ -255,6 +258,9 @@ export {
   GraphResult,
 } from './execution/engine/execution-engine';
 
+// Execution engine option types
+export type { ExecuteOptions, ResumeOptions } from './execution/engine/execution-engine';
+
 // ============================================================================
 // TOOL CALLING SYSTEM
 // ============================================================================
@@ -377,11 +383,6 @@ export {
   PostgresPool,
   PostgresStorageConfig,
 } from './adapters';
-
-// ============================================================================
-// METRICS AND OBSERVABILITY
-// ============================================================================
-export { WorkerPool, CpuWorkerPool } from './utils/worker-pool';
 
 // ============================================================================
 // GRAPH VISUALIZATION

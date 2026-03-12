@@ -50,6 +50,15 @@ export class GraphVisualizer {
         case NodeType.HUMAN:
           shape = `[/"${node.id}<br/>Human Input"/]`;
           break;
+        case NodeType.COLLABORATIVE:
+          shape = `[["${node.id}<br/>Collaborative"]]`;
+          break;
+        case NodeType.AGGREGATE:
+          shape = `["${node.id}<br/>Aggregate"]`;
+          break;
+        case NodeType.TRANSFORM:
+          shape = `["${node.id}<br/>Transform"]`;
+          break;
         default:
           shape = `["${node.id}<br/>${node.type}"]`;
       }
@@ -85,13 +94,41 @@ export class GraphVisualizer {
     mermaid += '    classDef agent fill:#ffecb3,stroke:#ffb74d;\n';
     mermaid += '    classDef startNode fill:#c8e6c9,stroke:#81c784;\n';
     mermaid += '    classDef endNode fill:#ffccbc,stroke:#ff8a65;\n';
+    mermaid += '    classDef condition fill:#e1bee7,stroke:#ab47bc;\n';
+    mermaid += '    classDef parallel fill:#bbdefb,stroke:#42a5f5;\n';
+    mermaid += '    classDef loop fill:#fff9c4,stroke:#f9a825;\n';
+    mermaid += '    classDef human fill:#d7ccc8,stroke:#8d6e63;\n';
+    mermaid += '    classDef collaborative fill:#b2dfdb,stroke:#26a69a;\n';
 
-    // Apply classes (basic heuristic)
+    // Apply classes
     for (const node of nodes.values()) {
       const safeId = GraphVisualizer.safeId(node.id);
-      if (node.type === NodeType.AGENT) mermaid += `    class ${safeId} agent;\n`;
-      if (node.type === NodeType.START) mermaid += `    class ${safeId} startNode;\n`;
-      if (node.type === NodeType.END) mermaid += `    class ${safeId} endNode;\n`;
+      switch (node.type) {
+        case NodeType.AGENT:
+          mermaid += `    class ${safeId} agent;\n`;
+          break;
+        case NodeType.START:
+          mermaid += `    class ${safeId} startNode;\n`;
+          break;
+        case NodeType.END:
+          mermaid += `    class ${safeId} endNode;\n`;
+          break;
+        case NodeType.CONDITION:
+          mermaid += `    class ${safeId} condition;\n`;
+          break;
+        case NodeType.PARALLEL:
+          mermaid += `    class ${safeId} parallel;\n`;
+          break;
+        case NodeType.LOOP:
+          mermaid += `    class ${safeId} loop;\n`;
+          break;
+        case NodeType.HUMAN:
+          mermaid += `    class ${safeId} human;\n`;
+          break;
+        case NodeType.COLLABORATIVE:
+          mermaid += `    class ${safeId} collaborative;\n`;
+          break;
+      }
     }
 
     return mermaid;

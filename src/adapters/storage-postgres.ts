@@ -65,14 +65,16 @@ export interface PostgresStorageConfig {
  */
 export class PostgresStorageAdapter implements StorageAdapter {
   private pool: PostgresPool;
+  private schema: string;
   private tableName: string;
   private fullTableName: string;
 
   constructor(config: PostgresStorageConfig) {
     this.pool = config.pool;
-    const schema = config.schemaName || 'public';
+    this.schema = config.schemaName || 'public';
     this.tableName = config.tableName || 'societyai_states';
-    this.fullTableName = `${schema}.${this.tableName}`;
+    // Quoted identifiers prevent SQL injection for schema/table names
+    this.fullTableName = `"${this.schema}"."${this.tableName}"`;
   }
 
   /**
@@ -89,10 +91,10 @@ export class PostgresStorageAdapter implements StorageAdapter {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
 
-      CREATE INDEX IF NOT EXISTS idx_${this.tableName}_status
+      CREATE INDEX IF NOT EXISTS "idx_${this.tableName}_status"
         ON ${this.fullTableName}(status);
 
-      CREATE INDEX IF NOT EXISTS idx_${this.tableName}_updated_at
+      CREATE INDEX IF NOT EXISTS "idx_${this.tableName}_updated_at"
         ON ${this.fullTableName}(updated_at DESC);
     `;
 
@@ -185,14 +187,15 @@ export class PostgresStorageAdapter implements StorageAdapter {
    * Advanced: Clean up old completed/failed states
    */
   async cleanup(olderThanDays: number = 7): Promise<number> {
+    // Use parameterized query to avoid SQL injection for the days value
     const sql = `
       DELETE FROM ${this.fullTableName}
       WHERE status IN ('completed', 'failed')
-        AND updated_at < NOW() - INTERVAL '${olderThanDays} days'
+        AND updated_at < NOW() - INTERVAL '1 day' * $1
     `;
 
     try {
-      const result = await this.pool.query(sql);
+      const result = await this.pool.query(sql, [olderThanDays]);
       return result.rowCount;
     } catch (error) {
       throw new ProcessingFailedError(`Failed to cleanup old states: ${(error as Error).message}`);

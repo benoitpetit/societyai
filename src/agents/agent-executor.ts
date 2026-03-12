@@ -28,11 +28,14 @@ export class AgentExecutor {
       loopConfig?: LoopConfig;
       signal?: AbortSignal;
       middlewareChain?: MiddlewareChain;
+      /** Maximum number of ReAct tool-execution steps per agent call (default: 5) */
+      maxToolSteps?: number;
     }
   ): Promise<TaskResult> {
     const startTime = Date.now();
     const loop = new LoopController(options.loopConfig || { maxIterations: 1 });
     let currentInput = input;
+    const originalInput = input;
     let lastOutput = '';
     let success = true;
     let error: Error | undefined;
@@ -97,7 +100,7 @@ export class AgentExecutor {
           let output = await this.agent.model.process(prompt, ctx.signal);
 
           // E. ReAct Loop (Tool Execution)
-          output = await this.runToolLoop(output, ctx);
+          output = await this.runToolLoop(output, ctx, options.maxToolSteps);
 
           // F. Schema Validation
           if (options.outputSchema) {
@@ -120,6 +123,14 @@ export class AgentExecutor {
 
         lastOutput = result.output;
 
+        // Store successful result in memory (M-01)
+        if (this.agent.memory && lastOutput) {
+          await this.agent.memory.add(lastOutput, {
+            type: 'fact',
+            metadata: { taskId: options.taskId, agentId: this.agent.id, timestamp: Date.now() },
+          });
+        }
+
         // G. Loop Exit Condition
         if (
           options.loopConfig?.exitCondition &&
@@ -137,9 +148,9 @@ export class AgentExecutor {
         error = e as Error;
         success = false;
 
-        // If we have more iterations, we can try to feed back the error
+        // If we have more iterations, feed back the error with original context preserved
         if (loop.iteration < (options.loopConfig?.maxIterations || 1)) {
-          currentInput = `Error encountered: ${(e as Error).message}. Please try again.`;
+          currentInput = `${originalInput}\n\n[Previous attempt failed: ${(e as Error).message}. Please try again with a corrected approach.]`;
           continue;
         }
         break;
@@ -161,13 +172,16 @@ export class AgentExecutor {
   /**
    * Runs the internal ReAct loop for tool execution.
    */
-  private async runToolLoop(initialOutput: string, ctx: MiddlewareContext): Promise<string> {
+  private async runToolLoop(
+    initialOutput: string,
+    ctx: MiddlewareContext,
+    maxToolSteps = 5
+  ): Promise<string> {
     if (!this.agent.tools || this.agent.tools.length === 0) return initialOutput;
 
     let currentOutput = initialOutput;
-    const MAX_TOOL_STEPS = 5;
 
-    for (let i = 0; i < MAX_TOOL_STEPS; i++) {
+    for (let i = 0; i < maxToolSteps; i++) {
       const toolMatch = currentOutput.match(/<tool_code>([\s\S]*?)<\/tool_code>/);
       if (!toolMatch) break;
 
@@ -205,6 +219,8 @@ export class AgentExecutor {
 
   /**
    * Builds the final prompt from various components.
+   * Sections with no content (Memory, Tools, Instructions) are omitted entirely
+   * to avoid cluttering the prompt with empty headings.
    */
   private buildPrompt(parts: {
     system: string;
@@ -215,35 +231,44 @@ export class AgentExecutor {
     template?: string;
     context: ExecutionContext;
   }): string {
-    let template =
-      parts.template ||
-      `
-System: {system}
-Context: {context}
-Memory: {memory}
-Tools: {tools}
-
-Instructions: {instructions}
-
-Input: {input}
-    `;
-
-    // Prepend instructions if not in template and provided
-    if (parts.instructions && !template.includes('{instructions}')) {
-      template = `${parts.instructions}\n\n${template}`;
+    // If a custom template is provided, use it verbatim (with substitutions)
+    if (parts.template) {
+      return parts.template
+        .replace(/{system}/g, parts.system)
+        .replace(/{input}/g, parts.input)
+        .replace(/{memory}/g, parts.memory)
+        .replace(/{tools}/g, parts.tools)
+        .replace(/{instructions}/g, parts.instructions || '')
+        .replace(/{context}/g, JSON.stringify(Object.fromEntries(parts.context.sharedData)))
+        .replace(/{sharedData}/g, JSON.stringify(Object.fromEntries(parts.context.sharedData)))
+        .replace(/{history}/g, this.formatHistory(parts.context))
+        .replace(/{messages}/g, this.formatMessages(parts.context))
+        .trim();
     }
 
-    return template
-      .replace(/{system}/g, parts.system)
-      .replace(/{input}/g, parts.input)
-      .replace(/{memory}/g, parts.memory)
-      .replace(/{tools}/g, parts.tools)
-      .replace(/{instructions}/g, parts.instructions || '')
-      .replace(/{context}/g, JSON.stringify(Object.fromEntries(parts.context.sharedData)))
-      .replace(/{sharedData}/g, JSON.stringify(Object.fromEntries(parts.context.sharedData)))
-      .replace(/{history}/g, this.formatHistory(parts.context))
-      .replace(/{messages}/g, this.formatMessages(parts.context))
-      .trim();
+    // Build sections conditionally — omit empty ones
+    const lines: string[] = [];
+
+    lines.push(`System: ${parts.system}`);
+    lines.push(`Context: ${JSON.stringify(Object.fromEntries(parts.context.sharedData))}`);
+
+    if (parts.memory) {
+      lines.push(`Memory: ${parts.memory}`);
+    }
+
+    if (parts.tools) {
+      lines.push(`Tools: ${parts.tools}`);
+    }
+
+    if (parts.instructions) {
+      lines.push('');
+      lines.push(`Instructions: ${parts.instructions}`);
+    }
+
+    lines.push('');
+    lines.push(`Input: ${parts.input}`);
+
+    return lines.join('\n').trim();
   }
 
   /**

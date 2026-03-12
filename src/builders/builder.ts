@@ -15,6 +15,8 @@ export {
   FluentTaskBuilder,
   FluentPipelineBuilder,
   AggregationStrategies,
+  roleBuilder,
+  agentBuilder,
   createRole,
   createAgent,
 } from './society-builder';

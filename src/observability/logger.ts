@@ -25,6 +25,15 @@ export class DefaultLogger implements Logger {
   }
 
   /**
+   * Log a warning message
+   */
+  warn(message: string, ...args: unknown[]): void {
+    if (this.level >= LogLevel.WARN) {
+      console.warn(`[WARN] ${this.format(message, args)}`);
+    }
+  }
+
+  /**
    * Log an error message
    */
   error(message: string, ...args: unknown[]): void {
@@ -48,7 +57,7 @@ export class DefaultLogger implements Logger {
       return message;
     }
 
-    // Remplacer les %s, %d, %j dans le message
+    // Replace %s, %d, %j placeholders in the message
     let formatted = message;
     let argIndex = 0;
 
@@ -71,7 +80,7 @@ export class DefaultLogger implements Logger {
       }
     });
 
-    // Ajouter les arguments restants
+    // Append any remaining arguments
     if (argIndex < args.length) {
       const remaining = args.slice(argIndex).map((arg) => {
         if (typeof arg === 'object') {
@@ -86,11 +95,11 @@ export class DefaultLogger implements Logger {
   }
 }
 
-// Instance singleton du logger
+// Singleton logger instance
 let loggerInstance: Logger | null = null;
 
 /**
- * Retourne l'instance singleton du logger
+ * Returns the singleton logger instance
  */
 export function getLogger(): Logger {
   if (!loggerInstance) {
@@ -100,14 +109,14 @@ export function getLogger(): Logger {
 }
 
 /**
- * Définit le logger global
+ * Sets the global logger
  */
 export function setLogger(logger: Logger): void {
   loggerInstance = logger;
 }
 
 /**
- * Définit le niveau de log global
+ * Sets the global log level
  */
 export function setGlobalLogLevel(level: LogLevel): void {
   getLogger().setLevel(level);

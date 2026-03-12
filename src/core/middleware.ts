@@ -305,6 +305,26 @@ export class MiddlewareWrappedModel implements AIModel {
     return result.output;
   }
 
+  /**
+   * Proxy streaming to the underlying model (O-05).
+   * Middleware does not currently intercept the stream; it passes through directly.
+   */
+  async *stream(prompt: unknown, signal?: AbortSignal): AsyncIterable<string> {
+    if (this.model.stream) {
+      yield* this.model.stream(prompt, signal);
+    } else {
+      // Fallback: materialise via process() and yield the whole result at once
+      yield await this.process(prompt, signal);
+    }
+  }
+
+  /**
+   * Proxy supportsStreaming() to the underlying model (O-05).
+   */
+  supportsStreaming(): boolean {
+    return this.model.supportsStreaming?.() ?? false;
+  }
+
   supportsPromptType(promptType: string): boolean {
     return this.model.supportsPromptType(promptType);
   }
@@ -416,16 +436,37 @@ export const Middlewares = {
   }),
 
   /**
-   * Cache middleware - caches responses
+   * Cache middleware - caches responses.
+   *
+   * When `maxSize` is set, evicts the least-recently-used entry once the
+   * cache is full (O-02 LRU eviction).
    */
   cache: (options?: {
     ttl?: number;
+    maxSize?: number;
     keyGenerator?: (input: unknown) => string;
     storage?: Map<string, { value: string; expires: number }>;
   }): Middleware => {
     const storage = options?.storage ?? new Map<string, { value: string; expires: number }>();
     const ttl = options?.ttl ?? 60000;
+    const maxSize = options?.maxSize;
     const keyGenerator = options?.keyGenerator ?? ((input): string => JSON.stringify(input));
+    // LRU order: most-recently-used key is last
+    const lruOrder: string[] = [];
+
+    const touchLru = (key: string): void => {
+      const idx = lruOrder.indexOf(key);
+      if (idx !== -1) lruOrder.splice(idx, 1);
+      lruOrder.push(key);
+    };
+
+    const evictIfNeeded = (): void => {
+      if (maxSize === undefined) return;
+      while (storage.size >= maxSize && lruOrder.length > 0) {
+        const oldest = lruOrder.shift()!;
+        storage.delete(oldest);
+      }
+    };
 
     return {
       name: 'cache',
@@ -436,16 +477,26 @@ export const Middlewares = {
         const cached = storage.get(key);
 
         if (cached && cached.expires > Date.now()) {
+          touchLru(key);
           ctx.metadata.set('cacheHit', true);
           return { output: cached.value, continue: false, metadata: { cached: true } };
         }
 
+        // Remove stale entry if present
+        if (cached) {
+          storage.delete(key);
+          const idx = lruOrder.indexOf(key);
+          if (idx !== -1) lruOrder.splice(idx, 1);
+        }
+
         const result = await next(ctx);
 
+        evictIfNeeded();
         storage.set(key, {
           value: result.output,
           expires: Date.now() + ttl,
         });
+        lruOrder.push(key);
 
         ctx.metadata.set('cacheHit', false);
         return result;
@@ -454,14 +505,20 @@ export const Middlewares = {
   },
 
   /**
-   * Rate limiting middleware - limits request rate
+   * Rate limiting middleware - limits request rate.
+   *
+   * Uses a fixed-size ring buffer (O-01) instead of Array.shift() so that
+   * trimming old timestamps is O(1) amortised rather than O(n).
    */
   rateLimit: (options: {
     maxRequests: number;
     windowMs: number;
     onLimitReached?: () => void;
   }): Middleware => {
-    const requests: number[] = [];
+    // Ring buffer: stores timestamps of recent requests.
+    const buf = new Float64Array(options.maxRequests);
+    let head = 0; // index of the oldest entry
+    let count = 0; // number of valid entries in the buffer
 
     return {
       name: 'rateLimit',
@@ -471,19 +528,24 @@ export const Middlewares = {
         const now = Date.now();
         const windowStart = now - options.windowMs;
 
-        // Remove old requests
-        while (requests.length > 0 && requests[0] < windowStart) {
-          requests.shift();
+        // Expire entries that fall outside the window
+        while (count > 0 && buf[head] < windowStart) {
+          head = (head + 1) % options.maxRequests;
+          count--;
         }
 
-        if (requests.length >= options.maxRequests) {
+        if (count >= options.maxRequests) {
           options.onLimitReached?.();
           throw new Error(
             `Rate limit exceeded: ${options.maxRequests} requests per ${options.windowMs}ms`
           );
         }
 
-        requests.push(now);
+        // Insert the new timestamp at the tail
+        const tail = (head + count) % options.maxRequests;
+        buf[tail] = now;
+        count++;
+
         return next(ctx);
       },
     };
@@ -502,7 +564,7 @@ export const Middlewares = {
 
       // Combine with existing signal
       if (ctx.signal) {
-        ctx.signal.addEventListener('abort', () => controller.abort());
+        ctx.signal.addEventListener('abort', () => controller.abort(), { once: true });
       }
 
       const modifiedCtx = { ...ctx, signal: controller.signal };
@@ -633,16 +695,22 @@ export const Middlewares = {
   }),
 
   /**
-   * Circuit breaker middleware - prevents cascading failures
+   * Circuit breaker middleware - prevents cascading failures.
+   *
+   * Uses a sliding time window (O-03) to count failures: only failures that
+   * occurred within the last `windowMs` milliseconds count toward the threshold.
+   * `windowMs` defaults to the same value as `timeout`.
    */
   circuitBreaker: (options: {
     threshold: number;
     timeout: number;
+    windowMs?: number;
     onOpen?: () => void;
     onClose?: () => void;
     onHalfOpen?: () => void;
   }): Middleware => {
-    let failures = 0;
+    const windowMs = options.windowMs ?? options.timeout;
+    const failureTimes: number[] = []; // timestamps of failures within the window
     let state: 'closed' | 'open' | 'half-open' = 'closed';
     let nextAttempt = 0;
 
@@ -666,15 +734,20 @@ export const Middlewares = {
 
           if (state === 'half-open') {
             state = 'closed';
-            failures = 0;
+            failureTimes.length = 0;
             options.onClose?.();
           }
 
           return result;
         } catch (error) {
-          failures++;
+          // Record failure timestamp and purge stale ones
+          failureTimes.push(now);
+          const cutoff = now - windowMs;
+          let i = 0;
+          while (i < failureTimes.length && failureTimes[i] < cutoff) i++;
+          if (i > 0) failureTimes.splice(0, i);
 
-          if (failures >= options.threshold) {
+          if (failureTimes.length >= options.threshold) {
             state = 'open';
             nextAttempt = now + options.timeout;
             options.onOpen?.();
@@ -687,7 +760,11 @@ export const Middlewares = {
   },
 
   /**
-   * Dedupe middleware - prevents duplicate concurrent requests
+   * Dedupe middleware - prevents duplicate concurrent requests.
+   *
+   * Each caller receives an independent clone of the result (O-04) so that
+   * mutations by one caller do not affect others sharing the same in-flight
+   * promise.
    */
   dedupe: (): Middleware => {
     const pending = new Map<string, Promise<MiddlewareResult>>();
@@ -701,7 +778,9 @@ export const Middlewares = {
 
         const existing = pending.get(key);
         if (existing) {
-          return existing;
+          // Return a structural clone so each caller has its own copy
+          const shared = await existing;
+          return structuredClone(shared);
         }
 
         const promise = next(ctx);

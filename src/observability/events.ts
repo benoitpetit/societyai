@@ -540,6 +540,12 @@ export class FilteredEventEmitter {
 class EventEmitterObserver implements SocietyObserver {
   /** Per-agent start timestamps (agentId → Date.now()) */
   private agentStartTimes = new Map<string, number>();
+  /** Per-phase start timestamps (phase → Date.now()) */
+  private phaseStartTimes = new Map<string, number>();
+  /** Per-phase accumulated TaskResults (phase → TaskResult[]) */
+  private phaseResults = new Map<string, TaskResult[]>();
+  /** Phase that is currently active (last onPhaseStart phase name) */
+  private currentPhase: string | undefined;
   /** Society-level start timestamp */
   private societyStartTime = 0;
 
@@ -557,12 +563,28 @@ class EventEmitterObserver implements SocietyObserver {
   onAgentComplete(agentId: string, modelName: string, result: string): void {
     const start = this.agentStartTimes.get(agentId) ?? Date.now();
     this.agentStartTimes.delete(agentId);
+    const duration = Date.now() - start;
     this.emitter.emit('agent:complete', {
       agentId,
       modelName,
       result,
-      duration: Date.now() - start,
+      duration,
     });
+    // Accumulate result for the current phase (if one is active)
+    if (this.currentPhase !== undefined) {
+      const taskResult: TaskResult = {
+        agentId,
+        taskId: this.currentPhase,
+        output: result,
+        success: true,
+        timestamp: Date.now(),
+        duration,
+        iteration: 1,
+      };
+      const bucket = this.phaseResults.get(this.currentPhase) ?? [];
+      bucket.push(taskResult);
+      this.phaseResults.set(this.currentPhase, bucket);
+    }
   }
 
   onAgentError(agentId: string, modelName: string, error: Error): void {
@@ -575,6 +597,9 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onPhaseStart(phase: string): void {
+    this.currentPhase = phase;
+    this.phaseStartTimes.set(phase, Date.now());
+    this.phaseResults.set(phase, []);
     this.emitter.emit('task:start', {
       stepName: phase,
       agentIds: [],
@@ -583,10 +608,16 @@ class EventEmitterObserver implements SocietyObserver {
   }
 
   onPhaseComplete(phase: string): void {
+    const start = this.phaseStartTimes.get(phase) ?? Date.now();
+    const duration = Date.now() - start;
+    const results = this.phaseResults.get(phase) ?? [];
+    this.phaseStartTimes.delete(phase);
+    this.phaseResults.delete(phase);
+    if (this.currentPhase === phase) this.currentPhase = undefined;
     this.emitter.emit('task:complete', {
       stepName: phase,
-      results: [],
-      duration: 0,
+      results,
+      duration,
     });
   }
 

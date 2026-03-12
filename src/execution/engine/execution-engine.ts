@@ -32,10 +32,17 @@
  * ```
  */
 
-import { Agent, Message, SocietyObserver, TaskResult, RetentionPolicy } from '../../core/types';
+import {
+  Agent,
+  ExecutionContext,
+  Message,
+  SocietyObserver,
+  TaskResult,
+  RetentionPolicy,
+} from '../../core/types';
 import { AgentExecutor } from '../../agents/agent-executor';
 import { getLogger } from '../../observability/logger';
-import { WorkerPool } from '../../utils/worker-pool';
+import { ConcurrencyLimiter } from '../../utils/worker-pool';
 import { IsolatedWorkerPool } from '../../utils/isolated-worker-pool';
 import { ProcessingFailedError } from '../../core/errors';
 import { JSONSchema } from '../../capabilities/validation';
@@ -43,6 +50,7 @@ import { MiddlewareChain } from '../../core/middleware';
 import { StorageAdapter, WorkflowState, mapToArray, arrayToMap } from '../../core/persistence';
 import { RetryOptions } from '../../core/config';
 import { withRetry } from '../../utils/retry';
+import { randomUUID } from 'crypto';
 
 // ============================================================================
 // GRAPH TYPES
@@ -112,6 +120,8 @@ export interface GraphNode {
 
   /** Retry options for this node */
   retryOptions?: RetryOptions;
+  /** Loop configuration — used by AGENT nodes to drive iteration */
+  loopConfig?: import('../../core/types').LoopConfig;
 }
 
 /**
@@ -198,6 +208,35 @@ export interface GraphResult {
   waitingForNodeId?: string;
   /** Execution ID */
   executionId?: string;
+}
+
+// ============================================================================
+// OPTIONS INTERFACES
+// ============================================================================
+
+/** Options object for {@link ExecutionEngine.execute} */
+export interface ExecuteOptions {
+  input: string;
+  agents: Agent[];
+  signal?: AbortSignal;
+  observer?: SocietyObserver;
+  middlewareChain?: MiddlewareChain;
+  initialContext?: Record<string, unknown>;
+  storageAdapter?: StorageAdapter;
+  executionId?: string;
+  retentionPolicy?: RetentionPolicy;
+}
+
+/** Options object for {@link ExecutionEngine.resume} */
+export interface ResumeOptions {
+  state: WorkflowState;
+  agents: Agent[];
+  humanInput?: string;
+  signal?: AbortSignal;
+  observer?: SocietyObserver;
+  middlewareChain?: MiddlewareChain;
+  storageAdapter?: StorageAdapter;
+  retentionPolicy?: RetentionPolicy;
 }
 
 // ============================================================================
@@ -397,7 +436,19 @@ export class ExecutionEngine {
 
   /**
    * Execute the graph
+   *
+   * @example New (preferred) style:
+   * ```typescript
+   * await graph.execute({ input: 'hello', agents: [...], signal, observer });
+   * ```
+   *
+   * @example Legacy (deprecated) style:
+   * ```typescript
+   * await graph.execute(input, agents, signal, observer, ...);
+   * ```
    */
+  async execute(options: ExecuteOptions): Promise<GraphResult>;
+  /** @deprecated Use `execute(ExecuteOptions)` instead */
   async execute(
     input: string,
     agents: Agent[],
@@ -408,28 +459,73 @@ export class ExecutionEngine {
     storageAdapter?: StorageAdapter,
     executionId?: string,
     retentionPolicy?: RetentionPolicy
+  ): Promise<GraphResult>;
+  async execute(
+    inputOrOptions: string | ExecuteOptions,
+    agents?: Agent[],
+    signal?: AbortSignal,
+    observer?: SocietyObserver,
+    middlewareChain?: MiddlewareChain,
+    initialContext?: Record<string, unknown>,
+    storageAdapter?: StorageAdapter,
+    executionId?: string,
+    retentionPolicy?: RetentionPolicy
   ): Promise<GraphResult> {
+    // Normalise arguments — support both options-object and positional styles
+    let _input: string;
+    let _agents: Agent[];
+    let _signal: AbortSignal | undefined;
+    let _observer: SocietyObserver | undefined;
+    let _middlewareChain: MiddlewareChain | undefined;
+    let _initialContext: Record<string, unknown> | undefined;
+    let _storageAdapter: StorageAdapter | undefined;
+    let _executionId: string | undefined;
+    let _retentionPolicy: RetentionPolicy | undefined;
+
+    if (typeof inputOrOptions === 'object' && 'input' in inputOrOptions) {
+      const opts = inputOrOptions as ExecuteOptions;
+      _input = opts.input;
+      _agents = opts.agents;
+      _signal = opts.signal;
+      _observer = opts.observer;
+      _middlewareChain = opts.middlewareChain;
+      _initialContext = opts.initialContext;
+      _storageAdapter = opts.storageAdapter;
+      _executionId = opts.executionId;
+      _retentionPolicy = opts.retentionPolicy;
+    } else {
+      _input = inputOrOptions as string;
+      _agents = agents!;
+      _signal = signal;
+      _observer = observer;
+      _middlewareChain = middlewareChain;
+      _initialContext = initialContext;
+      _storageAdapter = storageAdapter;
+      _executionId = executionId;
+      _retentionPolicy = retentionPolicy;
+    }
+
     const startTime = Date.now();
-    const execId = executionId || `exec-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const execId = _executionId || `exec-${randomUUID()}`;
 
     // Initialize sharedData with initialContext (globalContext from workflow)
     const sharedData = new Map<string, unknown>();
-    if (initialContext) {
-      for (const [key, value] of Object.entries(initialContext)) {
+    if (_initialContext) {
+      for (const [key, value] of Object.entries(_initialContext)) {
         sharedData.set(key, value);
       }
     }
 
     const context: GraphContext = {
       executionId: execId,
-      input,
-      currentResult: input,
+      input: _input,
+      currentResult: _input,
       nodeResults: new Map(),
       sharedData,
       iterationCounts: new Map(),
       executionPath: [],
       startTime,
-      signal,
+      signal: _signal,
       messageHistory: [],
       deadLetterQueue: [],
     };
@@ -441,25 +537,37 @@ export class ExecutionEngine {
     const queue: GraphNode[] = [...startNodes];
 
     // Save initial state
-    if (storageAdapter) {
-      await this.saveState(context, queue, 'active', storageAdapter);
+    if (_storageAdapter) {
+      await this.saveState(context, queue, 'active', _storageAdapter);
     }
 
     return this.runExecutionLoop(
       context,
       queue,
-      agents,
+      _agents,
       startTime,
-      observer,
-      middlewareChain,
-      storageAdapter,
-      retentionPolicy
+      _observer,
+      _middlewareChain,
+      _storageAdapter,
+      _retentionPolicy
     );
   }
 
   /**
    * Resume execution from a saved state
+   *
+   * @example New (preferred) style:
+   * ```typescript
+   * await graph.resume({ state, agents, humanInput, signal, observer });
+   * ```
+   *
+   * @example Legacy (deprecated) style:
+   * ```typescript
+   * await graph.resume(state, agents, humanInput, signal, ...);
+   * ```
    */
+  async resume(options: ResumeOptions): Promise<GraphResult>;
+  /** @deprecated Use `resume(ResumeOptions)` instead */
   async resume(
     state: WorkflowState,
     agents: Agent[],
@@ -469,41 +577,81 @@ export class ExecutionEngine {
     middlewareChain?: MiddlewareChain,
     storageAdapter?: StorageAdapter,
     retentionPolicy?: RetentionPolicy
+  ): Promise<GraphResult>;
+  async resume(
+    stateOrOptions: WorkflowState | ResumeOptions,
+    agents?: Agent[],
+    humanInput?: string,
+    signal?: AbortSignal,
+    observer?: SocietyObserver,
+    middlewareChain?: MiddlewareChain,
+    storageAdapter?: StorageAdapter,
+    retentionPolicy?: RetentionPolicy
   ): Promise<GraphResult> {
+    let _state: WorkflowState;
+    let _agents: Agent[];
+    let _humanInput: string | undefined;
+    let _signal: AbortSignal | undefined;
+    let _observer: SocietyObserver | undefined;
+    let _middlewareChain: MiddlewareChain | undefined;
+    let _storageAdapter: StorageAdapter | undefined;
+    let _retentionPolicy: RetentionPolicy | undefined;
+
+    if ('state' in stateOrOptions && 'agents' in stateOrOptions) {
+      const opts = stateOrOptions as ResumeOptions;
+      _state = opts.state;
+      _agents = opts.agents;
+      _humanInput = opts.humanInput;
+      _signal = opts.signal;
+      _observer = opts.observer;
+      _middlewareChain = opts.middlewareChain;
+      _storageAdapter = opts.storageAdapter;
+      _retentionPolicy = opts.retentionPolicy;
+    } else {
+      _state = stateOrOptions as WorkflowState;
+      _agents = agents!;
+      _humanInput = humanInput;
+      _signal = signal;
+      _observer = observer;
+      _middlewareChain = middlewareChain;
+      _storageAdapter = storageAdapter;
+      _retentionPolicy = retentionPolicy;
+    }
+
     const startTime = Date.now(); // Reset timer or calculate generic delta
 
     // Hydrate Context
     const context: GraphContext = {
-      executionId: state.executionId,
-      input: state.input ?? '', // Restore original input from persisted state (#4)
+      executionId: _state.executionId,
+      input: _state.input ?? '', // Restore original input from persisted state (#4)
       currentResult: '', // Will be updated below
-      nodeResults: arrayToMap(state.results),
-      sharedData: arrayToMap(state.sharedData),
-      iterationCounts: arrayToMap(state.iterationCounts),
-      executionPath: state.executionPath,
-      startTime: state.timestamp,
-      signal,
-      messageHistory: state.messageHistory,
-      deadLetterQueue: state.deadLetterQueue || [],
+      nodeResults: arrayToMap(_state.results),
+      sharedData: arrayToMap(_state.sharedData),
+      iterationCounts: arrayToMap(_state.iterationCounts),
+      executionPath: _state.executionPath,
+      startTime: _state.timestamp,
+      signal: _signal,
+      messageHistory: _state.messageHistory,
+      deadLetterQueue: _state.deadLetterQueue || [],
     };
 
     // Reconstruct Queue
     const queue: GraphNode[] = [];
-    for (const nodeId of state.queue) {
+    for (const nodeId of _state.queue) {
       const node = this.nodes.get(nodeId);
       if (node) queue.push(node);
     }
 
     // If resuming from HUMAN pause, inject input
-    if (state.status === 'paused' && state.waitingForNodeId && humanInput) {
+    if (_state.status === 'paused' && _state.waitingForNodeId && _humanInput) {
       const waitingNode = queue[0]; // Should be the first
-      if (waitingNode && waitingNode.id === state.waitingForNodeId) {
+      if (waitingNode && waitingNode.id === _state.waitingForNodeId) {
         // Treat human input as the result of this node
-        context.currentResult = humanInput;
+        context.currentResult = _humanInput;
         context.nodeResults.set(waitingNode.id, {
           agentId: 'human',
           taskId: waitingNode.id,
-          output: humanInput,
+          output: _humanInput,
           success: true,
           timestamp: Date.now(),
           duration: 0,
@@ -528,12 +676,12 @@ export class ExecutionEngine {
     return this.runExecutionLoop(
       context,
       queue,
-      agents,
+      _agents,
       startTime,
-      observer,
-      middlewareChain,
-      storageAdapter,
-      retentionPolicy
+      _observer,
+      _middlewareChain,
+      _storageAdapter,
+      _retentionPolicy
     );
   }
 
@@ -733,7 +881,7 @@ export class ExecutionEngine {
           return; // Loop node handles its own queueing
 
         case NodeType.COLLABORATIVE:
-          result = await this.executeCollaborativeNode(node, context, agents);
+          result = await this.executeCollaborativeNode(node, context, agents, middlewareChain);
           break;
       }
 
@@ -745,7 +893,7 @@ export class ExecutionEngine {
         output: result,
         success: true,
         timestamp: Date.now(),
-        duration: 0,
+        duration: Date.now() - startTime,
       });
 
       if (observer?.onNodeEnd) {
@@ -838,7 +986,9 @@ export class ExecutionEngine {
             instructions: node.metadata?.instructions as string,
             promptTemplate: node.metadata?.promptTemplate as string,
             outputSchema: node.outputSchema,
-            loopConfig: node.maxIterations ? { maxIterations: node.maxIterations } : undefined,
+            loopConfig:
+              node.loopConfig ??
+              (node.maxIterations ? { maxIterations: node.maxIterations } : undefined),
             signal: context.signal,
             middlewareChain,
           });
@@ -946,7 +1096,7 @@ export class ExecutionEngine {
       return agent;
     });
 
-    const pool = new WorkerPool(nodeAgents.length);
+    const pool = new ConcurrencyLimiter(nodeAgents.length);
     const results: TaskResult[] = [];
     const sharedDataSnapshots: Map<string, unknown>[] = [];
 
@@ -1124,7 +1274,8 @@ export class ExecutionEngine {
   private async executeCollaborativeNode(
     node: GraphNode,
     context: GraphContext,
-    agents: Agent[]
+    agents: Agent[],
+    middlewareChain?: MiddlewareChain
   ): Promise<string> {
     const maxIterations = node.maxIterations || 5;
     const nodeAgents = (node.agentIds || [])
@@ -1165,7 +1316,7 @@ export class ExecutionEngine {
       for (const agent of nodeAgents) {
         if (context.signal?.aborted) throw new Error('Execution cancelled');
 
-        // Build prompt with relevant message history for this agent
+        // Build the collaborative prompt with relevant message history
         const relevantMessages = this.getRelevantMessages(agent.id, context.messageHistory);
         const prompt = this.buildCollaborativePrompt(
           agent,
@@ -1175,7 +1326,15 @@ export class ExecutionEngine {
           relevantMessages
         );
 
-        const content = await agent.model.process(prompt, context.signal);
+        // Use AgentExecutor so middleware, tools, memory and validation are honoured
+        const executionContext = this.buildExecutionContext(context);
+        const executor = new AgentExecutor(agent);
+        const agentResult = await executor.execute(prompt, executionContext, {
+          taskId: node.id,
+          signal: context.signal,
+          middlewareChain,
+        });
+        const content = agentResult.output;
 
         // Parse message target if agent specifies one
         // Format: "@agentId: message" or just "message" for broadcast
@@ -1251,6 +1410,25 @@ export class ExecutionEngine {
 
     // Return the last message as the result
     return context.messageHistory[context.messageHistory.length - 1]?.content || '';
+  }
+
+  /**
+   * Adapt a GraphContext to the ExecutionContext shape expected by AgentExecutor.
+   */
+  private buildExecutionContext(context: GraphContext): ExecutionContext {
+    const taskResults = new Map<string, TaskResult[]>();
+    for (const result of context.nodeResults.values()) {
+      const existing = taskResults.get(result.agentId) || [];
+      existing.push(result);
+      taskResults.set(result.agentId, existing);
+    }
+    return {
+      input: context.input,
+      sharedData: context.sharedData,
+      taskResults,
+      messageHistory: context.messageHistory,
+      metadata: {},
+    };
   }
 
   /**

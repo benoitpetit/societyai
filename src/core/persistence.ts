@@ -7,6 +7,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { TaskResult, Message } from './types';
 import { ProcessingFailedError } from './errors';
 
@@ -68,30 +69,48 @@ export interface FileStorageConfig {
  */
 export class FileStorageAdapter implements StorageAdapter {
   private baseDir: string;
+  /** Tracks whether the storage directory has already been created. */
+  private initialized = false;
 
   constructor(config: FileStorageConfig = { baseDir: './.societyai/storage' }) {
     this.baseDir = config.baseDir;
   }
 
   /**
-   * Initialize storage directory
+   * Initialize storage directory (idempotent — runs only once per instance)
    */
   private async init(): Promise<void> {
+    if (this.initialized) return;
     try {
       await fs.mkdir(this.baseDir, { recursive: true });
+      this.initialized = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
         throw error;
       }
+      this.initialized = true;
     }
   }
 
   /**
-   * Get file path for an execution ID
+   * Get file path for an execution ID.
+   *
+   * IDs that are already safe (only `[a-zA-Z0-9\-_]`) are used verbatim so
+   * that files remain human-readable.  IDs containing other characters are
+   * sanitized AND a short SHA-256 hash suffix is appended to guarantee
+   * uniqueness — preventing the collision where two different IDs map to the
+   * same safe string (e.g. `a/b` and `a_b` both naively become `a_b`).
    */
   private getFilePath(id: string): string {
-    // Sanitize ID to prevent directory traversal
-    const safeId = id.replace(/[^a-zA-Z0-9-_]/g, '_');
+    const safePattern = /^[a-zA-Z0-9\-_]+$/;
+    let safeId: string;
+    if (safePattern.test(id)) {
+      safeId = id;
+    } else {
+      const sanitized = id.replace(/[^a-zA-Z0-9\-_]/g, '_');
+      const hash = crypto.createHash('sha256').update(id).digest('hex').slice(0, 8);
+      safeId = `${sanitized}_${hash}`;
+    }
     return path.join(this.baseDir, `${safeId}.json`);
   }
 

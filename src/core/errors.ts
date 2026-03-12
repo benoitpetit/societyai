@@ -4,8 +4,8 @@
 export class SocietyError extends Error {
   public readonly code: string;
 
-  constructor(message: string, code?: string) {
-    super(message);
+  constructor(message: string, code?: string, cause?: Error) {
+    super(message, cause ? { cause } : undefined);
     this.name = 'SocietyError';
     this.code = code || 'UNKNOWN_ERROR';
     Object.setPrototypeOf(this, SocietyError.prototype);
@@ -104,18 +104,18 @@ export class OperationCancelledError extends SocietyError {
 /**
  * Error when execution timeout is exceeded
  */
-export class TimeoutError extends SocietyError {
+export class ExecutionTimeoutError extends SocietyError {
   public readonly context?: {
     timeoutMs?: number;
     elapsedMs?: number;
     stepId?: string;
   };
 
-  constructor(message = 'Execution timeout exceeded', context?: TimeoutError['context']) {
+  constructor(message = 'Execution timeout exceeded', context?: ExecutionTimeoutError['context']) {
     super(message, 'TIMEOUT');
-    this.name = 'TimeoutError';
+    this.name = 'ExecutionTimeoutError';
     this.context = context;
-    Object.setPrototypeOf(this, TimeoutError.prototype);
+    Object.setPrototypeOf(this, ExecutionTimeoutError.prototype);
   }
 
   toString(): string {
@@ -134,6 +134,13 @@ export class TimeoutError extends SocietyError {
     return msg;
   }
 }
+
+/**
+ * @deprecated Use {@link ExecutionTimeoutError} instead.
+ */
+export const TimeoutError = ExecutionTimeoutError;
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export type TimeoutError = ExecutionTimeoutError;
 
 /**
  * Error when configuration is invalid
@@ -187,18 +194,30 @@ export class InvalidWorkflowRoutingError extends SocietyError {
 }
 
 /**
+ * Error when a feature or operation is not yet implemented
+ */
+export class NotImplementedError extends SocietyError {
+  constructor(message = 'Not implemented') {
+    super(message, 'NOT_IMPLEMENTED');
+    this.name = 'NotImplementedError';
+    Object.setPrototypeOf(this, NotImplementedError.prototype);
+  }
+}
+
+/**
  * Check if an error is related to cancellation or timeout
  */
 export function isAbortError(error: Error): boolean {
   return (
     error.name === 'AbortError' ||
     error instanceof OperationCancelledError ||
-    error instanceof TimeoutError
+    error instanceof ExecutionTimeoutError
   );
 }
 
 /**
- * Wrap an error with contextual message
+ * Wrap an error with contextual message, preserving the subclass type for
+ * {@link SocietyError} subclasses so callers can still use `instanceof` checks.
  */
 export function wrapError(error: Error, message: string): SocietyError {
   if (error.name === 'AbortError') {
@@ -206,7 +225,21 @@ export function wrapError(error: Error, message: string): SocietyError {
   }
 
   if (error instanceof SocietyError) {
-    return new SocietyError(`${message}: ${error.message}`, error.code);
+    // Preserve the subclass by re-creating via its own constructor.
+    // We pass the wrapped message and forward any context that the subclass
+    // constructor accepts as a second argument (best-effort).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Ctor = error.constructor as new (msg: string, ctx?: unknown) => SocietyError;
+      const wrapped = new Ctor(
+        `${message}: ${error.message}`,
+        (error as unknown as Record<string, unknown>)['context']
+      );
+      return wrapped;
+    } catch {
+      // Fallback: plain SocietyError with original code preserved
+      return new SocietyError(`${message}: ${error.message}`, error.code);
+    }
   }
 
   return new SocietyError(`${message}: ${error.message}`);

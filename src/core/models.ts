@@ -65,7 +65,7 @@ export class StandardModelBase implements AIModel {
 
     // Combine signals if external signal provided
     if (signal) {
-      signal.addEventListener('abort', () => controller.abort());
+      signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
 
     try {
@@ -145,18 +145,8 @@ export class StandardModelBase implements AIModel {
  */
 export class TextModelAdapter implements ModelAdapter {
   async convertPrompt(genericPrompt: unknown): Promise<unknown> {
-    if (typeof genericPrompt === 'string') {
-      return genericPrompt;
-    }
-
-    if (
-      genericPrompt &&
-      typeof (genericPrompt as { toString: () => string }).toString === 'function'
-    ) {
-      return String(genericPrompt);
-    }
-
-    return String(genericPrompt);
+    // All values can be coerced to string; strings are returned as-is.
+    return typeof genericPrompt === 'string' ? genericPrompt : String(genericPrompt);
   }
 
   async convertResponse(specificResponse: unknown): Promise<string> {

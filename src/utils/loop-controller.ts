@@ -11,7 +11,8 @@ export class LoopController {
 
   /**
    * Increments iteration count and checks if execution should continue.
-   * @throws Error if max iterations reached.
+   * @returns `true` while the iteration count is within `maxIterations`,
+   *          `false` once the limit is reached (never throws).
    */
   next(): boolean {
     this.currentIteration++;

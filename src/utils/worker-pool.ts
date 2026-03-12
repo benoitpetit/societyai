@@ -2,21 +2,27 @@ import { WorkerTask } from '../core/config';
 import { Worker } from 'worker_threads';
 
 /**
- * Pool de workers pour exécuter des tâches en parallèle (IO-Bound)
- * avec limitation du nombre d'exécutions simultanées
+ * Async concurrency limiter for IO-bound tasks.
+ *
+ * Runs at most `maxConcurrency` tasks simultaneously; additional tasks are
+ * queued and dispatched as slots become free.
+ *
+ * Previously named `WorkerPool` (kept as a deprecated alias below).
  */
-export class WorkerPool {
+export class ConcurrencyLimiter {
   private maxWorkers: number;
   private running = 0;
   private queue: Array<WorkerTask<unknown>> = [];
   private stopped = false;
   private signal?: AbortSignal;
+  /** Tracks all in-flight task promises so waitAll() can await them properly. */
+  private activePromises = new Set<Promise<unknown>>();
 
   constructor(maxWorkers = 5, signal?: AbortSignal) {
     this.maxWorkers = maxWorkers > 0 ? maxWorkers : 5;
     this.signal = signal;
 
-    // Gérer l'annulation
+    // Handle cancellation
     if (this.signal) {
       this.signal.addEventListener('abort', () => {
         this.stop();
@@ -25,7 +31,7 @@ export class WorkerPool {
   }
 
   /**
-   * Soumet une tâche au pool
+   * Submit a task to the limiter
    */
   async submit<T>(fn: () => Promise<T>): Promise<T> {
     if (this.stopped) {
@@ -36,8 +42,8 @@ export class WorkerPool {
       throw new Error('Operation cancelled');
     }
 
-    return new Promise<T>((resolve, reject) => {
-      // Envelopper pour gérer la résolution/rejet
+    const promise = new Promise<T>((resolve, reject) => {
+      // Wrap fn to handle resolution/rejection and decrement running count
       const wrappedFn = async (): Promise<unknown> => {
         try {
           const result = await fn();
@@ -48,6 +54,7 @@ export class WorkerPool {
           throw error;
         } finally {
           this.running--;
+          this.activePromises.delete(promise);
           this.processNext();
         }
       };
@@ -59,10 +66,13 @@ export class WorkerPool {
       this.queue.push(task);
       this.processNext();
     });
+
+    this.activePromises.add(promise);
+    return promise;
   }
 
   /**
-   * Traite la prochaine tâche dans la queue
+   * Process the next task in the queue
    */
   private processNext(): void {
     if (this.stopped || this.signal?.aborted) {
@@ -73,38 +83,61 @@ export class WorkerPool {
       const task = this.queue.shift();
       if (task) {
         this.running++;
-        // Les erreurs sont gérées dans wrappedFn et rejetées dans la Promise submit()
-        // On ajoute un catch vide pour éviter les unhandled rejections
+        // Errors are handled in wrappedFn and propagated via reject()
         void task.fn().catch(() => {
-          // Erreur déjà gérée dans wrappedFn et propagée via reject()
+          // Error already handled in wrappedFn and propagated via reject()
         });
       }
     }
   }
 
   /**
-   * Attend que toutes les tâches soient terminées
+   * Wait for all currently submitted tasks to complete.
+   * Uses Promise.allSettled to avoid short-circuiting on failures.
+   *
+   * If the pool was constructed with an AbortSignal and that signal fires
+   * before all tasks finish, this method rejects with `new Error('cancelled')`.
    */
   async waitAll(): Promise<void> {
-    while (this.running > 0 || this.queue.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    // Build an abort-rejection promise that races against the work so that
+    // aborting the signal causes waitAll() to reject immediately.
+    const abortPromise = this.signal
+      ? new Promise<never>((_resolve, reject) => {
+          if (this.signal!.aborted) {
+            reject(new Error('cancelled'));
+            return;
+          }
+          this.signal!.addEventListener('abort', () => reject(new Error('cancelled')), {
+            once: true,
+          });
+        })
+      : null;
 
-      if (this.signal?.aborted) {
-        throw new Error('Operation cancelled');
+    // Drain the queue by waiting for each wave of active tasks.
+    // New tasks may be enqueued as running tasks complete, so we loop until
+    // both the queue and the active set are empty.
+    while (this.activePromises.size > 0 || this.queue.length > 0) {
+      if (this.activePromises.size > 0) {
+        const wave = Promise.allSettled([...this.activePromises]);
+        await (abortPromise ? Promise.race([wave, abortPromise]) : wave);
+      } else {
+        // Queue has items but none are running yet — yield to let processNext() fire.
+        await (abortPromise ? Promise.race([Promise.resolve(), abortPromise]) : Promise.resolve());
       }
     }
   }
 
   /**
-   * Arrête le pool et rejette toutes les tâches en attente
+   * Stop the limiter and drain all queued tasks
    */
   stop(): void {
     this.stopped = true;
     this.queue = [];
+    this.activePromises.clear();
   }
 
   /**
-   * Retourne le nombre de tâches en cours et en attente
+   * Return the number of running and queued tasks
    */
   get stats(): { running: number; queued: number } {
     return {
@@ -115,23 +148,56 @@ export class WorkerPool {
 }
 
 /**
- * Pool de threads pour tâches CPU-Intensive (Validation, Parsing)
- * Utilise les Worker Threads Node.js
+ * @deprecated Use {@link ConcurrencyLimiter} instead.
+ */
+export const WorkerPool = ConcurrencyLimiter;
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export type WorkerPool = ConcurrencyLimiter;
+
+// ============================================================================
+// CPU WORKER POOL
+// ============================================================================
+
+interface IdleWorker {
+  worker: Worker;
+  busy: boolean;
+}
+
+interface PendingTask {
+  data: unknown;
+  resolve: (val: unknown) => void;
+  reject: (err: unknown) => void;
+}
+
+/**
+ * Thread pool for CPU-intensive tasks (validation, parsing).
+ * Uses Node.js Worker Threads and **reuses workers** across tasks to avoid
+ * the per-task startup cost.
+ *
+ * Each worker must follow the request/reply message protocol:
+ *   - Main → Worker: `workerData` is sent via `worker.postMessage(data)`
+ *   - Worker → Main: the worker sends back a single message with the result
+ *
+ * Workers are pre-warmed up to `maxWorkers` on construction and kept alive
+ * until `terminate()` is called.
  */
 export class CpuWorkerPool {
   private workerScript: string;
   private maxWorkers: number;
-  private workers: Worker[] = [];
-  private queue: Array<{
-    data: unknown;
-    resolve: (val: unknown) => void;
-    reject: (err: unknown) => void;
-  }> = [];
-  private activeWorkers = 0;
+  private idleWorkers: IdleWorker[] = [];
+  private queue: PendingTask[] = [];
 
   constructor(workerScriptPath: string, maxWorkers = 2) {
     this.workerScript = workerScriptPath;
-    this.maxWorkers = maxWorkers;
+    this.maxWorkers = maxWorkers > 0 ? maxWorkers : 2;
+    // Pre-warm the pool
+    for (let i = 0; i < this.maxWorkers; i++) {
+      this.idleWorkers.push({ worker: this.createWorker(), busy: false });
+    }
+  }
+
+  private createWorker(): Worker {
+    return new Worker(this.workerScript);
   }
 
   async submit<T, R>(data: T): Promise<R> {
@@ -147,46 +213,61 @@ export class CpuWorkerPool {
 
   private processNext(): void {
     if (this.queue.length === 0) return;
-    if (this.activeWorkers >= this.maxWorkers) return;
+
+    const slot = this.idleWorkers.find((w) => !w.busy);
+    if (!slot) return; // All workers busy; task stays in queue
 
     const task = this.queue.shift();
     if (!task) return;
 
-    this.activeWorkers++;
+    slot.busy = true;
 
-    const worker = new Worker(this.workerScript, {
-      workerData: task.data,
-    });
-
-    this.workers.push(worker);
-
-    // Guard against double-decrement: 'error' fires and then 'exit' also fires (#39).
-    // Use a flag so only the first event decrements activeWorkers and calls processNext.
-    let settled = false;
-    const settle = (): void => {
-      if (settled) return;
-      settled = true;
-      this.activeWorkers--;
+    // One-shot listeners for this task
+    const onMessage = (result: unknown): void => {
+      cleanup();
+      slot.busy = false;
+      task.resolve(result);
       this.processNext();
     };
 
-    worker.on('message', (result) => {
-      task.resolve(result);
-      worker.terminate();
-      settle();
-    });
-
-    worker.on('error', (err) => {
+    const onError = (err: Error): void => {
+      cleanup();
+      slot.busy = false;
       task.reject(err);
-      worker.terminate();
-      settle();
-    });
+      this.processNext();
+    };
 
-    worker.on('exit', (code) => {
-      if (code !== 0) {
-        task.reject(new Error(`Worker stopped with exit code ${code}`));
+    const onExit = (code: number): void => {
+      if (slot.busy) {
+        // Worker crashed mid-task — replace it and reject the task
+        cleanup();
+        slot.worker = this.createWorker();
+        slot.busy = false;
+        task.reject(new Error(`Worker exited unexpectedly with code ${code}`));
+        this.processNext();
       }
-      settle();
-    });
+    };
+
+    const cleanup = (): void => {
+      slot.worker.off('message', onMessage);
+      slot.worker.off('error', onError);
+      slot.worker.off('exit', onExit);
+    };
+
+    slot.worker.on('message', onMessage);
+    slot.worker.on('error', onError);
+    slot.worker.on('exit', onExit);
+
+    slot.worker.postMessage(task.data);
+  }
+
+  /**
+   * Terminate all workers in the pool.
+   * Call this when the pool is no longer needed to release resources.
+   */
+  async terminate(): Promise<void> {
+    await Promise.all(this.idleWorkers.map((slot) => slot.worker.terminate()));
+    this.idleWorkers = [];
+    this.queue = [];
   }
 }

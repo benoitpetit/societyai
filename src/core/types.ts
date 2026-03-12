@@ -15,9 +15,9 @@
  * without actual runtime circular dependencies.
  */
 
-import { MemorySystem } from '../capabilities/memory';
-import { Tool } from '../capabilities/tools';
-import { JSONSchema } from '../capabilities/validation';
+import type { MemorySystem } from '../capabilities/memory';
+import type { Tool } from '../capabilities/tools';
+import type { JSONSchema } from '../capabilities/validation';
 
 /**
  * Interface for AI models
@@ -196,6 +196,16 @@ export interface Agent {
    * @default 'default'
    */
   executionMode?: 'default' | 'isolated';
+
+  /**
+   * Tags for filtering and grouping agents
+   */
+  tags?: string[];
+
+  /**
+   * Arbitrary metadata for this agent
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -369,6 +379,15 @@ export interface Task {
    * ```
    */
   dependencies?: string[];
+
+  /**
+   * Loop configuration for repeating agent execution within this task.
+   *
+   * When set, each agent assigned to this task will be executed up to
+   * `loopConfig.maxIterations` times per invocation. An optional
+   * `exitCondition` can terminate the loop early.
+   */
+  loopConfig?: LoopConfig;
 }
 
 /**
@@ -499,6 +518,21 @@ export interface SocietyConfig {
    * If false (default), automatically creates sequential links.
    */
   strictRouting?: boolean;
+
+  /**
+   * Observer for monitoring execution events
+   */
+  observer?: SocietyObserver;
+
+  /**
+   * Middlewares applied to all agent executions
+   */
+  middlewares?: import('./middleware').Middleware[];
+
+  /**
+   * Execution timeout in milliseconds
+   */
+  timeout?: number;
 
   /**
    * Retention policy for managing memory in long-running executions

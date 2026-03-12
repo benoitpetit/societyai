@@ -39,6 +39,10 @@ export class SocietyExecutor {
 
     // Add nodes from tasks
     const tasks = society.tasks || [];
+    // Maps task.id → gate node id, for tasks that have a condition but a non-CONDITION
+    // executionType (e.g. parallel + withCondition).  Used when wiring edges so that
+    // incoming edges point to the gate node instead of the task node directly.
+    const gateNodeIds = new Map<string, string>();
     for (const task of tasks) {
       let type = NodeType.AGENT;
       if (task.executionType === 'parallel') type = NodeType.PARALLEL;
@@ -46,7 +50,7 @@ export class SocietyExecutor {
       if (task.executionType === 'conditional') type = NodeType.CONDITION;
       if (task.executionType === 'human') type = NodeType.HUMAN;
 
-      // Adapter for condition
+      // Adapter for condition predicate
       const conditionAdapter = task.condition
         ? (_result: string, ctx: GraphContext): boolean => {
             const prevResults = new Map<string, TaskResult[]>();
@@ -65,6 +69,27 @@ export class SocietyExecutor {
           }
         : undefined;
 
+      // If the task has a condition but is NOT already a CONDITION-type task
+      // (e.g. it is parallel or collaborative), insert a synthetic gate node
+      // so that the executionType is preserved while the condition still acts
+      // as a skip guard.  The gate node routes to the real task (true branch)
+      // or to the node that follows the real task (false/skip branch).
+      // The gate node id is `${task.id}_gate`; the entry point exposed to the
+      // rest of the graph for wiring is `${task.id}_gate` while `task.id`
+      // remains the real execution node.
+      if (conditionAdapter && type !== NodeType.CONDITION) {
+        const gateId = `${task.id}_gate`;
+        graphBuilder.addNode(gateId, NodeType.CONDITION, {
+          condition: conditionAdapter,
+          metadata: { name: `${task.name ?? task.id} [gate]` },
+        });
+        // true branch → real task node (added below)
+        graphBuilder.addEdge(gateId, task.id, { label: 'true' });
+        // false branch → 'end' placeholder; will be re-wired after all tasks
+        // are added.  We record this via the gateNodeIds set.
+        gateNodeIds.set(task.id, gateId);
+      }
+
       // For sequential tasks with multiple agents, create a chain of AGENT nodes
       // so every agent actually executes (#16). Without this, only agentIds[0] runs.
       if (type === NodeType.AGENT && task.agentIds && task.agentIds.length > 1) {
@@ -73,6 +98,7 @@ export class SocietyExecutor {
           graphBuilder.addNode(agentNodeId, NodeType.AGENT, {
             agentId: task.agentIds[ai],
             maxIterations: task.maxIterations,
+            loopConfig: task.loopConfig,
             metadata: {
               name: task.name,
               instructions: task.instructions,
@@ -96,8 +122,11 @@ export class SocietyExecutor {
           agentId: task.agentIds && task.agentIds.length > 0 ? task.agentIds[0] : undefined,
           agentIds: task.agentIds,
           maxIterations: task.maxIterations,
+          loopConfig: task.loopConfig,
           completionCondition: task.completionCondition,
-          condition: conditionAdapter,
+          // Only pass condition directly when the node IS a CONDITION node (executionType=conditional).
+          // For other types, the gate node above handles the condition predicate.
+          condition: type === NodeType.CONDITION ? conditionAdapter : undefined,
           metadata: {
             name: task.name,
             instructions: task.instructions,
@@ -117,15 +146,23 @@ export class SocietyExecutor {
     // Helper: for multi-agent sequential chains, the actual graph exit node is
     // the last agent in the chain; for all other tasks it is task.id itself (#16).
     const exitNodeId = (task: (typeof tasks)[number]): string => {
-      if (!task.executionType && task.agentIds && task.agentIds.length > 1) {
+      // A sequential multi-agent task expands into a chain of AGENT nodes;
+      // the exit point is the last one in the chain.
+      const isSequential = !task.executionType || task.executionType === 'sequential';
+      if (isSequential && task.agentIds && task.agentIds.length > 1) {
         return `${task.id}_agent${task.agentIds.length - 1}`;
       }
       return task.id;
     };
 
+    // Helper: the entry point for a task in the graph — either the gate node
+    // (if the task uses withCondition() with a non-CONDITION executionType)
+    // or the task node itself.
+    const entryNodeForTask = (taskId: string): string => gateNodeIds.get(taskId) ?? taskId;
+
     // Wire the entry point
     if (entryTaskId) {
-      graphBuilder.addEdge('start', entryTaskId);
+      graphBuilder.addEdge('start', entryNodeForTask(entryTaskId));
     } else {
       graphBuilder.addEdge('start', 'end');
     }
@@ -142,8 +179,10 @@ export class SocietyExecutor {
                 `Available tasks: ${Array.from(taskMap.keys()).join(', ')}.`
             );
           }
-          graphBuilder.addEdge(depId, task.id);
-          this.logger.debug(`Dependency edge: '${depId}' -> '${task.id}' (from dependsOn)`);
+          graphBuilder.addEdge(depId, entryNodeForTask(task.id));
+          this.logger.debug(
+            `Dependency edge: '${depId}' -> '${entryNodeForTask(task.id)}' (from dependsOn)`
+          );
         }
       }
     }
@@ -164,7 +203,7 @@ export class SocietyExecutor {
       // Case 1: Explicit next steps defined via thenGoto() / withNextSteps()
       if (task.nextTasks && task.nextTasks.length > 0) {
         for (const nextId of task.nextTasks) {
-          graphBuilder.addEdge(src, nextId);
+          graphBuilder.addEdge(src, entryNodeForTask(nextId));
         }
         continue;
       }
@@ -210,11 +249,22 @@ export class SocietyExecutor {
         );
       }
 
-      graphBuilder.addEdge(src, nextTask.id);
+      graphBuilder.addEdge(src, entryNodeForTask(nextTask.id));
       this.logger.debug(
         `Implicit routing: Task '${task.id}' -> '${nextTask.id}' ` +
           `(enable strictRouting to make this explicit)`
       );
+    }
+
+    // Gate false-branch wiring pass
+    // For each task that has a gate node, wire the gate's false branch to the
+    // node that would normally follow the task (skip the task when condition=false).
+    for (const [taskId, gateId] of gateNodeIds) {
+      const taskIndex = tasks.findIndex((t) => t.id === taskId);
+      const taskAfter = tasks[taskIndex + 1];
+      const falseTarget = taskAfter ? entryNodeForTask(taskAfter.id) : 'end';
+      graphBuilder.addEdge(gateId, falseTarget, { label: 'false' });
+      this.logger.debug(`Gate false-branch: '${gateId}' -> '${falseTarget}'`);
     }
 
     // Third pass: Dynamic routing (nextTaskResolver)
@@ -285,8 +335,9 @@ export class SocietyExecutor {
       this.observer.onSocietyStart(input, society.agents.length);
     }
 
+    let graph: ExecutionEngine | null = null;
     try {
-      const graph = this.buildExecutionGraph(society);
+      graph = this.buildExecutionGraph(society);
 
       // 2. Execute with globalContext
       const result: GraphResult = await graph.execute(
@@ -340,6 +391,10 @@ export class SocietyExecutor {
         errors: [error as Error],
         messages: [],
       };
+    } finally {
+      // Release engine-level resources (e.g. IsolatedWorkerPool worker threads).
+      // Without this, Worker threads stay alive and prevent Node.js from exiting.
+      if (graph) await graph.dispose();
     }
   }
 }

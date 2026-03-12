@@ -3,7 +3,7 @@ import { getLogger } from '../observability/logger';
 import { isAbortError, wrapError } from '../core/errors';
 
 /**
- * Options de retry par défaut
+ * Default retry options
  */
 export function defaultRetryOptions(): RetryOptions {
   return {
@@ -16,11 +16,11 @@ export function defaultRetryOptions(): RetryOptions {
 }
 
 /**
- * Exécute une fonction avec mécanisme de retry et backoff exponentiel
- * @param fn - La fonction à exécuter
- * @param options - Les options de retry
- * @param signal - Signal d'annulation optionnel
- * @returns Le résultat de la fonction
+ * Executes a function with retry logic and exponential backoff.
+ * @param fn - The function to execute
+ * @param options - Retry options
+ * @param signal - Optional cancellation signal
+ * @returns The result of the function
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -35,59 +35,57 @@ export async function withRetry<T>(
   let lastError: Error | null = null;
 
   while (retryCount <= opts.maxRetries) {
-    // Vérifier si l'opération a été annulée
+    // Check if the operation has been cancelled
     if (signal?.aborted) {
       throw new Error('Operation cancelled');
     }
 
     try {
-      // Informer du retry si ce n'est pas la première tentative
+      // Log the retry attempt if this is not the first try
       if (retryCount > 0) {
-        logger.info(`Retry ${retryCount}/${opts.maxRetries} après erreur: ${lastError?.message}`);
+        logger.info(`Retry ${retryCount}/${opts.maxRetries} after error: ${lastError?.message}`);
       }
 
       return await fn();
     } catch (error) {
       lastError = error as Error;
 
-      // Si l'erreur est une annulation, ne pas réessayer
+      // Do not retry on cancellation errors
       if (isAbortError(lastError)) {
         throw lastError;
       }
 
-      // Dernière tentative atteinte
+      // Last attempt reached
       if (retryCount >= opts.maxRetries) {
-        logger.error(
-          `Max retries atteint (${opts.maxRetries}). Dernière erreur: ${lastError.message}`
-        );
-        throw wrapError(lastError, 'Nombre maximum de tentatives atteint');
+        logger.error(`Max retries reached (${opts.maxRetries}). Last error: ${lastError.message}`);
+        throw wrapError(lastError, 'Maximum number of retries reached');
       }
 
-      // Calculer le backoff pour la prochaine tentative
+      // Calculate backoff for the next attempt
       let nextBackoff = backoff;
       if (opts.jitter) {
-        // Ajouter une variation aléatoire de ±20%
-        const jitterFactor = 0.8 + Math.random() * 0.4; // entre 0.8 et 1.2
+        // Add ±20% random variation
+        const jitterFactor = 0.8 + Math.random() * 0.4; // between 0.8 and 1.2
         nextBackoff = Math.floor(backoff * jitterFactor);
       }
 
-      // Attendre avant de réessayer
+      // Wait before retrying
       await sleep(nextBackoff, signal);
 
-      // Incrémenter le compteur et augmenter le backoff
+      // Increment counter and increase backoff
       retryCount++;
       backoff = Math.min(opts.maxBackoff, Math.floor(backoff * opts.backoffFactor));
     }
   }
 
-  // Ne devrait jamais atteindre ce point
-  throw lastError || new Error('Erreur inconnue lors du retry');
+  // Should never reach this point
+  throw lastError || new Error('Unknown retry error');
 }
 
 /**
- * Fonction utilitaire pour attendre un certain temps
- * @param ms - Temps d'attente en millisecondes
- * @param signal - Signal d'annulation optionnel
+ * Utility function to wait for a given duration.
+ * @param ms - Wait time in milliseconds
+ * @param signal - Optional cancellation signal
  */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {

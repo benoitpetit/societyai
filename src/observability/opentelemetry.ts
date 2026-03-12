@@ -30,6 +30,7 @@
  * ```
  */
 
+import { randomUUID } from 'crypto';
 import { SocietyObserver, Agent, TaskResult } from '../core/types';
 
 /**
@@ -84,6 +85,11 @@ export interface Tracer {
 export class OpenTelemetryObserver implements SocietyObserver {
   private config: Required<OpenTelemetryConfig>;
   private tracer?: Tracer;
+  /**
+   * Active spans keyed by a unique handle (O-14).
+   * Agent spans use `agent:<uuid>` rather than `agent:<agentId>` so that
+   * multiple concurrent executions of the same agent never collide.
+   */
   private spans: Map<string, Span> = new Map();
   private rootSpan?: Span;
 
@@ -97,20 +103,30 @@ export class OpenTelemetryObserver implements SocietyObserver {
       sampleRate: config.sampleRate || 1.0,
     };
 
-    this.initialize();
+    // O-15: use dynamic import() instead of require() so bundlers can
+    // tree-shake the optional dependency.  Wrap in void to avoid an
+    // unhandled-rejection warning; the fallback is a no-op tracer.
+    void this.initialize();
   }
 
   /**
-   * Initialize OpenTelemetry
-   * This dynamically loads OpenTelemetry if available
+   * Initialize OpenTelemetry.
+   * Uses dynamic import() (O-15) so the optional dependency is only loaded
+   * at runtime when actually installed, keeping the module side-effect free.
    */
-  private initialize(): void {
+  private async initialize(): Promise<void> {
     try {
-      // Try to load OpenTelemetry API
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { trace } = require('@opentelemetry/api');
-      this.tracer = trace.getTracer(this.config.serviceName);
-    } catch (error) {
+      // Dynamic import of an optional peer dependency.  TypeScript does not
+      // have type declarations for it (it is not installed), so we use
+      // Function() to defer resolution entirely to runtime without triggering
+      // a TS2307 "cannot find module" error.
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const load = new Function('m', 'return import(m)') as (m: string) => Promise<unknown>;
+      const otelApi = (await load('@opentelemetry/api')) as {
+        trace: { getTracer(name: string): Tracer };
+      };
+      this.tracer = otelApi.trace.getTracer(this.config.serviceName);
+    } catch {
       console.warn(
         'OpenTelemetry not available. Install @opentelemetry/api to enable tracing:',
         'npm install @opentelemetry/api @opentelemetry/sdk-node'
@@ -139,7 +155,9 @@ export class OpenTelemetryObserver implements SocietyObserver {
   onNodeStart(nodeId: string, input: string): void {
     if (!this.tracer) return;
 
+    // O-13: pass the root span as parent context so node spans are children
     const span = this.tracer.startSpan(`node.${nodeId}`, {
+      ...(this.rootSpan ? { parent: this.rootSpan } : {}),
       attributes: {
         'node.id': nodeId,
         'node.input.length': input.length,
@@ -147,14 +165,14 @@ export class OpenTelemetryObserver implements SocietyObserver {
       },
     });
 
-    this.spans.set(nodeId, span);
+    this.spans.set(`node:${nodeId}`, span);
   }
 
   /**
    * Called when a node completes execution
    */
   onNodeEnd(nodeId: string, output: string, duration: number): void {
-    const span = this.spans.get(nodeId);
+    const span = this.spans.get(`node:${nodeId}`);
     if (span) {
       span.setAttributes({
         'node.output.length': output.length,
@@ -162,7 +180,7 @@ export class OpenTelemetryObserver implements SocietyObserver {
       });
       span.setStatus({ code: 0 }); // OK
       span.end();
-      this.spans.delete(nodeId);
+      this.spans.delete(`node:${nodeId}`);
     }
   }
 
@@ -170,7 +188,7 @@ export class OpenTelemetryObserver implements SocietyObserver {
    * Called when a node encounters an error
    */
   onNodeError(nodeId: string, error: Error): void {
-    const span = this.spans.get(nodeId);
+    const span = this.spans.get(`node:${nodeId}`);
     if (span) {
       span.setStatus({
         code: 2, // ERROR
@@ -181,17 +199,31 @@ export class OpenTelemetryObserver implements SocietyObserver {
         'error.stack': error.stack || '',
       });
       span.end();
-      this.spans.delete(nodeId);
+      this.spans.delete(`node:${nodeId}`);
     }
   }
 
   /**
-   * Called when an agent starts execution
+   * Called when an agent starts execution.
+   *
+   * Returns a unique span handle (O-14) so that concurrent executions of the
+   * same agent each get their own span without key collisions.
+   * The handle is stored and returned so callers can pass it to
+   * `onAgentComplete`/`onAgentError`; when called from a single-threaded
+   * observer context the handle is implicitly managed here.
    */
   onAgentStart(agentId: string, modelName: string, input: string): void {
     if (!this.tracer) return;
 
+    // Unique handle per execution (O-14)
+    const handle = `agent:${agentId}:${randomUUID()}`;
+
+    // O-13: find nearest parent (node span for this agent, then root)
+    const nodeSpan = this.spans.get(`node:${agentId}`);
+    const parentSpan = nodeSpan ?? this.rootSpan;
+
     const span = this.tracer.startSpan(`agent.${agentId}`, {
+      ...(parentSpan ? { parent: parentSpan } : {}),
       attributes: {
         'agent.id': agentId,
         'agent.model': modelName,
@@ -200,6 +232,11 @@ export class OpenTelemetryObserver implements SocietyObserver {
       },
     });
 
+    // Index by both the unique handle and the plain agentId (for backward
+    // compat when callers only know the agentId).  The plain key is
+    // overwritten each time; for the concurrent case the unique handle
+    // should be used.
+    this.spans.set(handle, span);
     this.spans.set(`agent:${agentId}`, span);
   }
 
@@ -243,7 +280,9 @@ export class OpenTelemetryObserver implements SocietyObserver {
   onTaskStart(taskId: string, agents: Agent[]): void {
     if (!this.tracer) return;
 
+    // O-13: task spans are children of the root span
     const span = this.tracer.startSpan(`task.${taskId}`, {
+      ...(this.rootSpan ? { parent: this.rootSpan } : {}),
       attributes: {
         'task.id': taskId,
         'task.agent_count': agents.length,
@@ -310,7 +349,9 @@ export class OpenTelemetryObserver implements SocietyObserver {
   onPhaseStart(phase: string): void {
     if (!this.tracer) return;
 
+    // O-13: phase spans are children of the root span
     const span = this.tracer.startSpan(`phase.${phase}`, {
+      ...(this.rootSpan ? { parent: this.rootSpan } : {}),
       attributes: {
         'phase.name': phase,
         ...this.config.globalAttributes,

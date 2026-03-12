@@ -4,6 +4,7 @@
  * Provides fluent builder API for creating agent roles
  */
 
+import { randomUUID } from 'crypto';
 import { Role } from '../core/types';
 import { InvalidConfigurationError } from '../core/errors';
 
@@ -66,8 +67,12 @@ export class FluentRoleBuilder {
   }
 
   /**
-   * Define the capabilities this role has
-   * Capabilities are used for routing and constraint checking
+   * Set (replace) the capabilities list for this role.
+   *
+   * This is a **setter** — it replaces any previously defined capabilities.
+   * To add capabilities incrementally, use {@link addCapability} instead.
+   *
+   * Capabilities are used for routing and constraint checking.
    */
   withCapabilities(capabilities: string[]): this {
     this._capabilities = capabilities;
@@ -113,7 +118,7 @@ export class FluentRoleBuilder {
   build(): Role {
     // Auto-generate ID if not set
     if (!this._id) {
-      this._id = `role-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      this._id = `role-${randomUUID()}`;
     }
     if (!this._name) this._name = this._id;
     if (!this._systemPrompt) throw new InvalidConfigurationError('Role systemPrompt is required');

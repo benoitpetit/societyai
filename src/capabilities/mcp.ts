@@ -33,6 +33,7 @@
 
 import { Tool, ToolBuilder } from './tools';
 import { JSONSchema } from './validation';
+import { NotImplementedError } from '../core/errors';
 import { ChildProcess, spawn } from 'child_process';
 
 /**
@@ -94,8 +95,33 @@ export class MCPServerConnection {
   private tools: MCPTool[] = [];
   private connected = false;
 
+  // Multiplexing state: maps JSON-RPC id → {resolve, reject}
+  private pendingRequests = new Map<
+    number,
+    { resolve: (r: MCPResponse) => void; reject: (e: Error) => void }
+  >();
+  // Monotonically increasing request ID counter
+  private requestIdCounter = 0;
+  // Buffer for incomplete NDJSON lines from stdout
+  private stdoutBuffer = '';
+  // Process-level error stored for propagation to pending requests
+  private processError?: Error;
+
   constructor(config: MCPServerConfig) {
     this.config = config;
+  }
+
+  /** Generate the next unique request ID */
+  private nextId(): number {
+    return ++this.requestIdCounter;
+  }
+
+  /** Reject all in-flight requests with the given error */
+  private rejectAllPending(error: Error): void {
+    for (const { reject } of this.pendingRequests.values()) {
+      reject(error);
+    }
+    this.pendingRequests.clear();
   }
 
   /**
@@ -104,6 +130,12 @@ export class MCPServerConnection {
   async connect(): Promise<void> {
     if (this.connected) {
       return;
+    }
+
+    if (this.config.transport === 'sse') {
+      throw new NotImplementedError(
+        'SSE transport is not yet implemented. Use stdio transport instead.'
+      );
     }
 
     // Spawn the MCP server process
@@ -117,20 +149,55 @@ export class MCPServerConnection {
       throw new Error('Failed to spawn MCP server process');
     }
 
-    // Set up error handling
+    // Handle process-level errors: store and propagate to pending requests
     this.process.on('error', (error) => {
-      throw new Error(`MCP server error: ${error.message}`);
+      this.processError = new Error(`MCP server error: ${error.message}`);
+      this.rejectAllPending(this.processError);
+      this.connected = false;
     });
 
     this.process.on('exit', (code) => {
       if (code !== 0 && code !== null) {
         console.error(`MCP server exited with code ${code}`);
+        const exitError = new Error(`MCP server exited with code ${code}`);
+        this.rejectAllPending(exitError);
       }
       this.connected = false;
     });
 
+    // Single persistent NDJSON data handler — dispatches responses by ID
+    this.process.stdout.on('data', (data: Buffer) => {
+      this.stdoutBuffer += data.toString();
+      const lines = this.stdoutBuffer.split('\n');
+      // Keep the last (potentially incomplete) line in the buffer
+      this.stdoutBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const response = JSON.parse(trimmed) as MCPResponse;
+          const pending = this.pendingRequests.get(response.id);
+          if (pending) {
+            this.pendingRequests.delete(response.id);
+            pending.resolve(response);
+          }
+        } catch {
+          // Ignore malformed lines (e.g. server log output)
+        }
+      }
+    });
+
     // Send initialization request
     await this.initialize();
+
+    // Send the 'initialized' notification to complete the MCP handshake
+    const initializedNotification = {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+      params: {},
+    };
+    const notifStr = JSON.stringify(initializedNotification) + '\n';
+    this.process.stdin.write(notifStr);
 
     // Discover available tools
     await this.discoverTools();
@@ -144,7 +211,7 @@ export class MCPServerConnection {
   private async initialize(): Promise<void> {
     const initRequest = {
       jsonrpc: '2.0',
-      id: 1,
+      id: this.nextId(),
       method: 'initialize',
       params: {
         protocolVersion: '2024-11-05',
@@ -153,7 +220,7 @@ export class MCPServerConnection {
         },
         clientInfo: {
           name: 'societyai',
-          version: '0.1.0',
+          version: '0.1.1',
         },
       },
     };
@@ -167,7 +234,7 @@ export class MCPServerConnection {
   private async discoverTools(): Promise<void> {
     const listToolsRequest = {
       jsonrpc: '2.0',
-      id: 2,
+      id: this.nextId(),
       method: 'tools/list',
       params: {},
     };
@@ -180,40 +247,33 @@ export class MCPServerConnection {
   }
 
   /**
-   * Send a request to the MCP server
+   * Send a request to the MCP server and await its response by ID.
+   * Uses the multiplexed pending-requests map so concurrent calls are safe.
    */
-  private async sendRequest(request: unknown): Promise<MCPResponse> {
+  private async sendRequest(request: { id: number; [key: string]: unknown }): Promise<MCPResponse> {
     return new Promise((resolve, reject) => {
       if (!this.process || !this.process.stdin || !this.process.stdout) {
         return reject(new Error('MCP server not connected'));
       }
 
-      let responseData = '';
+      if (this.processError) {
+        return reject(this.processError);
+      }
 
-      const dataHandler = (data: Buffer): void => {
-        responseData += data.toString();
+      this.pendingRequests.set(request.id, { resolve, reject });
 
-        // Try to parse JSON response
-        try {
-          const response = JSON.parse(responseData);
-          this.process!.stdout!.off('data', dataHandler);
-          resolve(response);
-        } catch (e) {
-          // Not complete JSON yet, wait for more data
-        }
-      };
-
-      this.process.stdout.on('data', dataHandler);
-
-      // Send request
+      // Send request as a newline-delimited JSON message
       const requestStr = JSON.stringify(request) + '\n';
       this.process.stdin.write(requestStr);
 
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        this.process!.stdout!.off('data', dataHandler);
-        reject(new Error('MCP request timeout'));
+      // Timeout after 30 seconds; unref so it doesn't block process exit
+      const timeoutId = setTimeout(() => {
+        if (this.pendingRequests.has(request.id)) {
+          this.pendingRequests.delete(request.id);
+          reject(new Error('MCP request timeout'));
+        }
       }, 30000);
+      (timeoutId as NodeJS.Timeout).unref();
     });
   }
 
@@ -227,7 +287,7 @@ export class MCPServerConnection {
 
     const callToolRequest = {
       jsonrpc: '2.0',
-      id: Date.now(),
+      id: this.nextId(),
       method: 'tools/call',
       params: {
         name,
@@ -256,6 +316,7 @@ export class MCPServerConnection {
    */
   async disconnect(): Promise<void> {
     if (this.process) {
+      this.rejectAllPending(new Error('MCP server disconnected'));
       this.process.kill();
       this.process = undefined;
     }

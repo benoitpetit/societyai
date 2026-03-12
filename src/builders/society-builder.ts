@@ -41,6 +41,7 @@ export class FluentTaskBuilder {
   private _possibleNextTasks?: string[];
   private _timeout?: number;
   private _dependencies: string[] = [];
+  private _loopConfig?: import('../core/types').LoopConfig;
 
   /**
    * Create a new instance of FluentTaskBuilder
@@ -134,11 +135,15 @@ export class FluentTaskBuilder {
   }
 
   /**
-   * Make this step conditional based on previous results
+   * Make this step conditional based on previous results.
+   *
+   * The condition predicate is evaluated before the task runs. If it returns
+   * `false`, the task is skipped and execution continues to the next task.
+   * The task's `executionType` (parallel, collaborative, etc.) is preserved
+   * — this method no longer silently overrides it.
    */
   withCondition(condition: (previousResults: Map<string, TaskResult[]>) => boolean): this {
     this._condition = condition;
-    this._executionType = 'conditional';
     return this;
   }
 
@@ -204,6 +209,24 @@ export class FluentTaskBuilder {
    */
   withMaxIterations(max: number): this {
     this._maxIterations = max;
+    return this;
+  }
+
+  /**
+   * Set loop configuration for repeating agent execution within this task.
+   *
+   * @example
+   * ```typescript
+   * .addTask(t => t
+   *   .withId('refine')
+   *   .withAgents(['writer'])
+   *   .withLoopConfig({ maxIterations: 3, exitCondition: (r) => r.includes('DONE') })
+   * )
+   * ```
+   */
+  withLoopConfig(config: import('../core/types').LoopConfig): this {
+    this._loopConfig = config;
+    if (!this._maxIterations) this._maxIterations = config.maxIterations;
     return this;
   }
 
@@ -420,6 +443,7 @@ export class FluentTaskBuilder {
       possibleNextTasks: this._possibleNextTasks,
       timeout: this._timeout,
       dependencies: this._dependencies.length > 0 ? this._dependencies : undefined,
+      loopConfig: this._loopConfig,
     };
   }
 }
@@ -774,7 +798,17 @@ export const AggregationStrategies = {
       }
     },
 } as const;
-export function createRole(
+/**
+ * Quick helper to create a role builder.
+ *
+ * @example
+ * ```typescript
+ * const analyst = roleBuilder('analyst', 'You are a data analyst.')
+ *   .withCapabilities(['data analysis', 'statistics'])
+ *   .build();
+ * ```
+ */
+export function roleBuilder(
   id: string,
   systemPrompt?: string,
   options?: {
@@ -797,10 +831,32 @@ export function createRole(
   return builder;
 }
 
+/** @deprecated Use {@link roleBuilder} instead */
+export function createRole(
+  id: string,
+  systemPrompt?: string,
+  options?: {
+    name?: string;
+    description?: string;
+    capabilities?: string[];
+    constraints?: string[];
+    promptTemplate?: string;
+  }
+): FluentRoleBuilder {
+  return roleBuilder(id, systemPrompt, options);
+}
+
 /**
- * Quick helper to create an agent builder
+ * Quick helper to create an agent builder.
+ *
+ * @example
+ * ```typescript
+ * const agent = agentBuilder('researcher', analystRole, gptModel)
+ *   .withName('Research Agent')
+ *   .build();
+ * ```
  */
-export function createAgent(
+export function agentBuilder(
   id: string,
   role: Role | FluentRoleBuilder,
   model: AIModel,
@@ -819,4 +875,18 @@ export function createAgent(
   }
 
   return builder;
+}
+
+/** @deprecated Use {@link agentBuilder} instead */
+export function createAgent(
+  id: string,
+  role: Role | FluentRoleBuilder,
+  model: AIModel,
+  options?: {
+    name?: string;
+    priority?: number;
+    canCommunicateWith?: string[];
+  }
+): FluentAgentBuilder {
+  return agentBuilder(id, role, model, options);
 }

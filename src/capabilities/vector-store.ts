@@ -119,7 +119,11 @@ export class InMemoryVectorStore {
   }
 
   /**
-   * Insert or update a vector
+   * Insert or update a vector.
+   *
+   * When updating an existing entry (O-11), the old entry is deleted and
+   * re-inserted so that FIFO eviction order reflects the most recent upsert
+   * time rather than the original insertion time.
    */
   async upsert(entry: VectorEntry): Promise<void> {
     // Validate dimensions
@@ -129,8 +133,12 @@ export class InMemoryVectorStore {
       );
     }
 
-    // Evict oldest if at capacity
-    if (this.entries.size >= this.maxEntries && !this.entries.has(entry.id)) {
+    // If updating an existing entry, remove it first so re-insertion places it
+    // at the tail of the Map's iteration order (FIFO eviction correctness).
+    if (this.entries.has(entry.id)) {
+      this.entries.delete(entry.id);
+    } else if (this.entries.size >= this.maxEntries) {
+      // At capacity with a new entry — evict the oldest
       const oldestKey = this.entries.keys().next().value;
       if (oldestKey !== undefined) {
         this.entries.delete(oldestKey);
@@ -253,7 +261,15 @@ export class InMemoryVectorStore {
   }
 
   /**
-   * Cosine similarity (0 to 1, higher is better)
+   * Cosine similarity (0 to 1, higher is better).
+   *
+   * **Why clamping to [0, 1]? (O-12)**
+   * Mathematically, cosine similarity ranges from -1 (opposite directions) to
+   * +1 (identical directions).  This store interprets similarity as a
+   * probability-like relevance score, so values below 0 are clamped to 0.
+   * If you need the raw [-1, 1] range (e.g. for bi-directional similarity),
+   * use a custom similarity function via a subclass or the `dotProduct` metric
+   * with pre-normalised unit vectors.
    */
   private cosineSimilarity(a: number[], b: number[]): number {
     let dotProduct = 0;

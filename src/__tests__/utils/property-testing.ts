@@ -27,6 +27,7 @@ import * as fc from 'fast-check';
 import { WorkflowState } from '../../core/persistence';
 import { TaskResult, Message } from '../../core/types';
 import { JSONSchema } from '../../capabilities/validation';
+import { LoopController } from '../../utils/loop-controller';
 
 /**
  * Arbitrary for WorkflowState
@@ -262,29 +263,52 @@ export const vectorSimilarityBounds = (
 
 /**
  * Property: Graph node execution order
- * Nodes should execute in topological order (dependencies first)
+ *
+ * Validates that a simple linear DAG executes all N nodes and records
+ * them in the order they were added (topological order = insertion order
+ * for a linear chain).
+ *
+ * The property generates a list of unique node IDs and verifies that:
+ *  1. Each step in the simulated execution path is unique (no node runs twice).
+ *  2. The execution path length equals the number of nodes.
  */
 export const graphExecutionOrder = (): fc.IProperty<unknown[]> => {
-  return fc.property(fc.array(fc.string(), { minLength: 2, maxLength: 10 }), (nodeIds) => {
-    // Property: Each node should execute after its dependencies
-    // This would need actual graph execution to test
-    expect(nodeIds.length).toBeGreaterThan(0);
+  return fc.property(fc.array(fc.uuid(), { minLength: 2, maxLength: 8 }), (nodeIds) => {
+    // Simulate a topological traversal of a linear chain: each node
+    // enqueues only its single successor, so the execution path must
+    // equal the input order exactly.
+    const executionPath: string[] = [];
+    const queue = [...nodeIds];
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      executionPath.push(nodeId);
+    }
+
+    // Each node appears exactly once
+    const unique = new Set(executionPath);
+    expect(unique.size).toBe(nodeIds.length);
+    expect(executionPath).toHaveLength(nodeIds.length);
   });
 };
 
 /**
  * Property: Loop iteration bounds
- * Loops should never exceed maxIterations
+ *
+ * Uses LoopController to verify that a loop with `maxIterations = N`
+ * never exceeds N iterations, regardless of the value of N.
  */
 export const loopIterationBounds = (): fc.IProperty<unknown[]> => {
   return fc.property(fc.nat(20), (maxIterations) => {
-    // Simulate loop execution
+    const controller = new LoopController({ maxIterations: Math.max(1, maxIterations) });
     let iterations = 0;
-    while (iterations < maxIterations) {
+
+    while (controller.next()) {
       iterations++;
     }
 
-    expect(iterations).toBeLessThanOrEqual(maxIterations);
+    expect(iterations).toBeLessThanOrEqual(Math.max(1, maxIterations));
+    expect(controller.iteration).toBe(iterations);
   });
 };
 

@@ -10,6 +10,7 @@ import {
   NoModelsSpecifiedError,
   SynthesisModelRequiredError,
   OperationCancelledError,
+  ExecutionTimeoutError,
   TimeoutError,
   InvalidConfigurationError,
   InvalidWorkflowRoutingError,
@@ -160,18 +161,24 @@ describe('Error Classes', () => {
   });
 
   // =====================================================
-  // TimeoutError
+  // ExecutionTimeoutError (TimeoutError is a deprecated alias)
   // =====================================================
 
-  describe('TimeoutError', () => {
+  describe('ExecutionTimeoutError', () => {
     test('default message and code', () => {
-      const err = new TimeoutError();
+      const err = new ExecutionTimeoutError();
       expect(err.code).toBe('TIMEOUT');
-      expect(err.name).toBe('TimeoutError');
+      expect(err.name).toBe('ExecutionTimeoutError');
+    });
+
+    test('TimeoutError alias produces ExecutionTimeoutError instances', () => {
+      const err = new TimeoutError();
+      expect(err).toBeInstanceOf(ExecutionTimeoutError);
+      expect(err.name).toBe('ExecutionTimeoutError');
     });
 
     test('toString() with full context', () => {
-      const err = new TimeoutError('timed out', {
+      const err = new ExecutionTimeoutError('timed out', {
         timeoutMs: 5000,
         elapsedMs: 5123,
         stepId: 'step-3',
@@ -183,15 +190,15 @@ describe('Error Classes', () => {
     });
 
     test('toString() with partial context', () => {
-      const err = new TimeoutError('timed out', { timeoutMs: 3000 });
+      const err = new ExecutionTimeoutError('timed out', { timeoutMs: 3000 });
       const str = err.toString();
       expect(str).toContain('3000ms');
       expect(str).not.toContain('Elapsed');
     });
 
     test('toString() without context', () => {
-      const err = new TimeoutError('timed out');
-      expect(err.toString()).toContain('TimeoutError');
+      const err = new ExecutionTimeoutError('timed out');
+      expect(err.toString()).toContain('ExecutionTimeoutError');
     });
   });
 
@@ -259,7 +266,7 @@ describe('Error Classes', () => {
       expect(isAbortError(new OperationCancelledError())).toBe(true);
     });
 
-    test('should detect TimeoutError', () => {
+    test('should detect ExecutionTimeoutError (via TimeoutError alias)', () => {
       expect(isAbortError(new TimeoutError())).toBe(true);
     });
 

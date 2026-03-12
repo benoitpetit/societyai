@@ -1,70 +1,78 @@
+import type { ModelAdapter } from './types';
+
 /**
- * Options de retry pour les appels aux modèles d'IA
+ * Retry options for AI model calls
  */
 export interface RetryOptions {
   /**
-   * Nombre maximum de tentatives avant d'abandonner
+   * Maximum number of attempts before giving up
    */
   maxRetries: number;
 
   /**
-   * Délai initial avant la première nouvelle tentative (en ms)
+   * Initial delay before the first retry (in ms)
    */
   initialBackoff: number;
 
   /**
-   * Délai maximum entre deux tentatives (en ms)
+   * Maximum delay between two attempts (in ms)
    */
   maxBackoff: number;
 
   /**
-   * Facteur de multiplication du backoff à chaque nouvelle tentative
+   * Backoff multiplier applied on each retry
    */
   backoffFactor: number;
 
   /**
-   * Ajouter une variation aléatoire au backoff
+   * Add random jitter to the backoff delay
    */
   jitter: boolean;
 }
 
 /**
- * Niveau de log
+ * Log level
  */
 export enum LogLevel {
   SILENT = 0,
   ERROR = 1,
-  INFO = 2,
-  DEBUG = 3,
+  WARN = 2,
+  INFO = 3,
+  DEBUG = 4,
 }
 
 /**
- * Interface pour le système de logging
+ * Logger interface
  */
 export interface Logger {
   /**
-   * Log un message de debug
+   * Log a debug message
    */
   debug(message: string, ...args: unknown[]): void;
 
   /**
-   * Log un message d'information
+   * Log an info message
    */
   info(message: string, ...args: unknown[]): void;
 
   /**
-   * Log un message d'erreur
+   * Log a warning message
+   */
+  warn(message: string, ...args: unknown[]): void;
+
+  /**
+   * Log an error message
    */
   error(message: string, ...args: unknown[]): void;
 
   /**
-   * Définit le niveau de log
+   * Set the log level
    */
   setLevel(level: LogLevel): void;
 }
 
 /**
- * Message dans un échange de chat
+ * Chat message in an exchange
  */
 export interface ChatMessage {
   role: string;
@@ -72,7 +80,7 @@ export interface ChatMessage {
 }
 
 /**
- * Prompt structuré utilisé par certains modèles
+ * Structured prompt used by some models
  */
 export interface StructuredPrompt {
   system?: string;
@@ -82,53 +90,51 @@ export interface StructuredPrompt {
 }
 
 /**
- * Options standard pour les modèles d'IA
+ * Standard options for AI models
  */
 export interface StandardModelOptions {
   /**
-   * Nom du modèle
+   * Model name
    */
   name: string;
 
   /**
-   * Timeout pour les appels au modèle (en ms)
+   * Timeout for model calls (in ms)
    */
   timeout: number;
 
   /**
-   * Options de retry pour ce modèle
+   * Retry options for this model
    */
   retryOptions: RetryOptions;
 
   /**
-   * Logger à utiliser
+   * Logger to use
    */
   logger: Logger;
 
   /**
-   * Adaptateur pour ce modèle
+   * Adapter for this model
    */
   adapter?: ModelAdapter;
 }
 
 /**
- * Tâche à exécuter par le pool de workers
+ * Task to be executed by the worker pool
  */
 export interface WorkerTask<T = string> {
   /**
-   * Fonction à exécuter
+   * Function to execute
    */
   fn: () => Promise<T>;
 
   /**
-   * Résultat de l'exécution
+   * Execution result
    */
   result?: T;
 
   /**
-   * Erreur éventuelle
+   * Error if execution failed
    */
   error?: Error;
 }
-
-import type { ModelAdapter } from './types';

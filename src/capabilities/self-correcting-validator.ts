@@ -200,11 +200,18 @@ export class SelfCorrectingValidator<T = unknown> {
     const successful = this.attempts.filter((a) => a.successful).length;
     const failed = total - successful;
 
+    // averageAttemptsToSuccess: the attempt number at which success was reached.
+    // Since the loop exits immediately on success there is at most one successful
+    // attempt per validateAndCorrect() call.  We return that attempt's number,
+    // or 0 when no success occurred yet.
+    const successfulAttempt = this.attempts.find((a) => a.successful);
+    const averageAttemptsToSuccess = successfulAttempt ? successfulAttempt.attemptNumber : 0;
+
     return {
       totalAttempts: total,
       successfulAttempts: successful,
       failedAttempts: failed,
-      averageAttemptsToSuccess: successful > 0 ? total / successful : 0,
+      averageAttemptsToSuccess,
     };
   }
 

@@ -32,6 +32,7 @@
  * ```
  */
 
+import { randomUUID } from 'crypto';
 import { getLogger } from '../observability/logger';
 
 // ============================================================================
@@ -118,6 +119,12 @@ export interface ShortTermMemoryConfig {
   decayRate?: number;
   /** Maximum size in bytes */
   byteSizeLimit?: number;
+  /**
+   * Custom summarization callback (O-10).
+   * Called with the batch of memories to summarize; should return a summary string.
+   * If omitted, a simple concatenation-based fallback is used.
+   */
+  summarizer?: (memories: MemoryEntry[]) => string | Promise<string>;
 }
 
 /**
@@ -127,7 +134,9 @@ export class ShortTermMemory {
   private memories: MemoryEntry[] = [];
   private summarizedContent: string[] = [];
   private logger = getLogger();
-  private config: Required<ShortTermMemoryConfig>;
+  private config: Required<Omit<ShortTermMemoryConfig, 'summarizer'>> & {
+    summarizer?: ShortTermMemoryConfig['summarizer'];
+  };
 
   constructor(config: ShortTermMemoryConfig = {}) {
     this.config = {
@@ -136,11 +145,13 @@ export class ShortTermMemory {
       decayRate: config.decayRate ?? 0.1,
       // Default limit 10MB
       byteSizeLimit: config.byteSizeLimit ?? 10 * 1024 * 1024,
+      summarizer: config.summarizer,
     };
   }
 
   /**
-   * Add a memory entry
+   * Add a memory entry.
+   * Automatically applies importance decay to existing memories (O-09).
    */
   add(content: string, metadata?: Record<string, unknown>): void {
     // Check size limit before adding to avoid OOM with massive payload
@@ -150,8 +161,11 @@ export class ShortTermMemory {
       content = content.substring(0, this.config.byteSizeLimit / 2) + '...[truncated]';
     }
 
+    // Apply decay to existing memories before inserting a new one (O-09)
+    this.applyDecay();
+
     const entry: MemoryEntry = {
-      id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: `mem_${randomUUID()}`,
       content,
       timestamp: Date.now(),
       importance: (metadata?.importance as number) ?? 0.5,
@@ -167,7 +181,7 @@ export class ShortTermMemory {
 
     // Check if summarization is needed
     if (this.memories.length > this.config.summarizeAfter) {
-      this.summarize();
+      void this.summarize();
     }
   }
 
@@ -215,7 +229,14 @@ export class ShortTermMemory {
   }
 
   /**
-   * Search memories
+   * Search memories.
+   *
+   * Uses a TF-IDF-inspired relevance score (O-08):
+   * - Each query term is counted independently (term frequency in the document).
+   * - Terms that appear in fewer memories get higher weight (IDF proxy).
+   * - The final score is the sum of weighted term frequencies, normalised by
+   *   document length (characters) to avoid bias toward longer entries.
+   * - Entries with a score of 0 are excluded.
    */
   search(query: MemoryQuery): MemoryRetrievalResult {
     let filtered = this.memories;
@@ -243,13 +264,49 @@ export class ShortTermMemory {
       filtered = filtered.filter((m) => query.types!.includes(m.type ?? ''));
     }
 
-    // Simple text search (in production, use semantic search)
-    const queryLower = query.query.toLowerCase();
+    // TF-IDF-inspired scoring
+    const terms = query.query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+
+    if (terms.length === 0) {
+      // Empty query: return most recent entries
+      const limit = query.limit ?? 10;
+      const recent = filtered.slice(-limit);
+      return { memories: recent, scores: recent.map(() => 1), total: this.memories.length };
+    }
+
+    // IDF proxy: count how many documents contain each term
+    const docFreq = new Map<string, number>();
+    for (const term of terms) {
+      const count = filtered.filter((m) => m.content.toLowerCase().includes(term)).length;
+      docFreq.set(term, count);
+    }
+
+    const N = filtered.length || 1;
+
     const scored = filtered
-      .map((m) => ({
-        memory: m,
-        score: m.content.toLowerCase().includes(queryLower) ? 1 : 0,
-      }))
+      .map((m) => {
+        const contentLower = m.content.toLowerCase();
+        const docLen = m.content.length || 1;
+        let score = 0;
+        for (const term of terms) {
+          // Term frequency: count occurrences in this document
+          let tf = 0;
+          let idx = 0;
+          while ((idx = contentLower.indexOf(term, idx)) !== -1) {
+            tf++;
+            idx += term.length;
+          }
+          if (tf === 0) continue;
+          // IDF: log(N / df)  — add 1 to df to avoid division by zero
+          const df = docFreq.get(term) ?? 1;
+          const idf = Math.log(N / df + 1);
+          score += (tf / docLen) * idf;
+        }
+        return { memory: m, score };
+      })
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score);
 
@@ -264,17 +321,35 @@ export class ShortTermMemory {
   }
 
   /**
-   * Summarize old memories
+   * Summarize old memories.
+   *
+   * If `summarizer` was provided in the config (O-10), it is called with the
+   * batch of memories to condense.  Otherwise a simple truncated concatenation
+   * is used as a fallback.
    */
-  private summarize(): void {
+  private async summarize(): Promise<void> {
     // Take first half of memories for summarization
     const toSummarize = this.memories.slice(0, Math.floor(this.memories.length / 2));
 
-    // Create a simple summary (in production, use AI to summarize)
-    const summary = toSummarize
-      .map((m) => m.content)
-      .join('\n')
-      .substring(0, 500);
+    let summary: string;
+    if (this.config.summarizer) {
+      try {
+        summary = await Promise.resolve(this.config.summarizer(toSummarize));
+      } catch (err) {
+        this.logger.warn(
+          `Custom summarizer failed, falling back to concatenation: ${(err as Error).message}`
+        );
+        summary = toSummarize
+          .map((m) => m.content)
+          .join('\n')
+          .substring(0, 500);
+      }
+    } else {
+      summary = toSummarize
+        .map((m) => m.content)
+        .join('\n')
+        .substring(0, 500);
+    }
 
     this.summarizedContent.push(`[Summary]: ${summary}...`);
 
@@ -339,7 +414,7 @@ export class LongTermMemory {
    */
   async add(content: string, metadata?: Record<string, unknown>): Promise<string> {
     const entry: MemoryEntry = {
-      id: `ltm_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      id: `ltm_${randomUUID()}`,
       content,
       timestamp: Date.now(),
       importance: (metadata?.importance as number) ?? 0.5,
@@ -751,6 +826,22 @@ export class MemoryBuilder {
 
   withLongTermMemory(config: LongTermMemoryConfig): this {
     this.longTermConfig = config;
+    return this;
+  }
+
+  /**
+   * Enable entity memory for structured entity tracking.
+   *
+   * @example
+   * ```typescript
+   * const memory = MemoryBuilder.create()
+   *   .withEntityMemory()
+   *   .build();
+   * ```
+   */
+  withEntityMemory(): this {
+    // Entity memory is always included in MemorySystem. This method exists for
+    // discoverability and to make the builder API match documented examples.
     return this;
   }
 

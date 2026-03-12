@@ -28,6 +28,14 @@ export interface RedisClient {
   del(...keys: string[]): Promise<number>;
   keys(pattern: string): Promise<string[]>;
   setex(key: string, seconds: number, value: string): Promise<string>;
+  /** Incremental key scan — available in ioredis and node-redis v4+ */
+  scan(
+    cursor: string,
+    matchOption: 'MATCH',
+    pattern: string,
+    countOption: 'COUNT',
+    count: number
+  ): Promise<[string, string[]]>;
 }
 
 /**
@@ -111,10 +119,20 @@ export class RedisStorageAdapter implements StorageAdapter {
   async list(): Promise<string[]> {
     try {
       const pattern = `${this.keyPrefix}*`;
-      const keys = await this.client.keys(pattern);
-      // Anchored replacement: only strip prefix at the start of the key
       const prefixRegex = new RegExp(`^${this.keyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`);
-      return keys.map((key) => key.replace(prefixRegex, ''));
+      const ids: string[] = [];
+      let cursor = '0';
+
+      // Use SCAN instead of KEYS to avoid blocking the Redis server on large keyspaces
+      do {
+        const [nextCursor, keys] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = nextCursor;
+        for (const key of keys) {
+          ids.push(key.replace(prefixRegex, ''));
+        }
+      } while (cursor !== '0');
+
+      return ids;
     } catch (error) {
       throw new ProcessingFailedError(
         `Failed to list states from Redis: ${(error as Error).message}`

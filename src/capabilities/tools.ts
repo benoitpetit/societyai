@@ -470,26 +470,24 @@ export class ToolExecutor {
       // Not a single JSON object, scan for embedded JSON blobs
     }
 
-    const jsonRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-    const matches = output.match(jsonRegex);
-    if (matches) {
-      for (const match of matches) {
-        try {
-          const call = JSON.parse(match) as {
-            tool?: string;
-            parameters?: Record<string, unknown>;
-            callId?: string;
-          };
-          if (call.tool && call.parameters !== undefined) {
-            calls.push({
-              name: call.tool,
-              parameters: call.parameters,
-              callId: call.callId,
-            });
-          }
-        } catch {
-          // Invalid JSON, skip
+    // Legacy fallback: scan output for balanced JSON objects of any nesting depth (O-06)
+    const jsonCandidates = extractBalancedJSON(output);
+    for (const candidate of jsonCandidates) {
+      try {
+        const call = JSON.parse(candidate) as {
+          tool?: string;
+          parameters?: Record<string, unknown>;
+          callId?: string;
+        };
+        if (call.tool && call.parameters !== undefined) {
+          calls.push({
+            name: call.tool,
+            parameters: call.parameters,
+            callId: call.callId,
+          });
         }
+      } catch {
+        // Invalid JSON, skip
       }
     }
 
@@ -525,9 +523,10 @@ export class ToolExecutor {
     let currentInput = input;
     const allToolResults: ToolResult[] = [];
 
+    let agentOutput = '';
     for (let i = 0; i < maxIterations; i++) {
       // Execute agent
-      const agentOutput = await agentExecutor(currentInput);
+      agentOutput = await agentExecutor(currentInput);
 
       // Check for tool calls
       const { results, hasToolCalls } = await this.executeFromAgentOutput(agentOutput, context);
@@ -547,16 +546,153 @@ export class ToolExecutor {
       this.logger.debug(`Tool calling iteration ${i + 1}: ${results.length} tools executed`);
     }
 
-    // Max iterations reached
+    // Max iterations reached — return the last agent output directly (O-07):
+    // we already have a response from the final iteration; calling the agent
+    // again would be a redundant round-trip that produces no additional value.
     this.logger.info(`Max tool calling iterations (${maxIterations}) reached`);
-    const finalOutput = await agentExecutor(currentInput);
-    return { output: finalOutput, toolResults: allToolResults };
+    return { output: agentOutput, toolResults: allToolResults };
   }
+}
+
+// ============================================================================
+// JSON EXTRACTION HELPERS
+// ============================================================================
+
+/**
+ * Extract all top-level balanced JSON objects from a string (O-06).
+ * Handles arbitrary nesting depth and ignores braces inside strings.
+ * Returns each candidate as a raw substring for the caller to JSON.parse.
+ */
+function extractBalancedJSON(text: string): string[] {
+  const results: string[] = [];
+  let i = 0;
+
+  while (i < text.length) {
+    if (text[i] !== '{') {
+      i++;
+      continue;
+    }
+
+    // Found an opening brace — scan for the matching closing brace
+    let depth = 0;
+    let j = i;
+    let inString = false;
+    let escape = false;
+
+    while (j < text.length) {
+      const ch = text[j];
+
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\' && inString) {
+        escape = true;
+      } else if (ch === '"') {
+        inString = !inString;
+      } else if (!inString) {
+        if (ch === '{') depth++;
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0) {
+            results.push(text.slice(i, j + 1));
+            i = j + 1;
+            break;
+          }
+        }
+      }
+
+      j++;
+    }
+
+    if (depth !== 0) {
+      // Unmatched brace — skip this position
+      i++;
+    }
+  }
+
+  return results;
 }
 
 // ============================================================================
 // BUILT-IN TOOLS
 // ============================================================================
+
+/**
+ * Safe recursive-descent parser for basic arithmetic expressions.
+ * Supports: numbers (integers and decimals), +, -, *, /, unary minus, parentheses.
+ * Throws on invalid input rather than executing arbitrary code.
+ */
+function parseExpression(expr: string): number {
+  let pos = 0;
+
+  function skipSpaces(): void {
+    while (pos < expr.length && expr[pos] === ' ') pos++;
+  }
+
+  function parseNumber(): number {
+    skipSpaces();
+    let numStr = '';
+    if (expr[pos] === '-') {
+      numStr += '-';
+      pos++;
+    }
+    while (pos < expr.length && /[0-9.]/.test(expr[pos])) {
+      numStr += expr[pos++];
+    }
+    if (numStr === '' || numStr === '-') throw new Error(`Expected number at position ${pos}`);
+    const value = parseFloat(numStr);
+    if (isNaN(value)) throw new Error(`Invalid number: ${numStr}`);
+    return value;
+  }
+
+  function parsePrimary(): number {
+    skipSpaces();
+    if (expr[pos] === '(') {
+      pos++; // consume '('
+      const value = parseAddSub();
+      skipSpaces();
+      if (expr[pos] !== ')') throw new Error(`Expected ')' at position ${pos}`);
+      pos++; // consume ')'
+      return value;
+    }
+    return parseNumber();
+  }
+
+  function parseMulDiv(): number {
+    let left = parsePrimary();
+    skipSpaces();
+    while (pos < expr.length && (expr[pos] === '*' || expr[pos] === '/')) {
+      const op = expr[pos++];
+      const right = parsePrimary();
+      if (op === '*') left *= right;
+      else {
+        if (right === 0) throw new Error('Division by zero');
+        left /= right;
+      }
+      skipSpaces();
+    }
+    return left;
+  }
+
+  function parseAddSub(): number {
+    let left = parseMulDiv();
+    skipSpaces();
+    while (pos < expr.length && (expr[pos] === '+' || expr[pos] === '-')) {
+      const op = expr[pos++];
+      const right = parseMulDiv();
+      if (op === '+') left += right;
+      else left -= right;
+      skipSpaces();
+    }
+    return left;
+  }
+
+  const result = parseAddSub();
+  skipSpaces();
+  if (pos !== expr.length) {
+    throw new Error(`Unexpected characters at position ${pos}: '${expr.substring(pos)}'`);
+  }
+  return result;
+}
 
 /**
  * Create common built-in tools
@@ -581,16 +717,9 @@ export const BuiltInTools = {
       })
       .withExecutor(async (params) => {
         try {
-          // Safer evaluation of simple math expressions without eval()
-          // Supporting basic operators: +, -, *, /, (, )
           const expr = params.expression as string;
-          if (/[^0-9+\-*/().\s]/.test(expr)) {
-            throw new Error('Invalid characters in expression');
-          }
-          // Note: In a production environment, use a library like mathjs
-          // Using Function constructor is slightly safer than eval but still risky if not sanitized
-          // Since we sanitized above, it's better.
-          const result = new Function(`return ${expr}`)();
+          // Use a safe recursive-descent parser — no eval() or new Function()
+          const result = parseExpression(expr);
           return { result };
         } catch (error) {
           throw new ProcessingFailedError(`Invalid expression: ${error}`);

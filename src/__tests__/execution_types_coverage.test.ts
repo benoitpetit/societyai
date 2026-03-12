@@ -64,13 +64,14 @@ describe('Execution Types Logic Coverage', () => {
     const result = await graph.execute('Input', [baseAgent, agent2]);
 
     expect(result.success).toBe(true);
-    // Parallel node usually concatenates results by default implementation
+    // Both agents produced output — the parallel node combines them
     expect(result.output).toContain('Output');
-    // Check internal node results for distinct outputs
+    // The parallel node result should be present and have output
     const parallelResult = result.nodeResults.get('parallel');
     expect(parallelResult).toBeDefined();
-    // In current implementation, PARALLEL returns last output or combined string
-    // Let's verify that we have execution traces if possible, or just success
+    expect(parallelResult!.output.length).toBeGreaterThan(0);
+    // Execution path passes through the parallel node
+    expect(result.executionPath).toContain('parallel');
   });
 
   /**
@@ -176,13 +177,13 @@ describe('Execution Types Logic Coverage', () => {
 
     await graph.execute('Start', [baseAgent]);
 
-    // We expect body to run 3 times
-    // Start -> Loop(1) -> Body -> Loop(2) -> Body -> Loop(3) -> Body -> Loop(4 - stop)
+    // Body runs exactly maxIterations (3) times:
+    // Start → Loop(1) → Body → Loop(2) → Body → Loop(3) → Body → Loop(4 = stop, no more queuing)
     expect(bodyExecutions).toBe(3);
 
-    // Issue: execution stops here because Loop(4) doesn't queue anything.
-    // 'end' node is never reached unless we had a parallel path or something.
-    // We should fix LOOP node to allow an "exit" path or "continuation" path.
+    // Known limitation: the LOOP node does not emit an "exit" edge once the limit is
+    // reached, so any node connected only after the loop (like 'end') is never visited.
+    // Downstream continuation requires a parallel exit path or a separate CONDITION node.
   });
 
   /**

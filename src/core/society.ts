@@ -6,10 +6,10 @@ import {
   TaskResult,
   SocietyResult,
   SocietyObserver,
+  RetentionPolicy,
 } from './types';
 import { SocietyExecutor } from '../agents/society-executor';
 import { InvalidConfigurationError } from './errors';
-import { getLogger } from '../observability/logger';
 import { Middleware, MiddlewareChain, ComposedMiddleware } from './middleware';
 import { FluentAgentBuilder } from '../builders/agent-builder';
 import {
@@ -38,7 +38,7 @@ export class Society {
   private _description?: string;
   private _agents: Agent[] = [];
   private _tasks: Task[] = [];
-  private _entryStepId?: string;
+  private _entryTaskId?: string;
   private _globalContext: Record<string, unknown> = {};
   private _observer?: SocietyObserver;
   private _middlewares: Middleware[] = [];
@@ -48,7 +48,7 @@ export class Society {
   // Pipeline config is applied via usePipeline() to set steps
   private _timeout?: number;
   private _strictRouting: boolean = false;
-  private _logger = getLogger();
+  private _retentionPolicy?: RetentionPolicy;
 
   /**
    * Create a new Society builder
@@ -147,8 +147,8 @@ export class Society {
    */
   usePipeline(builderFn: (builder: FluentPipelineBuilder) => FluentPipelineBuilder): this {
     if (this._tasks.length > 0) {
-      this._logger.info(
-        `[Society] usePipeline() is overwriting ${this._tasks.length} existing task(s). ` +
+      throw new InvalidConfigurationError(
+        `[Society] usePipeline() would overwrite ${this._tasks.length} existing task(s). ` +
           `Call usePipeline() before adding tasks individually, or use useTasks() to append.`
       );
     }
@@ -163,7 +163,7 @@ export class Society {
    * Set the entry task for society execution
    */
   withEntryTask(taskId: string): this {
-    this._entryStepId = taskId;
+    this._entryTaskId = taskId;
     return this;
   }
 
@@ -189,6 +189,20 @@ export class Society {
    */
   withStrictRouting(strict: boolean = true): this {
     this._strictRouting = strict;
+    return this;
+  }
+
+  /**
+   * Set a retention policy to limit memory usage in long-running executions.
+   *
+   * @example
+   * ```typescript
+   * Society.create()
+   *   .withRetentionPolicy({ maxMessages: 50, archiveAfter: 100 })
+   * ```
+   */
+  withRetentionPolicy(policy: RetentionPolicy): this {
+    this._retentionPolicy = policy;
     return this;
   }
 
@@ -278,8 +292,9 @@ export class Society {
    */
   scatterGather(aggregator?: (results: TaskResult[]) => string): this {
     if (this._tasks.length > 0) {
-      this._logger.info(
-        `[Society] scatterGather() is overwriting ${this._tasks.length} existing task(s).`
+      throw new InvalidConfigurationError(
+        `[Society] scatterGather() would overwrite ${this._tasks.length} existing task(s). ` +
+          `Clear tasks before calling scatterGather(), or use .useTasks() to set tasks directly.`
       );
     }
     const agentIds = this._agents.map((a) => a.id);
@@ -303,7 +318,10 @@ export class Society {
    */
   chain(): this {
     if (this._tasks.length > 0) {
-      this._logger.info(`[Society] chain() is overwriting ${this._tasks.length} existing task(s).`);
+      throw new InvalidConfigurationError(
+        `[Society] chain() would overwrite ${this._tasks.length} existing task(s). ` +
+          `Clear tasks before calling chain(), or use .useTasks() to set tasks directly.`
+      );
     }
     const agentIds = this._agents.map((a) => a.id);
     this._tasks = agentIds.map((agentId, index) => ({
@@ -321,8 +339,9 @@ export class Society {
    */
   collaborate(maxIterations: number = 3): this {
     if (this._tasks.length > 0) {
-      this._logger.info(
-        `[Society] collaborate() is overwriting ${this._tasks.length} existing task(s).`
+      throw new InvalidConfigurationError(
+        `[Society] collaborate() would overwrite ${this._tasks.length} existing task(s). ` +
+          `Clear tasks before calling collaborate(), or use .useTasks() to set tasks directly.`
       );
     }
     const agentIds = this._agents.map((a) => a.id);
@@ -357,9 +376,13 @@ export class Society {
       description: this._description,
       agents: this._agents,
       tasks: this._tasks,
-      entryTaskId: this._entryStepId ?? this._tasks[0]?.id,
+      entryTaskId: this._entryTaskId ?? this._tasks[0]?.id,
       globalContext: this._globalContext,
       strictRouting: this._strictRouting,
+      retentionPolicy: this._retentionPolicy,
+      observer: this._observer,
+      middlewares: this._middlewares.length > 0 ? this._middlewares : undefined,
+      timeout: this._timeout,
       onBeforeTask: this._onBeforeTask,
       onAfterTask: this._onAfterTask,
       finalResultGenerator: this._finalResultGenerator,
@@ -418,10 +441,25 @@ export class Society {
       }
     }
 
+    // 3b. Validate explicit dependencies references
+    for (const step of this._tasks) {
+      if (step.dependencies) {
+        for (const depId of step.dependencies) {
+          if (!stepIds.has(depId)) {
+            errors.push(
+              `Task '${step.id}' declares dependency on unknown task '${depId}'. ` +
+                `Available tasks: ${Array.from(stepIds).join(', ')}. ` +
+                `Check your .dependsOn() configuration.`
+            );
+          }
+        }
+      }
+    }
+
     // 4. Validate entry task
-    if (this._entryStepId && !stepIds.has(this._entryStepId)) {
+    if (this._entryTaskId && !stepIds.has(this._entryTaskId)) {
       errors.push(
-        `Entry task '${this._entryStepId}' does not exist. ` +
+        `Entry task '${this._entryTaskId}' does not exist. ` +
           `Available tasks: ${Array.from(stepIds).join(', ')}.`
       );
     }

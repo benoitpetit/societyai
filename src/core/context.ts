@@ -45,11 +45,21 @@
 const CONTEXT_TOKEN_SYMBOL = Symbol('ContextToken');
 
 /**
+ * Each token carries a unique symbol key used as the Map key in
+ * ContextProvider.  Two calls to `createContextToken('foo')` therefore
+ * produce two independent tokens even if they share the same human-readable
+ * name — preventing silent type collisions.
+ */
+const TOKEN_KEY = Symbol('TokenKey');
+
+/**
  * Context token - a type-safe key for context values
  */
 export interface ContextToken<T> {
   /** Token symbol for identification */
   readonly [CONTEXT_TOKEN_SYMBOL]: true;
+  /** Unique symbol used as the registry key — prevents name collisions */
+  readonly [TOKEN_KEY]: symbol;
   /** Token name for debugging */
   readonly name: string;
   /** Default value (optional) */
@@ -59,11 +69,26 @@ export interface ContextToken<T> {
 }
 
 /**
- * Create a context token with a specific type
+ * Create a context token with a specific type.
+ *
+ * Every call returns a **distinct** token object — even if two tokens share
+ * the same `name` string they will never collide in a {@link ContextProvider}.
+ *
+ * @example
+ * ```typescript
+ * // Safe: different token objects, no collision
+ * const StrToken = createContextToken<string>('config');
+ * const NumToken = createContextToken<number>('config');
+ * provider.provide(StrToken, 'hello');
+ * provider.provide(NumToken, 42);
+ * provider.get(StrToken); // 'hello'
+ * provider.get(NumToken); // 42
+ * ```
  */
 export function createContextToken<T>(name: string, defaultValue?: T): ContextToken<T> {
   return {
     [CONTEXT_TOKEN_SYMBOL]: true,
+    [TOKEN_KEY]: Symbol(name),
     name,
     defaultValue,
   } as ContextToken<T>;
@@ -103,6 +128,8 @@ interface ContextEntry<T> {
   isFactory: boolean;
   initialized: boolean;
   cachedValue?: T;
+  /** Human-readable token name, kept for serialisation (keys() / toObject()) */
+  tokenName: string;
 }
 
 // ============================================================================
@@ -139,7 +166,9 @@ export interface IMutableContextProvider extends IContextProvider {
  * Context provider implementation
  */
 export class ContextProvider implements IMutableContextProvider {
-  private contexts = new Map<string, ContextEntry<unknown>>();
+  private contexts = new Map<symbol, ContextEntry<unknown>>();
+  /** Name → symbol index to support name-based lookup (fromObject, toObject, inject, restore) */
+  private nameIndex = new Map<string, symbol>();
   private parent?: ContextProvider;
 
   /**
@@ -164,13 +193,15 @@ export class ContextProvider implements IMutableContextProvider {
    * Provide a value for a context token
    */
   provide<T>(token: ContextToken<T>, value: T, scope: ContextScope = ContextScope.WORKFLOW): this {
-    this.contexts.set(token.name, {
+    this.contexts.set(token[TOKEN_KEY], {
       value,
       scope,
       isFactory: false,
       initialized: true,
       cachedValue: value,
+      tokenName: token.name,
     });
+    this.nameIndex.set(token.name, token[TOKEN_KEY]);
     return this;
   }
 
@@ -182,12 +213,14 @@ export class ContextProvider implements IMutableContextProvider {
     factory: () => T,
     scope: ContextScope = ContextScope.WORKFLOW
   ): this {
-    this.contexts.set(token.name, {
+    this.contexts.set(token[TOKEN_KEY], {
       value: factory,
       scope,
       isFactory: true,
       initialized: false,
+      tokenName: token.name,
     });
+    this.nameIndex.set(token.name, token[TOKEN_KEY]);
     return this;
   }
 
@@ -195,7 +228,15 @@ export class ContextProvider implements IMutableContextProvider {
    * Get a context value
    */
   get<T>(token: ContextToken<T>): T {
-    const entry = this.contexts.get(token.name) as ContextEntry<T> | undefined;
+    let entry = this.contexts.get(token[TOKEN_KEY]) as ContextEntry<T> | undefined;
+
+    // Fall back to name-based lookup (supports provideAll/fromObject round-trips)
+    if (!entry) {
+      const sym = this.nameIndex.get(token.name);
+      if (sym !== undefined) {
+        entry = this.contexts.get(sym) as ContextEntry<T> | undefined;
+      }
+    }
 
     if (entry) {
       if (entry.isFactory && !entry.initialized) {
@@ -233,7 +274,7 @@ export class ContextProvider implements IMutableContextProvider {
    * Check if a context is provided
    */
   has<T>(token: ContextToken<T>): boolean {
-    if (this.contexts.has(token.name)) {
+    if (this.contexts.has(token[TOKEN_KEY])) {
       return true;
     }
     return this.parent?.has(token) ?? false;
@@ -243,21 +284,24 @@ export class ContextProvider implements IMutableContextProvider {
    * Set a context value
    */
   set<T>(token: ContextToken<T>, value: T): void {
-    const existing = this.contexts.get(token.name);
-    this.contexts.set(token.name, {
+    const existing = this.contexts.get(token[TOKEN_KEY]);
+    this.contexts.set(token[TOKEN_KEY], {
       value,
       scope: existing?.scope ?? ContextScope.WORKFLOW,
       isFactory: false,
       initialized: true,
       cachedValue: value,
+      tokenName: token.name,
     });
+    this.nameIndex.set(token.name, token[TOKEN_KEY]);
   }
 
   /**
    * Delete a context value
    */
   delete<T>(token: ContextToken<T>): boolean {
-    return this.contexts.delete(token.name);
+    this.nameIndex.delete(token.name);
+    return this.contexts.delete(token[TOKEN_KEY]);
   }
 
   /**
@@ -265,6 +309,25 @@ export class ContextProvider implements IMutableContextProvider {
    */
   clear(): void {
     this.contexts.clear();
+    this.nameIndex.clear();
+  }
+
+  /**
+   * Get a value by token name (for serialisation helpers: toObject, inject)
+   */
+  getByName(name: string): unknown {
+    const sym = this.nameIndex.get(name);
+    if (sym !== undefined) {
+      const entry = this.contexts.get(sym) as ContextEntry<unknown> | undefined;
+      if (entry) {
+        if (entry.isFactory && !entry.initialized) {
+          entry.cachedValue = (entry.value as () => unknown)();
+          entry.initialized = true;
+        }
+        return entry.cachedValue;
+      }
+    }
+    return this.parent?.getByName(name);
   }
 
   /**
@@ -279,7 +342,8 @@ export class ContextProvider implements IMutableContextProvider {
    */
   keys(): string[] {
     const parentKeys = this.parent?.keys() ?? [];
-    return [...new Set([...parentKeys, ...this.contexts.keys()])];
+    const ownKeys = [...this.contexts.values()].map((entry) => entry.tokenName);
+    return [...new Set([...parentKeys, ...ownKeys])];
   }
 
   /**
@@ -288,6 +352,7 @@ export class ContextProvider implements IMutableContextProvider {
   merge(other: ContextProvider): this {
     for (const [key, entry] of other.contexts) {
       this.contexts.set(key, { ...entry });
+      this.nameIndex.set(entry.tokenName, key);
     }
     return this;
   }
@@ -459,16 +524,29 @@ export class ContextStore<T> {
  * Type-safe context map for storing multiple context values
  */
 export class ContextMap {
-  private stores = new Map<string, ContextStore<unknown>>();
+  private stores = new Map<symbol, ContextStore<unknown>>();
+  private storeNames = new Map<symbol, string>();
+  /** Name → symbol index to support name-based lookup (restore, snapshot round-trips) */
+  private nameIndex = new Map<string, symbol>();
 
   /**
    * Get or create a store for a token
    */
   getStore<T>(token: ContextToken<T>): ContextStore<T> {
-    let store = this.stores.get(token.name);
+    // First try by exact token symbol
+    let store = this.stores.get(token[TOKEN_KEY]);
+    if (!store) {
+      // Fall back to name-based lookup (supports restore() round-trips)
+      const existingSym = this.nameIndex.get(token.name);
+      if (existingSym !== undefined) {
+        store = this.stores.get(existingSym);
+      }
+    }
     if (!store) {
       store = new ContextStore<unknown>(token.defaultValue);
-      this.stores.set(token.name, store);
+      this.stores.set(token[TOKEN_KEY], store);
+      this.storeNames.set(token[TOKEN_KEY], token.name);
+      this.nameIndex.set(token.name, token[TOKEN_KEY]);
     }
     return store as ContextStore<T>;
   }
@@ -500,7 +578,8 @@ export class ContextMap {
   snapshot(): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const [key, store] of this.stores) {
-      result[key] = store.get();
+      const name = this.storeNames.get(key) ?? String(key);
+      result[name] = store.get();
     }
     return result;
   }
@@ -556,8 +635,7 @@ export function fromObject(obj: Record<string, unknown>): ContextProvider {
 export function toObject(provider: ContextProvider): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const key of provider.keys()) {
-    const token = createContextToken<unknown>(key);
-    result[key] = provider.getOptional(token);
+    result[key] = provider.getByName(key);
   }
   return result;
 }
@@ -589,21 +667,29 @@ export class AgentContextInjector {
   inject(template: string, additionalContext?: Record<string, unknown>): string {
     let result = template;
 
-    // Inject from provider
+    // Inject from provider — use name-based lookup when available (ContextProvider)
+    // so that provideAll/fromObject-populated values are found correctly.
     const contextPattern = /\{context:([^}]+)\}/g;
     result = result.replace(contextPattern, (match, tokenName) => {
-      const token = createContextToken<unknown>(tokenName);
-      const value = this.provider.getOptional(token);
+      let value: unknown;
+      if (this.provider instanceof ContextProvider) {
+        value = this.provider.getByName(tokenName);
+      } else {
+        const token = createContextToken<unknown>(tokenName);
+        value = this.provider.getOptional(token);
+      }
       if (value === undefined) {
         return match; // Keep original if not found
       }
       return typeof value === 'object' ? JSON.stringify(value) : String(value);
     });
 
-    // Inject additional context
+    // Inject additional context — escape regex metacharacters in the key so
+    // that keys like "foo.bar" or "a+b" don't corrupt the regex pattern.
     if (additionalContext) {
       for (const [key, value] of Object.entries(additionalContext)) {
-        const pattern = new RegExp(`\\{${key}\\}`, 'g');
+        const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`\\{${escapedKey}\\}`, 'g');
         result = result.replace(
           pattern,
           typeof value === 'object' ? JSON.stringify(value) : String(value)

@@ -241,10 +241,20 @@ describe('WorkerPool', () => {
     const controller = new AbortController();
     const pool = new WorkerPool(1, controller.signal);
 
-    // Submit a long task
+    // Submit a long task that cleans up when aborted
     pool
       .submit(async () => {
-        await new Promise((r) => setTimeout(r, 10000));
+        await new Promise<void>((r) => {
+          const id = setTimeout(r, 10000);
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(id);
+              r();
+            },
+            { once: true }
+          );
+        });
       })
       .catch(() => {}); // ignore rejection
 

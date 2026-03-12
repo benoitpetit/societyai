@@ -74,11 +74,14 @@ export class FluentAgentBuilder {
   }
 
   /**
-   * Set the role directly
+   * Set the role directly.
+   *
+   * @deprecated Use {@link withRole} instead — it accepts a plain `Role` object
+   *             as well as a builder instance or builder function.
+   *             `useRole()` will be removed in a future major version.
    */
   useRole(role: Role): this {
-    this._role = role;
-    return this;
+    return this.withRole(role);
   }
 
   /**
@@ -190,7 +193,7 @@ export class FluentAgentBuilder {
   /**
    * Build the agent configuration
    */
-  build(): Agent & { tags?: string[]; metadata?: Record<string, unknown> } {
+  build(): Agent {
     if (!this._id) throw new InvalidConfigurationError('Agent id is required');
     if (!this._role) throw new InvalidConfigurationError('Agent role is required');
     if (!this._model) throw new InvalidConfigurationError('Agent model is required');

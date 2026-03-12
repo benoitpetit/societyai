@@ -126,9 +126,8 @@ export class StructuredOutputValidator<T = unknown> {
    */
   validate(output: string): ValidationResult<T> {
     try {
-      // Try to extract JSON from output
-      const jsonString = this.extractJSON(output);
-      const data = JSON.parse(jsonString);
+      // Try to extract and parse JSON from output (single parse)
+      const data = this.extractJSON(output);
 
       // Validate against schema
       const errors = this.validateData(data, this.schema, 'data');
@@ -183,9 +182,13 @@ export class StructuredOutputValidator<T = unknown> {
   ): Promise<ValidationResult<T>> {
     let currentOutput = initialOutput;
     let attempt = 0;
+    let result: ValidationResult<T> = {
+      valid: false,
+      errors: [{ path: 'root', message: 'No validation attempt made' }],
+    };
 
     while (attempt <= this.maxRetries) {
-      const result = this.validate(currentOutput);
+      result = this.validate(currentOutput);
 
       if (result.valid) {
         this.logger.info(`Validation successful after ${attempt} attempts`);
@@ -218,20 +221,22 @@ export class StructuredOutputValidator<T = unknown> {
       }
     }
 
-    return { valid: false, errors: [] };
+    // All retries exhausted — return the last validation result with its errors
+    return result;
   }
 
   /**
-   * Extract JSON from output (handles markdown code blocks, etc.)
+   * Extract and parse JSON from output (handles markdown code blocks, etc.)
+   * Returns the parsed value directly to avoid a second `JSON.parse` call.
+   * @throws {SyntaxError} if no valid JSON can be found/parsed in the output
    */
-  private extractJSON(output: string): string {
+  private extractJSON(output: string): unknown {
     const trimmed = output.trim();
 
-    // First, try to parse the output directly as-is — handles primitives
-    // (quoted strings, numbers, booleans, null) as well as objects/arrays
+    // Fast path: try to parse the output directly as-is — handles primitives
+    // (quoted strings, numbers, booleans, null) as well as objects/arrays.
     try {
-      JSON.parse(trimmed);
-      return trimmed;
+      return JSON.parse(trimmed);
     } catch {
       // Not valid JSON as-is, continue with extraction heuristics
     }
@@ -239,17 +244,17 @@ export class StructuredOutputValidator<T = unknown> {
     // Try to find JSON in markdown code block
     const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
     if (codeBlockMatch) {
-      return codeBlockMatch[1].trim();
+      return JSON.parse(codeBlockMatch[1].trim());
     }
 
     // Try to find JSON object/array
     const jsonMatch = trimmed.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
     if (jsonMatch) {
-      return jsonMatch[1].trim();
+      return JSON.parse(jsonMatch[1].trim());
     }
 
-    // Return as-is and let JSON.parse in validate() produce the error
-    return trimmed;
+    // Let JSON.parse produce a descriptive error for the caller
+    return JSON.parse(trimmed);
   }
 
   /**
@@ -694,7 +699,18 @@ export function validateJSON<T = unknown>(output: string, schema: JSONSchema): V
 }
 
 /**
- * Create a simple schema from TypeScript type annotation
+ * Create a simple schema from TypeScript type annotation.
+ *
+ * By default fields are **optional** (following standard JSON Schema conventions).
+ * Pass `required: true` on a property config to explicitly mark it as required.
+ *
+ * @example
+ * ```typescript
+ * const schema = createSchema({
+ *   name: { type: 'string', required: true },
+ *   age:  { type: 'number' },            // optional by default
+ * });
+ * ```
  */
 export function createSchema(
   properties: Record<string, { type: string; required?: boolean; description?: string }>
@@ -702,8 +718,9 @@ export function createSchema(
   const schema: JSONSchema = {
     type: 'object',
     properties: {},
-    required: [],
   };
+
+  const requiredFields: string[] = [];
 
   for (const [key, config] of Object.entries(properties)) {
     schema.properties![key] = {
@@ -711,9 +728,13 @@ export function createSchema(
       description: config.description,
     };
 
-    if (config.required !== false) {
-      schema.required!.push(key);
+    if (config.required === true) {
+      requiredFields.push(key);
     }
+  }
+
+  if (requiredFields.length > 0) {
+    schema.required = requiredFields;
   }
 
   return schema;
