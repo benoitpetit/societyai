@@ -16,7 +16,7 @@
   },
   "bin": {
     "societyai": "bin/societyai.js",
-    "society-inspect": "dist/bin/inspect.js"
+    "society-inspect": "bin/inspect.js"
   },
   "engines": {
     "node": ">=16.0.0",
