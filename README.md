@@ -89,43 +89,57 @@ npm run test -- --coverage
 npm install societyai
 ```
 
-### 1. Connect Your Model
+### 1. Quick Start with Built-in Adapters
 
-SocietyAI does not depend on any specific SDK library. You simply need to adapt
-your model to the `AIModel` interface. Here is a minimal example for OpenAI:
+SocietyAI provides built-in adapters for popular LLM providers:
 
 ```typescript
-import { AIModel } from 'societyai';
-import OpenAI from 'openai'; // Install openai separately: npm install openai
+import { Society } from 'societyai';
+import { ModelAdapters } from 'societyai/adapters';
 
-export class OpenAIModel implements AIModel {
-  private client: OpenAI;
-  private modelName: string;
+// Use built-in OpenAI adapter
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
+});
 
-  constructor(apiKey: string, model: string = 'gpt-4o') {
-    this.client = new OpenAI({ apiKey });
-    this.modelName = model;
-  }
+const result = await Society.create()
+  .addAgent(agent => agent
+    .withId('writer')
+    .withRole(r => r.withSystemPrompt('You are a technical writer'))
+    .withModel(model)
+  )
+  .addTask(t => t
+    .withId('write')
+    .withAgents(['writer'])
+    .sequential()
+  )
+  .execute('Write about TypeScript');
+```
 
-  name(): string {
-    return this.modelName;
-  }
+### Available Adapters
 
-  supportsPromptType(_type: string): boolean {
-    return true;
-  }
+```typescript
+import { ModelAdapters } from 'societyai/adapters';
 
-  async process(prompt: unknown, signal?: AbortSignal): Promise<string> {
-    const response = await this.client.chat.completions.create(
-      {
-        model: this.modelName,
-        messages: [{ role: 'user', content: String(prompt) }],
-      },
-      { signal }
-    );
-    return response.choices[0].message.content ?? '';
-  }
-}
+// OpenAI
+const openai = ModelAdapters.openai({ apiKey, model: 'gpt-4' });
+
+// Anthropic
+const anthropic = ModelAdapters.anthropic({ apiKey, model: 'claude-3-opus' });
+
+// Google Gemini
+const gemini = ModelAdapters.gemini({ apiKey, model: 'gemini-pro' });
+
+// Azure OpenAI
+const azure = ModelAdapters.azureOpenAI({ apiKey, endpoint, deployment });
+
+// Ollama (local)
+const ollama = ModelAdapters.ollama({ model: 'llama2', baseURL });
+
+// Mock (for testing)
+import { MockModel } from 'societyai/adapters';
+const mock = new MockModel();
 ```
 
 ### 2. Create Your First Society
@@ -134,9 +148,12 @@ This example creates a small team to write and review an article.
 
 ```typescript
 import { Society } from 'societyai';
-import { OpenAIModel } from './my-model-impl'; // Your implementation above
+import { ModelAdapters } from 'societyai/adapters';
 
-const model = new OpenAIModel(process.env.OPENAI_API_KEY);
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
+});
 
 // Create the Society
 const result = await Society.create()
@@ -199,20 +216,16 @@ console.log('History:', result.taskResults);
 For CPU-intensive agents, use worker threads to prevent blocking:
 
 ```typescript
-import { Society, Middlewares, MiddlewareChain, createOpenTelemetryObserver } from 'societyai';
-import { OpenAIModel } from './my-model-impl';
+import { Society, Middlewares, MiddlewareChain } from 'societyai';
+import { ModelAdapters } from 'societyai/adapters';
 
-const model = new OpenAIModel(process.env.OPENAI_API_KEY!);
-
-// Optional: enable distributed tracing (peer dep: @opentelemetry/*)
-const observer = createOpenTelemetryObserver({
-  serviceName: 'my-app',
-  exporterType: 'console',
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
 });
 
 const result = await Society.create()
   .withId('advanced-team')
-  .withObserver(observer)               // ← OpenTelemetry tracing
   .addMiddleware(
     MiddlewareChain.create()
       .use(Middlewares.logging())
@@ -227,7 +240,7 @@ const result = await Society.create()
         role.withSystemPrompt('You coordinate tasks and handle I/O operations.')
       )
       .withModel(model)
-    // executionMode defaults to 'default' (main thread)
+    // executionMode defaults to 'inline' (main thread)
   )
 
   // CPU-intensive agent — runs in an isolated Worker Thread
@@ -257,19 +270,15 @@ const result = await Society.create()
   .execute('Start workflow');
 
 console.log('Result:', result.output);
-
-// Always shut down the observer to flush pending spans
-await observer.shutdown();
 ```
 
 **Key Points:**
 
 - **`executionMode: 'isolated'`**: Runs the agent in a Worker Thread, preventing
   main-event-loop blocking for CPU-heavy work.
-- **`withObserver(observer)`**: Accepts any `SocietyObserver` implementation —
-  `OpenTelemetryObserver` provides distributed tracing for production.
 - **Middlewares**: Applied to every agent call via `.addMiddleware()`. Accepts a
   single `Middleware`, a raw `MiddlewareFn`, or a `MiddlewareChain`.
+- **ModelAdapters**: Built-in adapters for OpenAI, Anthropic, Gemini, Azure, Ollama.
 - **MCP Tools**: Add external tools via
   `withTools(await MCPServers.filesystem('/path'))` on any agent.
 
@@ -289,14 +298,17 @@ Explore detailed documentation in the `/docs` folder:
 
 Recent Highlights:
 
+- [Getting Started](./docs/1-basics/getting-started.md) with CLI and ModelAdapters.
 - [Context Management](./docs/2-building-societies/context.md) for dependency
   injection.
-- [Observability System](./docs/4-advanced/observability.md) for full event
-  tracking.
+- [Visualization](./docs/4-advanced/visualization.md) — Mermaid, DOT, HTML export.
+- [Benchmarks](./docs/4-advanced/benchmarks.md) — Performance testing.
+- [Middleware](./docs/4-advanced/middleware.md) — Including streaming middleware.
 - [Memory & RAG](./docs/3-capabilities/memory.md) for long-term state.
 - [Structured Validation](./docs/3-capabilities/validation.md) for reliable JSON
   outputs.
 - [Execution Engine](./docs/5-architecture/execution-engine.md) deep dive.
+- [CLI Reference](./docs/reference/cli.md) — Complete CLI documentation.
 
 ## 🤝 Contribution
 

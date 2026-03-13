@@ -44,7 +44,7 @@ import { AgentExecutor } from '../../agents/agent-executor';
 import { getLogger } from '../../observability/logger';
 import { ConcurrencyLimiter } from '../../utils/worker-pool';
 import { IsolatedWorkerPool } from '../../utils/isolated-worker-pool';
-import { ProcessingFailedError } from '../../core/errors';
+import { ProcessingFailedError, InvalidConfigurationError } from '../../core/errors';
 import { JSONSchema } from '../../capabilities/validation';
 import { MiddlewareChain } from '../../core/middleware';
 import { StorageAdapter, WorkflowState, mapToArray, arrayToMap } from '../../core/persistence';
@@ -248,12 +248,21 @@ import { GraphVisualizer } from '../graph-visualizer';
 /**
  * Graph-based execution engine
  */
+export interface ExecutionEngineOptions {
+  /** Maximum number of parallel tasks (default: 10) */
+  maxParallelism?: number;
+  /** Abort signal for cancellation */
+  signal?: AbortSignal;
+}
+
 export class ExecutionEngine {
   private nodes: Map<string, GraphNode> = new Map();
   private edges: Map<string, GraphEdge[]> = new Map();
   private logger = getLogger();
   /** Engine-level isolated worker pool — created once and reused (#8) */
   private isolatedPool: IsolatedWorkerPool | null = null;
+  /** Engine-level parallel pool — created once and reused */
+  private parallelPool: ConcurrencyLimiter;
 
   /**
    * Get all nodes in the graph (read-only)
@@ -269,7 +278,7 @@ export class ExecutionEngine {
     return this.edges;
   }
 
-  constructor(nodes: GraphNode[], edges: GraphEdge[]) {
+  constructor(nodes: GraphNode[], edges: GraphEdge[], options?: ExecutionEngineOptions) {
     // Validate and store nodes
     for (const node of nodes) {
       this.nodes.set(node.id, node);
@@ -290,14 +299,58 @@ export class ExecutionEngine {
       this.edges.get(edge.from)!.push(edge);
     }
 
+    // Initialize parallel pool
+    this.parallelPool = new ConcurrencyLimiter(options?.maxParallelism ?? 10, options?.signal);
+
     this.validateGraph();
+  }
+
+  /**
+   * Validate that all agent references in nodes point to existing agents
+   */
+  validateAgentReferences(agents: Agent[]): void {
+    const agentIds = new Set(agents.map((a) => a.id));
+    const errors: string[] = [];
+
+    for (const node of this.nodes.values()) {
+      if (node.type === NodeType.AGENT && node.agentId) {
+        if (!agentIds.has(node.agentId)) {
+          errors.push(`Node '${node.id}' references unknown agent '${node.agentId}'`);
+        }
+      }
+      if (node.type === NodeType.PARALLEL && node.agentIds) {
+        for (const agentId of node.agentIds) {
+          if (!agentIds.has(agentId)) {
+            errors.push(`Node '${node.id}' references unknown agent '${agentId}'`);
+          }
+        }
+      }
+      if (node.type === NodeType.COLLABORATIVE && node.agentIds) {
+        for (const agentId of node.agentIds) {
+          if (!agentIds.has(agentId)) {
+            errors.push(`Node '${node.id}' references unknown agent '${agentId}'`);
+          }
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      const availableAgents = Array.from(agentIds);
+      throw new InvalidConfigurationError(
+        `Agent validation failed:\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+        {
+          availableIds: availableAgents,
+          suggestion: 'Ensure all agents are defined before building the graph',
+        }
+      );
+    }
   }
 
   /**
    * Export the graph structure as a Mermaid diagram
    */
   toMermaid(direction: 'TD' | 'LR' = 'TD'): string {
-    return GraphVisualizer.toMermaid(this, direction);
+    return GraphVisualizer.toMermaid(this, { direction });
   }
 
   /**
@@ -507,6 +560,9 @@ export class ExecutionEngine {
 
     const startTime = Date.now();
     const execId = _executionId || `exec-${randomUUID()}`;
+
+    // Validate agent references before execution
+    this.validateAgentReferences(_agents);
 
     // Initialize sharedData with initialContext (globalContext from workflow)
     const sharedData = new Map<string, unknown>();
@@ -1096,17 +1152,16 @@ export class ExecutionEngine {
       return agent;
     });
 
-    const pool = new ConcurrencyLimiter(nodeAgents.length);
     const results: TaskResult[] = [];
     const sharedDataSnapshots: Map<string, unknown>[] = [];
 
-    // Submit all tasks to the pool with isolated contexts
+    // Submit all tasks to the engine-level pool with isolated contexts
     await Promise.all(
       nodeAgents.map((agent) => {
         // Create isolated snapshot of sharedData for this branch
         const isolatedSharedData = this.cloneSharedData(context.sharedData);
 
-        return pool.submit(() =>
+        return this.parallelPool.submit(() =>
           withRetry(
             async () => {
               // Create isolated context for this parallel branch

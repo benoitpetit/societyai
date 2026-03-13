@@ -16,6 +16,7 @@ use case.
 - [The Context](#5-the-context)
 - [The ReAct Loop](#6-the-react-loop)
 - [The Two API Levels](#7-the-two-api-levels)
+- [Module Structure](#8-module-structure)
 - [Summary](#summary)
 
 ---
@@ -41,6 +42,8 @@ const result = await Society.create()
   .execute('Start');
 ```
 
+---
+
 ## 2. Agents & Roles
 
 An **Agent** is an autonomous entity capable of processing information.
@@ -52,12 +55,14 @@ In SocietyAI, an agent is composed of:
 - **Tools**: The "Hands". Functions the agent can call (calculator, web search,
   file system, etc.).
 - **Memory**: The "Experience". Context retained from previous interactions.
+- **Execution Mode**: How the agent runs — `inline` (default, same thread) or
+  `isolated` (worker thread for CPU-intensive tasks).
 
 Agents are created through the **fluent builder API** — never instantiated
 directly:
 
 ```typescript
-import { Society, createRole } from 'societyai';
+import { Society } from 'societyai';
 
 // Option 1: inline role definition (most common)
 Society.create()
@@ -72,43 +77,23 @@ Society.create()
       .withModel(myModel)
   );
 
-// Option 2: reusable pre-built role
-const writerRole = createRole('writer')
-  .withName('Technical Writer')
-  .withSystemPrompt('You write clear, concise technical documentation.')
-  .build();
-
+// Option 2: with isolated execution (worker thread)
 Society.create()
   .addAgent((a) =>
-    a.withId('writer').withRole(writerRole).withModel(myModel)
+    a
+      .withId('analyzer')
+      .withRole((r) =>
+        r.withSystemPrompt('You analyze complex data.')
+      )
+      .withModel(myModel)
+      .withExecutionMode('isolated') // ← Runs in worker thread
   );
 ```
 
 > **Note:** `Agent` is a TypeScript interface, not an instantiable class.
-> Always use `FluentAgentBuilder` (via `.addAgent()`) or the `createAgent()`
-> helper to construct agents.
+> Always use `FluentAgentBuilder` (via `.addAgent()`) to construct agents.
 
-### `createAgent()` helper
-
-For cases where you want to build an agent object ahead of time:
-
-```typescript
-import { createAgent, createRole } from 'societyai';
-
-const role = createRole('analyst')
-  .withSystemPrompt('You are a data analyst.')
-  .build();
-
-const agent = createAgent('analyst', role, myModel, {
-  name: 'Senior Analyst',
-  priority: 10,
-});
-
-Society.create()
-  .useAgent(agent)
-  .addTask(/* ... */)
-  .execute('Analyse this dataset');
-```
+---
 
 ## 3. Tasks & Workflow
 
@@ -144,6 +129,8 @@ Society.create()
   .execute('Write a post about TypeScript');
 ```
 
+---
+
 ## 4. The Execution Graph
 
 This is the "Secret Sauce" of SocietyAI.
@@ -165,6 +152,27 @@ enables patterns like:
 For cases where you need full graph control, use the low-level `GraphBuilder`
 API directly — see the
 [Execution Engine](../5-architecture/execution-engine.md) documentation.
+
+### Visualizing the Graph
+
+You can visualize your graph using the CLI:
+
+```bash
+npx societyai visualize ./my-society.ts --format html --output graph.html
+```
+
+Or programmatically:
+
+```typescript
+import { GraphVisualizer } from 'societyai/advanced';
+
+const mermaid = GraphVisualizer.toMermaid(engine, {
+  direction: 'LR',
+  highlightPath: ['start', 'agent1', 'end']
+});
+```
+
+---
 
 ## 5. The Context
 
@@ -191,6 +199,8 @@ Society.create()
 
 For advanced type-safe dependency injection, see the
 [Context Management](./context.md) guide.
+
+---
 
 ## 6. The ReAct Loop
 
@@ -230,6 +240,8 @@ Society.create()
   .execute('What is 1024 * 768?');
 ```
 
+---
+
 ## 7. The Two API Levels
 
 SocietyAI offers two levels of abstraction:
@@ -244,16 +256,62 @@ features not expressible through the fluent builder.
 
 ---
 
+## 8. Module Structure
+
+SocietyAI uses a modular export structure for better tree-shaking and clearer
+API boundaries:
+
+```typescript
+// Essential API (recommended for most use cases)
+import { Society, Agent, TaskResult } from 'societyai';
+
+// Advanced execution engine (low-level graph control)
+import { ExecutionEngine, GraphBuilder, NodeType } from 'societyai/advanced';
+
+// Memory management (short-term, long-term, vector store)
+import { MemorySystem, MemoryBuilder } from 'societyai/memory';
+
+// Event system (observability, progress tracking)
+import { SocietyEventEmitter, ProgressTracker } from 'societyai/events';
+
+// Context system (dependency injection, scoping)
+import { ContextProvider, ContextScope } from 'societyai/context';
+
+// Model adapters (OpenAI, Anthropic, Gemini, etc.)
+import { ModelAdapters, MockModel } from 'societyai/adapters';
+```
+
+### Why Modular Exports?
+
+1. **Tree-shaking**: Only import what you need
+2. **Clear boundaries**: Easy to understand which features belong where
+3. **Progressive disclosure**: Start simple, expand as needed
+4. **Type safety**: Each module has its own type definitions
+
+---
+
 ## Summary
 
 | Concept | Class / Helper | Purpose |
 |---|---|---|
 | Society | `Society.create()` | Top-level workflow container |
-| Agent | `FluentAgentBuilder`, `createAgent()` | Autonomous processing unit |
-| Role | `FluentRoleBuilder`, `createRole()` | Agent "job description" |
+| Agent | `FluentAgentBuilder` | Autonomous processing unit |
+| Role | `FluentRoleBuilder` | Agent "job description" |
 | Task | `FluentTaskBuilder` (via `.addTask()`) | Unit of work in the graph |
-| Model | `AIModel` interface | LLM adapter you implement |
+| Model | `AIModel` interface / `ModelAdapters` | LLM adapter |
 | Tool | `ToolBuilder` | Function the agent can call |
-| Memory | `MemoryBuilder` | Short/long-term context |
-| Middleware | `MiddlewareChain`, `Middlewares` | Cross-cutting concerns |
+| Memory | `MemoryBuilder` | Short/long-term context with persistence |
+| Middleware | `MiddlewareChain`, `Middlewares`, `StreamMiddlewares` | Cross-cutting concerns |
 | Graph | `GraphBuilder`, `ExecutionEngine` | Low-level DAG / cycle control |
+| Visualization | `GraphVisualizer` | Mermaid, DOT, HTML export |
+| CLI | `societyai` | Validate, visualize, run, benchmark |
+
+---
+
+## 📚 Next Steps
+
+- [Getting Started](./getting-started.md) — Installation and first society
+- [Society Builder](../2-building-societies/society-builder.md) — Complete API reference
+- [Middleware](../4-advanced/middleware.md) — Logging, retry, cache, streaming
+- [Visualization](../4-advanced/visualization.md) — Graph visualization guide
+- [CLI Reference](../reference/cli.md) — Command-line tools

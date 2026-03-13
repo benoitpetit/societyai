@@ -9,6 +9,26 @@ graph-based execution engine (DAGs and Cycles).
 npm install societyai
 ```
 
+## Quick Start with CLI
+
+SocietyAI includes a powerful CLI for rapid development:
+
+```bash
+# Create a new project
+npx societyai init --template basic --output ./my-project --name my-society
+cd my-project
+npm install
+
+# Validate your configuration
+npx societyai validate ./society.ts
+
+# Generate visualization
+npx societyai visualize ./society.ts --format html --output graph.html
+
+# Run your society
+npx societyai run ./society.ts --input "Hello World" --verbose --metrics
+```
+
 ## Basic Concepts
 
 ### 1. Agents
@@ -18,6 +38,7 @@ Agents are the workers in your society. Each agent has:
 - An **ID** — unique identifier
 - A **Role** — its "job description" (system prompt, name)
 - An **AI Model** — the LLM backing it (you provide the adapter)
+- An **Execution Mode** — `inline` (default) or `isolated` (worker thread)
 
 ### 2. Tasks
 
@@ -26,6 +47,7 @@ A Task is a unit of work assigned to one or more agents:
 - **Sequential** — one agent runs, its output feeds the next task
 - **Parallel** — multiple agents run simultaneously on the same input
 - **Collaborative** — agents exchange messages across multiple rounds
+- **Human** — execution pauses and waits for human input
 
 ### 3. Society (The Workflow)
 
@@ -37,29 +59,42 @@ fluent builder API.
 ## Your First Society
 
 ```typescript
-import { Society, createRole } from 'societyai';
-import { YourAIModel } from './your-model'; // your AIModel implementation
+import { Society } from 'societyai';
+import { ModelAdapters } from 'societyai/adapters';
 
-const model = new YourAIModel();
+// Use built-in adapter (OpenAI example)
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
+});
 
-// Define reusable roles
-const writerRole = createRole('writer')
-  .withName('Technical Writer')
-  .withSystemPrompt('You are a technical writer. Write clearly and concisely.');
-
-const editorRole = createRole('editor')
-  .withName('Editor')
-  .withSystemPrompt('You review text for style, grammar, and clarity.');
+// Or use MockModel for testing
+// import { MockModel } from 'societyai/adapters';
+// const model = new MockModel();
 
 const result = await Society.create()
   .withId('blog-post-workflow')
 
   // Add agents
   .addAgent((a) =>
-    a.withId('writer').withRole(writerRole).withModel(model)
+    a
+      .withId('writer')
+      .withRole((r) =>
+        r
+          .withName('Technical Writer')
+          .withSystemPrompt('You write clear, concise technical documentation.')
+      )
+      .withModel(model)
   )
   .addAgent((a) =>
-    a.withId('editor').withRole(editorRole).withModel(model)
+    a
+      .withId('editor')
+      .withRole((r) =>
+        r
+          .withName('Editor')
+          .withSystemPrompt('You review text for style, grammar, and clarity.')
+      )
+      .withModel(model)
   )
 
   // Add tasks — explicit dependency wiring
@@ -87,6 +122,39 @@ console.log('Per-task results:', result.taskResults);
 
 ---
 
+## Using Worker Threads
+
+For CPU-intensive agents, use isolated execution mode with built-in adapters:
+
+```typescript
+import { Society } from 'societyai';
+import { ModelAdapters } from 'societyai/adapters';
+
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
+});
+
+const result = await Society.create()
+  .addAgent((a) =>
+    a
+      .withId('analyzer')
+      .withRole((r) =>
+        r.withSystemPrompt('You analyze complex data structures.')
+      )
+      .withModel(model)
+      .withExecutionMode('isolated') // ← Runs in worker thread
+  )
+  .addTask((t) =>
+    t.withId('analyze').withAgents(['analyzer']).sequential()
+  )
+  .execute('Analyze this dataset');
+```
+
+Available adapters: `openai`, `anthropic`, `gemini`, `azureOpenAI`, `ollama`, `mock`.
+
+---
+
 ## Advanced Graph Patterns (Low-Level API)
 
 The high-level `Society` builder covers most use cases. For full graph control —
@@ -97,7 +165,7 @@ cycles, custom node types, complex aggregations — use `GraphBuilder` directly.
 Create a validate-and-retry feedback cycle:
 
 ```typescript
-import { GraphBuilder, NodeType } from 'societyai';
+import { GraphBuilder, NodeType } from 'societyai/advanced';
 
 const engine = GraphBuilder.create()
   .addNode('start',    NodeType.START)
@@ -120,7 +188,10 @@ const engine = GraphBuilder.create()
   })
   .build();
 
-const result = await engine.execute('Generate secure code', agents);
+const result = await engine.execute({
+  input: 'Generate secure code',
+  agents: [generatorAgent, validatorAgent]
+});
 ```
 
 ### Parallel Processing
@@ -128,7 +199,7 @@ const result = await engine.execute('Generate secure code', agents);
 Execute multiple agents in parallel, then aggregate their results:
 
 ```typescript
-import { GraphBuilder, NodeType } from 'societyai';
+import { GraphBuilder, NodeType } from 'societyai/advanced';
 
 const engine = GraphBuilder.create()
   .addNode('start',     NodeType.START)
@@ -146,67 +217,86 @@ const engine = GraphBuilder.create()
   .addEdge('aggregate', 'end')
   .build();
 
-const result = await engine.execute('Analyze market trends', agents);
+const result = await engine.execute({
+  input: 'Analyze market trends',
+  agents: [analyst1, analyst2, analyst3]
+});
 ```
 
-### Collaborative Node (Agents Debating)
+### Visualize Your Graph
 
-Agents exchange messages across multiple rounds until a condition is met:
+Export your graph to multiple formats:
 
 ```typescript
-import { GraphBuilder, NodeType } from 'societyai';
+import { GraphVisualizer } from 'societyai/advanced';
 
-const engine = GraphBuilder.create()
-  .addNode('start', NodeType.START)
-  .addNode('debate', NodeType.COLLABORATIVE, {
-    agentIds: ['junior', 'senior', 'manager'],
-    maxIterations: 5,
-    messageRouter: (message, sender) => {
-      // Juniors report to seniors, seniors escalate to manager
-      if (sender.id === 'junior')  return ['senior'];
-      if (sender.id === 'senior')  return ['manager'];
-      if (sender.id === 'manager') return ['junior', 'senior'];
-      return [];
-    },
-    completionCondition: (results) =>
-      results.some((r) => r.output.includes('DECISION')),
-  })
-  .addNode('end', NodeType.END)
+// Generate Mermaid diagram
+const mermaid = engine.toMermaid();
+console.log(mermaid);
 
-  .addEdge('start',  'debate')
-  .addEdge('debate', 'end')
-  .build();
+// Or use the CLI
+// npx societyai visualize ./my-society.ts --format mermaid
 
-const result = await engine.execute('Review architecture proposal', agents);
+// Available formats: mermaid, dot, json, html, ascii, plantuml
+const dot = GraphVisualizer.toDOT(engine);
+const html = GraphVisualizer.toHTML(engine, { theme: 'dark' });
 ```
 
-### Iterative Loop with Max Iterations
+---
 
-Repeat a step until a condition is met or a hard cap is reached:
+## Memory with Automatic Persistence
+
+Persist memory across sessions:
 
 ```typescript
-import { GraphBuilder, NodeType } from 'societyai';
+import { MemoryBuilder } from 'societyai/memory';
+import { FileStorageAdapter } from 'societyai/advanced';
 
-const engine = GraphBuilder.create()
-  .addNode('start',   NodeType.START)
-  .addNode('process', NodeType.AGENT, { agentId: 'processor' })
-  .addNode('loop',    NodeType.LOOP,  {
-    maxIterations: 10,
-    loopCondition: (iteration: number, result: string) =>
-      iteration < 10 && !result.includes('COMPLETE'),
-  })
-  .addNode('end', NodeType.END)
-
-  .addEdge('start',   'process')
-  .addEdge('process', 'loop')
-  .addEdge('loop',    'process') // continue loop
-  .addConditionalEdge({
-    from:      'loop',
-    condition: (_result, ctx) => (ctx.iterationCount ?? 0) >= 10,
-    truePath:  'end',
-    falsePath: 'process',
+const memory = MemoryBuilder.create()
+  .withPersistence({
+    adapter: new FileStorageAdapter('./memory'),
+    autoSaveInterval: 60000, // Save every minute
+    namespace: 'my-agent',
+    loadOnInit: true,
   })
   .build();
+
+// Use in your agent
+Society.create()
+  .addAgent((a) =>
+    a
+      .withId('assistant')
+      .withModel(model)
+      .withMemory(memory)
+  )
+  .execute('Hello');
+
+// Cleanup on exit
+process.on('SIGINT', async () => {
+  await memory.dispose();
+  process.exit(0);
+});
+```
+
+---
+
+## Streaming Responses
+
+Stream responses with middleware support:
+
+```typescript
+import { MiddlewareChain, StreamMiddlewares } from 'societyai';
+
+const chain = MiddlewareChain.create()
+  .use(StreamMiddlewares.logChunks({ prefix: '[Agent]' }))
+  .use(StreamMiddlewares.transformChunk((chunk) => chunk.toUpperCase()));
+
+const wrappedModel = chain.wrap(model);
+
+// Stream the response
+for await (const chunk of wrappedModel.stream('Hello')) {
+  process.stdout.write(chunk);
+}
 ```
 
 ---
@@ -257,6 +347,15 @@ Society.create()
   .execute(input);
 ```
 
+### 5. Validate Before Running
+
+```bash
+# Always validate your configuration
+npx societyai validate ./my-society.ts
+
+# Check for agent reference errors, missing dependencies, etc.
+```
+
 ---
 
 ## Troubleshooting
@@ -281,33 +380,16 @@ Use `.dependsOn()` to declare explicit ordering:
 )
 ```
 
-Or use `.thenGoto()` on the preceding task:
+### Worker Thread Errors
 
-```typescript
-.addTask((t) =>
-  t.withId('step1').withAgents(['writer']).sequential().thenGoto('step2')
-)
-.addTask((t) => t.withId('step2').withAgents(['editor']).sequential())
-```
+If you encounter issues with isolated execution:
 
-### Conditional Routing Not Triggering
+1. Ensure your model adapter is serializable
+2. Use built-in adapters from `societyai/adapters`
+3. Check that `ts-node` is installed for TypeScript files
 
-Prefer the explicit `.withConditionalNext()` or `.withBranch()` helpers on
-`FluentTaskBuilder` rather than the low-level `GraphBuilder` `CONDITION` node
-when using the high-level API:
-
-```typescript
-.addTask((t) =>
-  t
-    .withId('validate')
-    .withAgents(['validator'])
-    .sequential()
-    .withConditionalNext(
-      (results) => results.get('validate')?.[0].output.includes('APPROVED') ?? false,
-      'deploy',     // next task if true
-      'fix-issues'  // next task if false
-    )
-)
+```bash
+npm install --save-dev ts-node
 ```
 
 ---
@@ -318,4 +400,5 @@ when using the high-level API:
 - [Society Builder](../2-building-societies/society-builder.md) — Full fluent API reference
 - [Execution Engine](../5-architecture/execution-engine.md) — Deep dive into the DAG engine
 - [Tools & Functions](../3-capabilities/tools-functions.md) — Give agents real-world capabilities
-- [Middleware](../4-advanced/middleware.md) — Cross-cutting concerns (logging, retry, cache)
+- [Middleware](../4-advanced/middleware.md) — Cross-cutting concerns (logging, retry, cache, streaming)
+- [CLI Reference](../reference/cli.md) — Complete CLI documentation

@@ -17,9 +17,9 @@ describe('GraphVisualizer', () => {
 
     expect(mermaid).toContain('graph TD');
     // Visualizer prefixes IDs with n_ and uses generic syntax
-    expect(mermaid).toContain('n_start("start [Start]")');
-    expect(mermaid).toContain('n_agent["agent<br/>Agent: agent1"]');
-    expect(mermaid).toContain('n_end("end [End]")');
+    expect(mermaid).toContain('n_start("start\\nStart")');
+    expect(mermaid).toContain('n_agent["agent\\nAgent: agent1"]');
+    expect(mermaid).toContain('n_end("end\\nEnd")');
     expect(mermaid).toContain('n_start --> n_agent');
     expect(mermaid).toContain('n_agent --> n_end');
   });
@@ -44,7 +44,7 @@ describe('GraphVisualizer', () => {
 
     const mermaid = GraphVisualizer.toMermaid(graph);
 
-    expect(mermaid).toContain('n_decision{"decision<br/>Condition"}');
+    expect(mermaid).toContain('n_decision{"decision\\nCondition"}');
     expect(mermaid).toContain('n_decision -->|true| n_end');
     expect(mermaid).toContain('n_decision -->|false| n_start');
   });
@@ -71,21 +71,21 @@ describe('GraphVisualizer', () => {
       .addEdge('xform', 'end')
       .build();
 
-    const mermaid = GraphVisualizer.toMermaid(graph, 'LR');
+    const mermaid = GraphVisualizer.toMermaid(graph, { direction: 'LR' });
 
     expect(mermaid).toContain('graph LR');
     // Parallel node — double-brace shape
-    expect(mermaid).toContain('n_par{{"par<br/>Parallel"}}');
+    expect(mermaid).toContain('n_par{{"par\\nParallel (2 agents)"}}');
     // Loop node — double-paren shape
-    expect(mermaid).toContain('n_loop(("loop<br/>Loop"))');
+    expect(mermaid).toContain('n_loop(("loop\\nLoop"))');
     // Human node — trapezoid shape
-    expect(mermaid).toContain('n_human[/"human<br/>Human Input"/]');
+    expect(mermaid).toContain('n_human["human\\nHuman"]');
     // Collaborative node — subroutine shape
-    expect(mermaid).toContain('n_collab[["collab<br/>Collaborative"]]');
+    expect(mermaid).toContain('n_collab[["collab\\nCollaborative (2 agents)"]]');
     // Aggregate — rectangular
-    expect(mermaid).toContain('n_agg["agg<br/>Aggregate"]');
+    expect(mermaid).toContain('n_agg["agg\\nAggregate"]');
     // Transform — rectangular
-    expect(mermaid).toContain('n_xform["xform<br/>Transform"]');
+    expect(mermaid).toContain('n_xform["xform\\nTransform"]');
 
     // Class assignments
     expect(mermaid).toContain('class n_par parallel');
@@ -108,6 +108,6 @@ describe('GraphVisualizer', () => {
     nodes.set('custom', { id: 'custom', type: 'unknown_type' as NodeType });
 
     const mermaid = GraphVisualizer.toMermaid(graph);
-    expect(mermaid).toContain('n_custom["custom<br/>unknown_type"]');
+    expect(mermaid).toContain('n_custom["custom\\nUnknown_type"]');
   });
 });

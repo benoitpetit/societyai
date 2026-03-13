@@ -205,6 +205,81 @@ export class NotImplementedError extends SocietyError {
 }
 
 /**
+ * Error when an agent is not found
+ */
+export class AgentNotFoundError extends SocietyError {
+  public readonly context?: {
+    agentId: string;
+    nodeId?: string;
+    availableAgents: string[];
+    suggestion?: string;
+  };
+
+  constructor(agentId: string, availableAgents: string[], nodeId?: string) {
+    const suggestion = availableAgents.find(
+      (a) =>
+        a.toLowerCase().includes(agentId.toLowerCase()) ||
+        agentId.toLowerCase().includes(a.toLowerCase())
+    );
+
+    super(
+      `Agent '${agentId}' not found${nodeId ? ` (referenced by node '${nodeId}')` : ''}`,
+      'AGENT_NOT_FOUND'
+    );
+    this.name = 'AgentNotFoundError';
+    this.context = {
+      agentId,
+      nodeId,
+      availableAgents,
+      suggestion: suggestion ? `Did you mean: '${suggestion}'?` : undefined,
+    };
+    Object.setPrototypeOf(this, AgentNotFoundError.prototype);
+  }
+
+  toString(): string {
+    let msg = `${this.name}: ${this.message}`;
+    if (this.context) {
+      msg += `\n  Available agents: ${this.context.availableAgents.join(', ')}`;
+      if (this.context.suggestion) {
+        msg += `\n  💡 ${this.context.suggestion}`;
+      }
+    }
+    return msg;
+  }
+}
+
+/**
+ * Error when a circular dependency is detected
+ */
+export class CircularDependencyError extends SocietyError {
+  public readonly context?: {
+    cycle: string[];
+    resolution: string;
+  };
+
+  constructor(cycle: string[]) {
+    super(
+      `Circular dependency detected: ${cycle.join(' -> ')} -> ${cycle[0]}`,
+      'CIRCULAR_DEPENDENCY'
+    );
+    this.name = 'CircularDependencyError';
+    this.context = {
+      cycle,
+      resolution: 'Break the cycle by removing a dependency or adding a maxIterations limit',
+    };
+    Object.setPrototypeOf(this, CircularDependencyError.prototype);
+  }
+
+  toString(): string {
+    let msg = `${this.name}: ${this.message}`;
+    if (this.context?.resolution) {
+      msg += `\n  💡 ${this.context.resolution}`;
+    }
+    return msg;
+  }
+}
+
+/**
  * Check if an error is related to cancellation or timeout
  */
 export function isAbortError(error: Error): boolean {

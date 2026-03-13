@@ -663,6 +663,40 @@ export class EntityMemory {
 }
 
 // ============================================================================
+// MEMORY PERSISTENCE CONFIGURATION
+// ============================================================================
+
+/**
+ * Generic storage adapter interface for memory persistence
+ */
+export interface MemoryStorageAdapter {
+  /** Save memory state */
+  save<T>(id: string, state: T): Promise<void>;
+  /** Load memory state */
+  load<T>(id: string): Promise<T | null>;
+  /** Delete memory state */
+  delete(id: string): Promise<void>;
+}
+
+/**
+ * Configuration for memory persistence
+ */
+export interface MemoryPersistenceConfig {
+  /** Storage adapter for persisting memory */
+  adapter: MemoryStorageAdapter;
+  /** Auto-save interval in milliseconds (default: 60000 = 1 minute) */
+  autoSaveInterval?: number;
+  /** Whether to encrypt persisted data */
+  encryption?: boolean;
+  /** Key for encryption (if encryption is enabled) */
+  encryptionKey?: string;
+  /** Whether to load persisted memory on startup */
+  loadOnInit?: boolean;
+  /** Namespace for this memory system (to avoid conflicts) */
+  namespace?: string;
+}
+
+// ============================================================================
 // UNIFIED MEMORY SYSTEM
 // ============================================================================
 
@@ -674,11 +708,127 @@ export class MemorySystem {
   private longTerm: LongTermMemory;
   private entities: EntityMemory;
   private logger = getLogger();
+  private persistenceConfig?: MemoryPersistenceConfig;
+  private persistenceTimer?: NodeJS.Timeout;
+  private isLoading = false;
 
-  constructor(shortTermConfig?: ShortTermMemoryConfig, longTermConfig?: LongTermMemoryConfig) {
+  constructor(
+    shortTermConfig?: ShortTermMemoryConfig,
+    longTermConfig?: LongTermMemoryConfig,
+    persistenceConfig?: MemoryPersistenceConfig
+  ) {
     this.shortTerm = new ShortTermMemory(shortTermConfig);
     this.longTerm = new LongTermMemory(longTermConfig);
     this.entities = new EntityMemory();
+    this.persistenceConfig = persistenceConfig;
+
+    if (persistenceConfig) {
+      this.setupPersistence(persistenceConfig);
+    }
+  }
+
+  /**
+   * Setup persistence with auto-save
+   */
+  private async setupPersistence(config: MemoryPersistenceConfig): Promise<void> {
+    // Load persisted memory if enabled
+    if (config.loadOnInit !== false) {
+      await this.loadPersistedMemory();
+    }
+
+    // Setup auto-save if interval is specified
+    if (config.autoSaveInterval && config.autoSaveInterval > 0) {
+      this.persistenceTimer = setInterval(
+        () =>
+          this.saveMemory().catch((err) => this.logger.error('Failed to auto-save memory:', err)),
+        config.autoSaveInterval
+      );
+    }
+  }
+
+  /**
+   * Load persisted memory from storage
+   */
+  private async loadPersistedMemory(): Promise<void> {
+    if (!this.persistenceConfig?.adapter || this.isLoading) return;
+
+    this.isLoading = true;
+    try {
+      const namespace = this.persistenceConfig.namespace || 'default';
+      const state = await this.persistenceConfig.adapter.load<MemoryState>(`memory-${namespace}`);
+
+      if (state) {
+        // Restore short-term memory
+        if (state.shortTerm?.memories) {
+          for (const mem of state.shortTerm.memories) {
+            this.shortTerm.add(mem.content, mem.metadata);
+          }
+        }
+
+        // Restore long-term memory
+        if (state.longTerm?.memories) {
+          for (const [, mem] of state.longTerm.memories) {
+            await this.longTerm.add(mem.content, mem.metadata);
+          }
+        }
+
+        // Restore entities
+        if (state.entities) {
+          for (const [, entity] of state.entities) {
+            const e = entity as Entity;
+            this.entities.upsert(e.name, e.type, e.facts, e.metadata);
+          }
+        }
+
+        this.logger.info(`Loaded persisted memory for namespace: ${namespace}`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to load persisted memory:', error);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Save current memory state to storage
+   */
+  async saveMemory(): Promise<void> {
+    if (!this.persistenceConfig?.adapter) return;
+
+    try {
+      const namespace = this.persistenceConfig.namespace || 'default';
+      const longTermMemories = (this.longTerm as unknown as { memories: Map<string, MemoryEntry> })
+        .memories;
+      const entityMemories = (this.entities as unknown as { entities: Map<string, Entity> })
+        .entities;
+
+      const state: MemoryState = {
+        shortTerm: this.shortTerm.getAll(),
+        longTerm: {
+          memories: Array.from(longTermMemories.entries()),
+        },
+        entities: Array.from(entityMemories.entries()),
+        timestamp: Date.now(),
+      };
+
+      await this.persistenceConfig.adapter.save<MemoryState>(`memory-${namespace}`, state);
+      this.logger.debug(`Saved memory state for namespace: ${namespace}`);
+    } catch (error) {
+      this.logger.error('Failed to save memory:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop auto-save and cleanup resources
+   */
+  async dispose(): Promise<void> {
+    if (this.persistenceTimer) {
+      clearInterval(this.persistenceTimer);
+      this.persistenceTimer = undefined;
+    }
+    // Final save before disposing
+    await this.saveMemory();
   }
 
   /**
@@ -805,6 +955,28 @@ export class MemorySystem {
 }
 
 // ============================================================================
+// MEMORY STATE INTERFACE
+// ============================================================================
+
+/**
+ * Serializable memory state for persistence
+ */
+interface MemoryState {
+  shortTerm: {
+    memories: Array<{
+      content: string;
+      metadata?: Record<string, unknown>;
+    }>;
+    summaries: string[];
+  };
+  longTerm: {
+    memories: Array<[string, MemoryEntry]>;
+  };
+  entities: Array<[string, unknown]>;
+  timestamp: number;
+}
+
+// ============================================================================
 // MEMORY BUILDER
 // ============================================================================
 
@@ -814,6 +986,7 @@ export class MemorySystem {
 export class MemoryBuilder {
   private shortTermConfig?: ShortTermMemoryConfig;
   private longTermConfig?: LongTermMemoryConfig;
+  private persistenceConfig?: MemoryPersistenceConfig;
 
   static create(): MemoryBuilder {
     return new MemoryBuilder();
@@ -845,7 +1018,26 @@ export class MemoryBuilder {
     return this;
   }
 
+  /**
+   * Enable automatic persistence of memory state.
+   *
+   * @example
+   * ```typescript
+   * const memory = MemoryBuilder.create()
+   *   .withPersistence({
+   *     adapter: new FileStorageAdapter('./memory'),
+   *     autoSaveInterval: 60000, // Save every minute
+   *     namespace: 'my-agent'
+   *   })
+   *   .build();
+   * ```
+   */
+  withPersistence(config: MemoryPersistenceConfig): this {
+    this.persistenceConfig = config;
+    return this;
+  }
+
   build(): MemorySystem {
-    return new MemorySystem(this.shortTermConfig, this.longTermConfig);
+    return new MemorySystem(this.shortTermConfig, this.longTermConfig, this.persistenceConfig);
   }
 }

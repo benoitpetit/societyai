@@ -27,9 +27,12 @@ Use `withExecutionMode()` when building an agent:
 
 ```typescript
 import { Society } from 'societyai';
-import { OpenAIModel } from './my-model-impl';
+import { ModelAdapters } from 'societyai/adapters';
 
-const model = new OpenAIModel(process.env.OPENAI_API_KEY);
+const model = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4'
+});
 
 const society = Society.create()
   .withId('cpu-intensive-society')
@@ -42,7 +45,7 @@ const society = Society.create()
         role.withSystemPrompt('You coordinate tasks and handle I/O operations.')
       )
       .withModel(model)
-    // executionMode defaults to 'default'
+    // executionMode defaults to 'inline'
   )
 
   // CPU-intensive agent (runs in Worker Thread)
@@ -66,15 +69,58 @@ const society = Society.create()
   .execute('Analyze large dataset');
 ```
 
+### Built-in Model Adapters
+
+SocietyAI provides built-in adapters for popular LLM providers:
+
+```typescript
+import { ModelAdapters } from 'societyai/adapters';
+
+// OpenAI
+const openai = ModelAdapters.openai({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: 'gpt-4',
+});
+
+// Anthropic
+const anthropic = ModelAdapters.anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  model: 'claude-3-opus',
+});
+
+// Google Gemini
+const gemini = ModelAdapters.gemini({
+  apiKey: process.env.GEMINI_API_KEY!,
+  model: 'gemini-pro',
+});
+
+// Azure OpenAI
+const azure = ModelAdapters.azureOpenAI({
+  apiKey: process.env.AZURE_API_KEY!,
+  endpoint: 'https://your-resource.openai.azure.com',
+  deployment: 'gpt-4',
+});
+
+// Ollama (local models)
+const ollama = ModelAdapters.ollama({
+  model: 'llama2',
+  baseURL: 'http://localhost:11434',
+});
+
+// Mock model (for testing)
+import { MockModel } from 'societyai/adapters';
+const mock = new MockModel();
+```
+
 ---
 
 ## 📋 Execution Modes
 
 | Mode        | Description                        | Use Case                        |
 | ----------- | ---------------------------------- | ------------------------------- |
-| `'default'` | Runs in main thread (standard)     | I/O-bound tasks, API calls      |
+| `'inline'`  | Runs in main thread (standard)     | I/O-bound tasks, API calls      |
 | `'isolated'`| Runs in Worker Thread              | CPU-intensive computations      |
-| `undefined` | Same as `'default'` (backward compat) | Existing code                  |
+| `undefined` | Same as `'inline'` (backward compat) | Existing code                  |
 
 ---
 
@@ -156,7 +202,7 @@ const society = Society.create()
     a
       .withId('agent')
       .withModel(model)
-    // No executionMode → runs in main thread
+    // No executionMode → runs in main thread (inline)
   );
 ```
 
@@ -193,13 +239,13 @@ Combine standard and isolated agents in the same society:
 const society = Society.create()
   .withId('hybrid-society')
 
-  // I/O-bound agent (standard)
+  // I/O-bound agent (inline)
   .addAgent((a) =>
     a
       .withId('fetcher')
       .withRole((r) => r.withSystemPrompt('Fetch data from APIs'))
       .withModel(model)
-    // executionMode: default (main thread)
+    // executionMode: inline (main thread)
   )
 
   // CPU-bound agent (isolated)

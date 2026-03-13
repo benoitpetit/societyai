@@ -12,8 +12,8 @@ architectural details.
 
 Start here to understand the core philosophy and get your first agent running.
 
-- **[Getting Started](./1-basics/getting-started.md)**: Installation and "Hello
-  World".
+- **[Getting Started](./1-basics/getting-started.md)**: Installation, "Hello
+  World", and CLI usage.
 - **[Core Concepts](./1-basics/core-concepts.md)**: The mental model: Agents,
   Societies, Tasks, and the Graph.
 
@@ -39,7 +39,7 @@ Give your agents superpowers.
 - **[Tools & Functions](./3-capabilities/tools-functions.md)**: Enabling agents
   to interact with the world.
 - **[Memory Systems](./3-capabilities/memory.md)**: Short-term and Long-term
-  (Vector) memory.
+  (Vector) memory with automatic persistence.
 - **[Validation](./3-capabilities/validation.md)**: Ensuring robust, structured
   JSON outputs.
 - **[Persistence](./3-capabilities/persistence.md)**: Saving and resuming state.
@@ -51,14 +51,17 @@ Master the complex features for production-grade systems.
 - **[Loops & Cycles](./4-advanced/loops-cycles.md)**: Creating self-correcting
   feedback loops.
 - **[Middleware](./4-advanced/middleware.md)**: Intercepting and modifying
-  execution flow.
+  execution flow, including streaming middleware.
 - **[Observability](./4-advanced/observability.md)**: Events, logging, and
   debugging.
 - **[Worker Threads](./4-advanced/worker-threads.md)**: Execute CPU-intensive
-  agents in isolated threads.
+  agents in isolated threads with built-in adapters.
 - **[OpenTelemetry Integration](./4-advanced/opentelemetry.md)**: Distributed
   tracing for production.
 - **[MCP Support](./4-advanced/mcp.md)**: Model Context Protocol integration.
+- **[Visualization](./4-advanced/visualization.md)**: Generate Mermaid, DOT, and
+  HTML diagrams of your workflows.
+- **[Benchmarks](./4-advanced/benchmarks.md)**: Performance testing and metrics.
 
 ### [5. Architecture](./5-architecture/)
 
@@ -84,15 +87,76 @@ Deep dive into how SocietyAI works under the hood.
 - **[API Index](./reference/index.md)**: Complete API reference.
 - **[Decision Guide](./reference/decision-guide.md)**: When to use High-level vs
   Low-level APIs.
+- **[CLI Reference](./reference/cli.md)**: Command-line interface documentation.
 
 ---
 
 ## 🚀 Key Features
 
-- **Model Agnostic**: Use OpenAI, Anthropic, Mistral, or local models.
-- **Graph-Based**: Supports DAGs, Cycles, and Conditionals.
-- **Worker Threads**: Execute CPU-intensive agents without blocking.
+- **Model Agnostic**: Use OpenAI, Anthropic, Mistral, or local models with
+  built-in adapters.
+- **Graph-Based**: Supports DAGs, Cycles, and Conditionals with advanced
+  visualization.
+- **Worker Threads**: Execute CPU-intensive agents without blocking using
+  simplified adapters.
+- **Streaming Middleware**: Transform and monitor streaming responses in
+  real-time.
 - **OpenTelemetry**: Built-in distributed tracing support.
 - **MCP Protocol**: Integrate external tools and services.
 - **Zero Dependencies**: Lightweight and secure.
 - **Type-Safe**: Built with TypeScript for TypeScript.
+- **CLI Tools**: Validate, visualize, run, and benchmark your societies.
+
+---
+
+## 🛠️ CLI Quick Reference
+
+```bash
+# Validate configuration
+npx societyai validate ./my-society.ts
+
+# Generate visualization
+npx societyai visualize ./my-society.ts --format html --output graph.html
+
+# Run with monitoring
+npx societyai run ./my-society.ts --input "Hello" --verbose --metrics
+
+# Create new project
+npx societyai init --template advanced --output ./my-project/
+
+# Run benchmarks
+npx societyai benchmark --filter "parallel" --runs 50
+
+# Compare versions
+npx societyai diff ./society-v1.ts ./society-v2.ts
+```
+
+---
+
+## 📦 Module Exports
+
+SocietyAI uses a modular export structure for better tree-shaking:
+
+```typescript
+// Essential API (recommended)
+import { Society, Agent, TaskResult } from 'societyai';
+
+// Advanced execution engine
+import { ExecutionEngine, GraphBuilder } from 'societyai/advanced';
+
+// Memory management
+import { MemorySystem, MemoryBuilder } from 'societyai/memory';
+
+// Event system
+import { SocietyEventEmitter, ProgressTracker } from 'societyai/events';
+
+// Context system
+import { ContextProvider, ContextScope } from 'societyai/context';
+
+// Model adapters
+import { ModelAdapters } from 'societyai/adapters';
+```
+
+---
+
+*Last updated: 2026-03-13*

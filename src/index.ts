@@ -33,18 +33,46 @@
  *   .execute('Analyze this data');
  * ```
  *
+ * ## API Organization
+ *
+ * This package exports a comprehensive API. For better tree-shaking and smaller bundles,
+ * consider using the submodule imports:
+ *
+ * ```typescript
+ * // Essential API (recommended for most use cases)
+ * import { Society, Agent, TaskResult } from 'societyai';
+ *
+ * // Advanced execution engine
+ * import { ExecutionEngine, GraphBuilder } from 'societyai/advanced';
+ *
+ * // Memory management
+ * import { MemorySystem, MemoryBuilder } from 'societyai/memory';
+ *
+ * // Event system
+ * import { SocietyEventEmitter, ProgressTracker } from 'societyai/events';
+ *
+ * // Context system
+ * import { ContextProvider, ContextScope } from 'societyai/context';
+ * ```
+ *
  * @packageDocumentation
  */
 
 // ============================================================================
-// CORE TYPES AND INTERFACES
+// PUBLIC API (Essential exports)
+// ============================================================================
+
+export * from './public-api';
+
+// ============================================================================
+// CORE TYPES AND INTERFACES (Complete)
 // ============================================================================
 
 export * from './core/types';
 export * from './core/config';
 
 // ============================================================================
-// ERROR HANDLING
+// ERROR HANDLING (Complete)
 // ============================================================================
 
 export * from './core/errors';
@@ -89,6 +117,18 @@ export { MCPToolProvider, MCPServers, type MCPServerConfig } from './capabilitie
 // ============================================================================
 
 export * from './core/models';
+
+// ============================================================================
+// PROVIDER ADAPTERS (Isolated Worker Support)
+// ============================================================================
+
+export {
+  ModelAdapters,
+  SerializableModelConfig,
+  ModelAdapter,
+  isSerializableModelConfig,
+  createModelFromConfig,
+} from './adapters';
 
 // ============================================================================
 // CORE SOCIETY (Main Logic)

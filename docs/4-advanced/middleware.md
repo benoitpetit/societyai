@@ -11,7 +11,9 @@ context, intercept calls, and add cross-cutting behaviours to your agents.
 - [Middleware Types](#middleware-types)
 - [Model Middleware](#model-middleware)
 - [Step Middleware](#step-middleware)
+- [Streaming Middleware](#streaming-middleware)
 - [Built-in Middlewares](#built-in-middlewares)
+- [Streaming Middlewares](#streaming-middlewares)
 - [Middleware Composition](#middleware-composition)
 - [Advanced Examples](#advanced-examples)
 - [Usage with Society](#usage-with-society)
@@ -375,6 +377,142 @@ const transformOutput = Middlewares.transformOutput((output) => {
 });
 ```
 
+---
+
+## 📡 Streaming Middlewares
+
+SocietyAI supports middleware for streaming responses. These middlewares can
+inspect, transform, and monitor chunks as they flow from the model.
+
+### Basic Streaming Middleware
+
+```typescript
+import { StreamMiddlewares, MiddlewareChain } from 'societyai';
+
+const chain = MiddlewareChain.create()
+  .use(StreamMiddlewares.logChunks({ prefix: '[Agent]' }))
+  .use(StreamMiddlewares.transformChunk((chunk) => chunk.toUpperCase()));
+
+const wrappedModel = chain.wrap(model);
+
+// Stream with middleware applied
+for await (const chunk of wrappedModel.stream('Hello')) {
+  process.stdout.write(chunk);
+}
+```
+
+### Available Streaming Middlewares
+
+#### 1. Log Chunks
+
+```typescript
+const logChunks = StreamMiddlewares.logChunks({
+  prefix: '[Stream]',    // optional prefix for logs
+});
+```
+
+#### 2. Transform Chunk
+
+```typescript
+const transformChunk = StreamMiddlewares.transformChunk((chunk) => {
+  // Modify each chunk as it flows through
+  return chunk.replace(/\s+/g, ' ');
+});
+```
+
+#### 3. Filter Chunks
+
+```typescript
+const filterChunks = StreamMiddlewares.filterChunks((chunk) => {
+  // Return false to filter out this chunk
+  return chunk.length > 0;
+});
+```
+
+#### 4. Throttle
+
+```typescript
+const throttle = StreamMiddlewares.throttle(100); // 100ms between chunks
+```
+
+#### 5. Annotate
+
+```typescript
+const annotate = StreamMiddlewares.annotate((ctx) => ({
+  timestamp: Date.now(),
+  chunkIndex: ctx.index,
+  chunkLength: ctx.chunk.length,
+}));
+```
+
+#### 6. Metrics
+
+```typescript
+const metrics = StreamMiddlewares.metrics({
+  onChunk: (chunk, index, timestamp) => {
+    console.log(`Chunk ${index} received at ${timestamp}`);
+  },
+  onComplete: (totalChunks, totalBytes, durationMs) => {
+    console.log(`Stream complete: ${totalChunks} chunks, ${totalBytes} bytes, ${durationMs}ms`);
+  },
+});
+```
+
+### Composing Streaming Middlewares
+
+```typescript
+import { composeStreamingMiddleware, applyStreamingMiddleware } from 'societyai';
+
+// Compose multiple streaming middlewares
+const composed = composeStreamingMiddleware([
+  StreamMiddlewares.logChunks(),
+  StreamMiddlewares.transformChunk((chunk) => chunk.trim()),
+  StreamMiddlewares.throttle(50),
+]);
+
+// Apply to an existing stream
+const sourceStream = model.stream('Hello');
+const transformedStream = applyStreamingMiddleware(sourceStream, [
+  StreamMiddlewares.filterChunks((chunk) => chunk.length > 0),
+  StreamMiddlewares.transformChunk((chunk) => `[${chunk}]`),
+]);
+
+for await (const chunk of transformedStream) {
+  console.log(chunk);
+}
+```
+
+### Streaming Middleware Context
+
+Streaming middlewares receive a `StreamingMiddlewareContext`:
+
+```typescript
+interface StreamingMiddlewareContext {
+  chunk: string;              // Current chunk being processed
+  accumulatedOutput: string;  // All chunks received so far
+  index: number;              // Chunk index (0-based)
+  metadata: Map<string, unknown>; // Shared metadata
+  signal?: AbortSignal;       // Abort signal
+}
+```
+
+### Custom Streaming Middleware
+
+```typescript
+import { StreamingMiddleware } from 'societyai';
+
+const customStreamingMiddleware: StreamingMiddleware = {
+  name: 'customStream',
+  description: 'Adds prefix to each chunk',
+  fn: async (ctx, next) => {
+    const result = await next();
+    return `[${ctx.index}] ${result}`;
+  },
+};
+```
+
+---
+
 ## 🔗 Middleware Composition
 
 ### Using `MiddlewareChain.create()` (recommended)
@@ -731,6 +869,7 @@ Middlewares enable:
 - ✅ A/B testing
 - ✅ Multi-tenancy
 - ✅ Circuit breaking and deduplication
+- ✅ Streaming response transformation
 
 ---
 
@@ -769,6 +908,7 @@ interface MiddlewareContext {
   agentId?: string;
   stepId?: string;
   signal?: AbortSignal;
+  streaming?: boolean;      // true if this is a streaming request
 }
 ```
 
@@ -784,4 +924,38 @@ MiddlewareChain.create()
   .sortByPriority()               // reorder by priority field
   .wrap(model)                    // returns MiddlewareWrappedModel
   .build()                        // returns ComposedMiddleware
+```
+
+### `StreamingMiddleware`
+
+```typescript
+interface StreamingMiddleware {
+  name: string;
+  description?: string;
+  fn: StreamingMiddlewareFn;
+}
+```
+
+### `StreamingMiddlewareContext`
+
+```typescript
+interface StreamingMiddlewareContext {
+  chunk: string;              // Current chunk being processed
+  accumulatedOutput: string;  // All chunks received so far
+  index: number;              // Chunk index (0-based)
+  metadata: Map<string, unknown>;
+  signal?: AbortSignal;
+}
+```
+
+### `StreamMiddlewares`
+
+```typescript
+StreamMiddlewares.logChunks(options?)     // Log each chunk
+StreamMiddlewares.transformChunk(fn)      // Transform each chunk
+StreamMiddlewares.transformStream(fn)     // Transform complete stream
+StreamMiddlewares.filterChunks(predicate) // Filter chunks
+StreamMiddlewares.throttle(delayMs)       // Rate limit chunks
+StreamMiddlewares.annotate(annotator)     // Add metadata
+StreamMiddlewares.metrics(collector)      // Collect metrics
 ```
