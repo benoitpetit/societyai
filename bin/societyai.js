@@ -171,7 +171,16 @@ async function validateCommand(filePath) {
 
     // For TypeScript, we need to use ts-node/register
     if (ext === '.ts') {
-      require('ts-node/register');
+      const projectDir = path.dirname(fullPath);
+      const originalCwd = process.cwd();
+      process.chdir(projectDir);
+      const localTsNode = path.join(projectDir, 'node_modules', 'ts-node', 'register');
+      try {
+        require(localTsNode);
+      } catch (e) {
+        require('ts-node/register');
+      }
+      process.chdir(originalCwd);
     }
 
     const module = require(fullPath);
@@ -188,8 +197,12 @@ async function validateCommand(filePath) {
         console.warn(colorize('yellow', '⚠️  Warning: Society does not have an execute method'));
       }
 
-      if (!society.agents || society.agents.length === 0) {
-        console.warn(colorize('yellow', '⚠️  Warning: Society has no agents'));
+      // Use build() to get the SocietyConfig for structure validation
+      if (typeof society.build === 'function') {
+        const config = society.build();
+        if (!config.agents || config.agents.length === 0) {
+          console.warn(colorize('yellow', '⚠️  Warning: Society has no agents'));
+        }
       }
     }
 
@@ -236,7 +249,16 @@ async function visualizeCommand(filePath, options) {
     // Load the module
     const ext = path.extname(fullPath);
     if (ext === '.ts') {
-      require('ts-node/register');
+      const projectDir = path.dirname(fullPath);
+      const originalCwd = process.cwd();
+      process.chdir(projectDir);
+      const localTsNode = path.join(projectDir, 'node_modules', 'ts-node', 'register');
+      try {
+        require(localTsNode);
+      } catch (e) {
+        require('ts-node/register');
+      }
+      process.chdir(originalCwd);
     }
 
     const module = require(fullPath);
@@ -338,8 +360,19 @@ async function runCommand(filePath, options) {
   try {
     // Load the module
     const ext = path.extname(fullPath);
+    const projectDir = path.dirname(fullPath);
     if (ext === '.ts') {
-      require('ts-node/register');
+      // Change to project directory so ts-node picks up the local tsconfig.json
+      const originalCwd = process.cwd();
+      process.chdir(projectDir);
+      // Use ts-node from the project's own node_modules if available
+      const localTsNode = path.join(projectDir, 'node_modules', 'ts-node', 'register');
+      try {
+        require(localTsNode);
+      } catch (e) {
+        require('ts-node/register');
+      }
+      process.chdir(originalCwd);
     }
 
     const module = require(fullPath);
@@ -418,6 +451,8 @@ async function runCommand(filePath, options) {
       console.log(colorize('green', `\n💾 State saved to: ${saveState}`));
     }
 
+    process.exit(0);
+
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error(colorize('red', `\n❌ Execution failed after ${duration}ms: ${error.message}`));
@@ -430,7 +465,7 @@ async function runCommand(filePath, options) {
 
 // Init command
 async function initCommand(template, options) {
-  const templateName = template || options.template || options.t || 'basic';
+  const templateName = options.template || options.t || template || 'basic';
   const outputDir = options.output || options.o || '.';
   const projectName = options.name || 'my-society';
 
@@ -458,10 +493,12 @@ export const society = Society.create()
     .sequential()
   );
 
-// Execute
-society.execute('Hello World')
-  .then(result => console.log(result.output))
-  .catch(console.error);
+// Execute (only when run directly, not when imported by CLI tools)
+if (require.main === module) {
+  society.execute('Hello World')
+    .then(result => console.log(result.output))
+    .catch(console.error);
+}
 `,
       'package.json': JSON.stringify({
         name: projectName,
@@ -502,13 +539,26 @@ npm start
 
 - \`society.ts\` - Main society configuration
 `,
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          strict: false,
+          skipLibCheck: true,
+          outDir: 'dist',
+        },
+        'ts-node': {
+          transpileOnly: true,
+        },
+      }, null, 2),
     },
 
     advanced: {
-      'society.ts': `import { Society } from 'societyai';
-import { MockModel } from 'societyai/adapters';
+      'society.ts': `import { Society, StandardModelBase, MiddlewareChain, Middlewares } from 'societyai';
 
-const model = new MockModel();
+const model = new StandardModelBase({}, async () => 'Hello from mock model!').withName('mock');
 
 export const society = Society.create()
   .withName('${projectName}')
@@ -516,7 +566,6 @@ export const society = Society.create()
     .withId('analyzer')
     .withRole(role => role.withSystemPrompt('Analyze the input and extract key insights'))
     .withModel(model)
-    .withExecutionMode('isolated')
   )
   .addAgent(agent => agent
     .withId('validator')
@@ -529,23 +578,34 @@ export const society = Society.create()
     .withModel(model)
   )
   .addTask(task => task
-    .withId('process')
-    .withAgents(['analyzer', 'validator', 'formatter'])
-    .withInstructions('Process input through analysis, validation, and formatting')
-    .withDependencies({
-      validator: ['analyzer'],
-      formatter: ['validator'],
-    })
+    .withId('analyze')
+    .withAgents(['analyzer'])
+    .withInstructions('Analyze the input')
     .sequential()
   )
-  .withMiddleware(chain => chain
-    .use(Middlewares.logging())
-    .use(Middlewares.timing())
+  .addTask(task => task
+    .withId('validate')
+    .withAgents(['validator'])
+    .withInstructions('Validate the analysis')
+    .dependsOn('analyze')
+    .sequential()
+  )
+  .addTask(task => task
+    .withId('format')
+    .withAgents(['formatter'])
+    .withInstructions('Format the final output')
+    .dependsOn('validate')
+    .sequential()
+  )
+  .addMiddleware(
+    MiddlewareChain.create()
+      .use(Middlewares.logging())
+      .use(Middlewares.timing())
   );
 
-// Execute
+// Execute (only when run directly, not when imported by CLI tools)
 if (require.main === module) {
-  society.execute({ input: 'Hello World' })
+  society.execute('Hello World')
     .then(result => console.log(result.output))
     .catch(console.error);
 }
@@ -593,6 +653,209 @@ npm start
 - Agents: analyzer, validator, formatter
 - Pipeline: analyzer → validator → formatter
 `,
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          strict: false,
+          skipLibCheck: true,
+          outDir: 'dist',
+        },
+        'ts-node': {
+          transpileOnly: true,
+        },
+      }, null, 2),
+    },
+
+    mcp: {
+      'society.ts': `import { Society, StandardModelBase, MCPServers } from 'societyai';
+
+const model = new StandardModelBase({}, async (input) => \`Processed: \${input}\`).withName('mock');
+
+async function main() {
+  // Connect to an MCP filesystem server (adjust the path as needed)
+  const fsTools = await MCPServers.filesystem(process.cwd());
+
+  const society = Society.create()
+    .withName('${projectName}')
+    .addAgent(agent => agent
+      .withId('assistant')
+      .withRole(role => role
+        .withSystemPrompt('You are a helpful assistant with access to filesystem tools.')
+        .withTools(fsTools.getTools())
+      )
+      .withModel(model)
+    )
+    .addTask(task => task
+      .withId('main')
+      .withAgents(['assistant'])
+      .withInstructions('Process the input using available tools')
+      .sequential()
+    );
+
+  try {
+    const result = await society.execute('Hello World');
+    console.log(result.output);
+  } finally {
+    await fsTools.disconnect();
+  }
+}
+
+main().catch(console.error);
+`,
+      'package.json': JSON.stringify({
+        name: projectName,
+        version: '1.0.0',
+        description: `A SocietyAI project with MCP tool integration`,
+        main: 'society.ts',
+        scripts: {
+          start: 'ts-node society.ts',
+          validate: 'societyai validate society.ts',
+          visualize: 'societyai visualize society.ts --format html --output graph.html',
+        },
+        dependencies: {
+          'societyai': '^0.1.0',
+        },
+        devDependencies: {
+          'ts-node': '^10.9.0',
+          'typescript': '^5.7.0',
+        },
+      }, null, 2),
+      'README.md': `# ${projectName}
+
+A SocietyAI project with Model Context Protocol (MCP) tool integration.
+
+## Getting Started
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## Structure
+
+- \`society.ts\` - Main society configuration with MCP tool support
+- Uses MCPServers.filesystem to give agents access to filesystem tools
+`,
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          strict: false,
+          skipLibCheck: true,
+          outDir: 'dist',
+        },
+        'ts-node': {
+          transpileOnly: true,
+        },
+      }, null, 2),
+    },
+
+    'multi-tenant': {
+      'society.ts': `import { Society, StandardModelBase } from 'societyai';
+
+const model = new StandardModelBase({}, async (input) => \`Tenant response: \${input}\`).withName('mock');
+
+// Factory function to create a society for a specific tenant
+function createTenantSociety(tenantId: string, tenantConfig: { name: string; instructions: string }) {
+  return Society.create(\`society-\${tenantId}\`)
+    .withName(\`\${tenantConfig.name} Society\`)
+    .withGlobalContext({ tenantId, tenantName: tenantConfig.name })
+    .addAgent(agent => agent
+      .withId(\`agent-\${tenantId}\`)
+      .withRole(role => role.withSystemPrompt(tenantConfig.instructions))
+      .withModel(model)
+    )
+    .addTask(task => task
+      .withId('main')
+      .withAgents([\`agent-\${tenantId}\`])
+      .withInstructions('Process the input for this tenant')
+      .sequential()
+    );
+}
+
+// Define tenants
+const tenants = [
+  { id: 'tenant-a', name: 'Tenant A', instructions: 'You handle support tickets for Tenant A. Be formal.' },
+  { id: 'tenant-b', name: 'Tenant B', instructions: 'You handle support tickets for Tenant B. Be friendly.' },
+];
+
+// Export the multi-tenant runner
+export async function runForTenant(tenantId: string, input: string) {
+  const tenant = tenants.find(t => t.id === tenantId);
+  if (!tenant) throw new Error(\`Unknown tenant: \${tenantId}\`);
+
+  const society = createTenantSociety(tenant.id, { name: tenant.name, instructions: tenant.instructions });
+  return society.execute(input);
+}
+
+// Run example with all tenants
+async function main() {
+  const input = 'Hello, I need help with my account';
+  for (const tenant of tenants) {
+    const society = createTenantSociety(tenant.id, { name: tenant.name, instructions: tenant.instructions });
+    const result = await society.execute(input);
+    console.log(\`[\${tenant.name}]: \${result.output}\`);
+  }
+}
+
+if (require.main === module) {
+  main().catch(console.error);
+}
+`,
+      'package.json': JSON.stringify({
+        name: projectName,
+        version: '1.0.0',
+        description: `A multi-tenant SocietyAI project`,
+        main: 'society.ts',
+        scripts: {
+          start: 'ts-node society.ts',
+          validate: 'societyai validate society.ts',
+          visualize: 'societyai visualize society.ts --format html --output graph.html',
+        },
+        dependencies: {
+          'societyai': '^0.1.0',
+        },
+        devDependencies: {
+          'ts-node': '^10.9.0',
+          'typescript': '^5.7.0',
+        },
+      }, null, 2),
+      'README.md': `# ${projectName}
+
+A multi-tenant SocietyAI project where each tenant gets an isolated society instance.
+
+## Getting Started
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## Structure
+
+- \`society.ts\` - Multi-tenant society factory and runner
+- Each tenant gets its own isolated society with custom instructions
+- Use \`runForTenant(tenantId, input)\` to execute for a specific tenant
+`,
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          strict: false,
+          skipLibCheck: true,
+          outDir: 'dist',
+        },
+        'ts-node': {
+          transpileOnly: true,
+        },
+      }, null, 2),
     },
   };
 
@@ -600,7 +863,7 @@ npm start
 
   if (!selectedTemplate) {
     console.error(colorize('red', `❌ Unknown template: ${templateName}`));
-    console.error(colorize('dim', 'Available templates: basic, advanced'));
+    console.error(colorize('dim', 'Available templates: basic, advanced, mcp, multi-tenant'));
     process.exit(1);
   }
 
@@ -714,7 +977,16 @@ async function diffCommand(file1, file2) {
     const ext2 = path.extname(path2);
 
     if (ext1 === '.ts' || ext2 === '.ts') {
-      require('ts-node/register');
+      const projectDir = path.dirname(path1);
+      const originalCwd = process.cwd();
+      process.chdir(projectDir);
+      const localTsNode = path.join(projectDir, 'node_modules', 'ts-node', 'register');
+      try {
+        require(localTsNode);
+      } catch (e) {
+        require('ts-node/register');
+      }
+      process.chdir(originalCwd);
     }
 
     const module1 = require(path1);
