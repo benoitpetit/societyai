@@ -160,7 +160,7 @@ async function validateCommand(filePath) {
     const ext = path.extname(fullPath);
     if (ext === '.ts') {
       console.log(colorize('dim', '  Compiling TypeScript...'));
-      execSync(`npx tsc --noEmit "${fullPath}"`, { stdio: 'pipe' });
+      execSync(`npx tsc --noEmit "${fullPath}"`, { stdio: 'pipe', cwd: path.dirname(fullPath) });
     }
 
     // Try to load and validate the module
@@ -242,17 +242,21 @@ async function visualizeCommand(filePath, options) {
     const module = require(fullPath);
     const society = module.default || module.society;
 
-    if (!society || !society.engine) {
-      console.error(colorize('red', '❌ Error: Could not find Society engine in file'));
+    if (!society || typeof society.build !== 'function') {
+      console.error(colorize('red', '❌ Error: Could not find Society builder in file'));
       process.exit(1);
     }
+
+    const { SocietyExecutor } = require('../dist/agents/society-executor');
+    const config = society.build();
+    const engine = new SocietyExecutor().buildExecutionGraph(config);
 
     let result = '';
 
     switch (format.toLowerCase()) {
       case 'mermaid':
         const { GraphVisualizer } = require('../dist/execution/graph-visualizer');
-        result = GraphVisualizer.toMermaid(society.engine, {
+        result = GraphVisualizer.toMermaid(engine, {
           direction,
           theme,
           highlightPath: highlight,
@@ -262,27 +266,27 @@ async function visualizeCommand(filePath, options) {
       case 'dot':
       case 'graphviz':
         const { GraphVisualizer: GV2 } = require('../dist/execution/graph-visualizer');
-        result = GV2.toDOT(society.engine, { rankdir: direction });
+        result = GV2.toDOT(engine, { rankdir: direction });
         break;
 
       case 'json':
         const { GraphVisualizer: GV3 } = require('../dist/execution/graph-visualizer');
-        result = JSON.stringify(GV3.toJSON(society.engine), null, 2);
+        result = JSON.stringify(GV3.toJSON(engine), null, 2);
         break;
 
       case 'html':
         const { GraphVisualizer: GV4 } = require('../dist/execution/graph-visualizer');
-        result = GV4.toHTML(society.engine, { direction, theme, highlightPath: highlight });
+        result = GV4.toHTML(engine, { direction, theme, highlightPath: highlight });
         break;
 
       case 'ascii':
         const { GraphVisualizer: GV5 } = require('../dist/execution/graph-visualizer');
-        result = GV5.toASCII(society.engine);
+        result = GV5.toASCII(engine);
         break;
 
       case 'plantuml':
         const { GraphVisualizer: GV6 } = require('../dist/execution/graph-visualizer');
-        result = GV6.toPlantUML(society.engine, direction);
+        result = GV6.toPlantUML(engine, direction);
         break;
 
       default:
@@ -347,23 +351,29 @@ async function runCommand(filePath, options) {
     }
 
     // Setup observer for verbose mode
-    const observer = verbose ? {
-      onNodeStart: (nodeId, type, input) => {
-        console.log(colorize('dim', `  ▶️  Node ${nodeId} (${type}) starting...`));
-      },
-      onNodeEnd: (nodeId, output, duration) => {
-        console.log(colorize('dim', `  ✅ Node ${nodeId} completed in ${duration}ms`));
-      },
-      onAgentStart: (agentId, modelName, input) => {
-        console.log(colorize('blue', `    🤖 Agent ${agentId} (${modelName}) processing...`));
-      },
-      onAgentComplete: (agentId, modelName, output) => {
-        console.log(colorize('green', `    ✅ Agent ${agentId} completed`));
-      },
-      onAgentError: (agentId, modelName, error) => {
-        console.log(colorize('red', `    ❌ Agent ${agentId} error: ${error.message}`));
-      },
-    } : undefined;
+    if (verbose) {
+      society.withObserver({
+        onNodeStart: (nodeId, type, input) => {
+          console.log(colorize('dim', `  ▶️  Node ${nodeId} (${type}) starting...`));
+        },
+        onNodeEnd: (nodeId, output, duration) => {
+          console.log(colorize('dim', `  ✅ Node ${nodeId} completed in ${duration}ms`));
+        },
+        onAgentStart: (agentId, modelName, input) => {
+          console.log(colorize('blue', `    🤖 Agent ${agentId} (${modelName}) processing...`));
+        },
+        onAgentComplete: (agentId, modelName, output) => {
+          console.log(colorize('green', `    ✅ Agent ${agentId} completed`));
+        },
+        onAgentError: (agentId, modelName, error) => {
+          console.log(colorize('red', `    ❌ Agent ${agentId} error: ${error.message}`));
+        },
+        onPhaseStart: () => {},
+        onPhaseComplete: () => {},
+        onSocietyStart: () => {},
+        onSocietyComplete: () => {},
+      });
+    }
 
     // Execute with timeout
     const timeoutPromise = new Promise((_, reject) => {
@@ -371,7 +381,7 @@ async function runCommand(filePath, options) {
     });
 
     const result = await Promise.race([
-      society.execute({ input, observer }),
+      society.execute(input),
       timeoutPromise,
     ]);
 
@@ -430,10 +440,9 @@ async function initCommand(template, options) {
 
   const templates = {
     basic: {
-      'society.ts': `import { Society } from 'societyai';
-import { MockModel } from 'societyai/adapters';
+      'society.ts': `import { Society, StandardModelBase } from 'societyai';
 
-const model = new MockModel();
+const model = new StandardModelBase({}, async () => 'Hello from mock model!').withName('mock');
 
 export const society = Society.create()
   .withName('${projectName}')
@@ -450,11 +459,9 @@ export const society = Society.create()
   );
 
 // Execute
-if (require.main === module) {
-  society.execute({ input: 'Hello World' })
-    .then(result => console.log(result.output))
-    .catch(console.error);
-}
+society.execute('Hello World')
+  .then(result => console.log(result.output))
+  .catch(console.error);
 `,
       'package.json': JSON.stringify({
         name: projectName,
@@ -618,6 +625,68 @@ npm start
 }
 
 // Diff command
+async function inspectCommand(filePath) {
+  if (!filePath) {
+    console.error(colorize('red', '❌ Error: No file specified'));
+    console.error(colorize('dim', 'Usage: societyai inspect <path-to-state.json>'));
+    process.exit(1);
+  }
+
+  const fullPath = path.resolve(filePath);
+  if (!fs.existsSync(fullPath)) {
+    console.error(colorize('red', `❌ File not found: ${fullPath}`));
+    process.exit(1);
+  }
+
+  try {
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const state = JSON.parse(content);
+
+    console.log('\n🔍 SocietyAI Execution State Inspector\n');
+    console.log(`🆔 Execution ID: ${colorize('cyan', state.executionId || 'N/A')}`);
+    console.log(`📅 Timestamp:    ${state.timestamp ? new Date(state.timestamp).toLocaleString() : 'N/A'}`);
+    console.log(`🚦 Status:       ${formatInspectStatus(state.status)}`);
+
+    if (state.executionPath && state.executionPath.length > 0) {
+      console.log(`🛣️  Path Length:  ${state.executionPath.length} steps`);
+      console.log(`    Start:       ${state.executionPath[0] || 'N/A'}`);
+      console.log(`    Current:     ${state.executionPath[state.executionPath.length - 1] || 'N/A'}`);
+    }
+
+    console.log('\n📋 Queue (Next Nodes):');
+    if (!state.queue || state.queue.length === 0) {
+      console.log('    (Empty)');
+    } else {
+      state.queue.forEach((nodeId, idx) => {
+        console.log(`    ${idx + 1}. ${nodeId}`);
+      });
+    }
+
+    if (state.status === 'paused' && state.waitingForNodeId) {
+      console.log(`\n⏸️  Waiting For: ${colorize('yellow', state.waitingForNodeId)} (Human Input)`);
+    }
+
+    if (state.deadLetterQueue && state.deadLetterQueue.length > 0) {
+      console.log(`\n💀 Dead Letter Queue: ${colorize('red', state.deadLetterQueue.join(', '))}`);
+    }
+
+    console.log(`\n🧠 Memory/Results Captured: ${state.results ? state.results.length : 0} nodes`);
+  } catch (error) {
+    console.error(colorize('red', `❌ Error reading state file: ${error.message}`));
+    process.exit(1);
+  }
+}
+
+function formatInspectStatus(status) {
+  switch (status) {
+    case 'active': return colorize('green', 'Active');
+    case 'completed': return colorize('cyan', 'Completed');
+    case 'failed': return colorize('red', 'Failed');
+    case 'paused': return colorize('yellow', 'Paused');
+    default: return status || 'Unknown';
+  }
+}
+
 async function diffCommand(file1, file2) {
   console.log(colorize('cyan', '🔍 Comparing Society configurations...'));
 
@@ -654,16 +723,19 @@ async function diffCommand(file1, file2) {
     const society1 = module1.default || module1.society;
     const society2 = module2.default || module2.society;
 
-    if (!society1 || !society2) {
-      console.error(colorize('red', '❌ Error: Could not find Society in one or both files'));
+    if (!society1 || typeof society1.build !== 'function' || !society2 || typeof society2.build !== 'function') {
+      console.error(colorize('red', '❌ Error: Could not find Society builder in one or both files'));
       process.exit(1);
     }
+
+    const config1 = society1.build();
+    const config2 = society2.build();
 
     console.log(colorize('cyan', '\n📊 Comparison Results:'));
 
     // Compare agents
-    const agents1 = society1.agents || [];
-    const agents2 = society2.agents || [];
+    const agents1 = config1.agents || [];
+    const agents2 = config2.agents || [];
 
     console.log(colorize('blue', '\nAgents:'));
     console.log(colorize('dim', `  File 1: ${agents1.length} agents`));
@@ -688,8 +760,8 @@ async function diffCommand(file1, file2) {
     }
 
     // Compare tasks
-    const tasks1 = society1.tasks || [];
-    const tasks2 = society2.tasks || [];
+    const tasks1 = config1.tasks || [];
+    const tasks2 = config2.tasks || [];
 
     console.log(colorize('blue', '\nTasks:'));
     console.log(colorize('dim', `  File 1: ${tasks1.length} tasks`));
@@ -783,8 +855,7 @@ async function main() {
       break;
 
     case 'inspect':
-      // Delegate to inspect.js
-      require('./inspect');
+      await inspectCommand(args[0]);
       break;
 
     case 'diff':
