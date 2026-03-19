@@ -179,6 +179,10 @@ export {
   Middlewares,
   // Step middlewares
   StepMiddlewares,
+  // Streaming middlewares
+  StreamMiddlewares,
+  composeStreamingMiddleware,
+  applyStreamingMiddleware,
   // Metrics
   InMemoryMetricsCollector,
 } from './core/middleware';
@@ -194,6 +198,9 @@ export type {
   StepMiddleware,
   StepMiddlewareFn,
   StepMiddlewareContext,
+  StreamingMiddleware,
+  StreamingMiddlewareContext,
+  StreamingMiddlewareFn,
 } from './core/middleware';
 
 // ============================================================================

@@ -87,6 +87,9 @@ export {
   Middlewares,
   StepMiddlewares,
   InMemoryMetricsCollector,
+  StreamMiddlewares,
+  composeStreamingMiddleware,
+  applyStreamingMiddleware,
 } from './core/middleware';
 
 export type {
@@ -94,6 +97,9 @@ export type {
   MiddlewareContext,
   MiddlewareResult,
   MetricsCollector,
+  StreamingMiddleware,
+  StreamingMiddlewareContext,
+  StreamingMiddlewareFn,
 } from './core/middleware';
 
 // ============================================================================
@@ -159,4 +165,4 @@ export type { Logger } from './core/config';
 // VERSION
 // ============================================================================
 
-export const VERSION = '0.1.2';
+export const VERSION = '0.1.5';
