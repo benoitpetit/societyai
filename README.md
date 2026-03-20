@@ -1,7 +1,7 @@
 # SocietyAI
 
 <div align="center">
-  <img src="https://societyai.vercel.app/logo.png" alt="SocietyAI Logo" width="200" />
+  <img src="https://societyai.pages.dev/logo.png" alt="SocietyAI Logo" width="200" />
 
   <p>
     <a href="https://www.npmjs.com/package/societyai"><img src="https://img.shields.io/npm/v/societyai.svg" alt="npm version"></a>
